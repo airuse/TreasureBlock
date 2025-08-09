@@ -1,0 +1,60 @@
+server:
+  host: "localhost"
+  port: 8080
+  protocol: "http"
+  api_key: ""
+
+blockchain:
+  chains:
+    btc:
+      name: "Bitcoin"
+      symbol: "BTC"
+      decimals: 8
+      enabled: true
+      rpc_url: "http://localhost:8332"
+      explorer_api_url: "https://blockstream.info/api"
+      api_key: ""
+      username: ""
+      password: ""
+    eth:
+      name: "Ethereum"
+      symbol: "ETH"
+      decimals: 18
+      enabled: true
+      rpc_url: "http://localhost:8545"
+      explorer_api_url: "https://api.etherscan.io/api"
+      api_key: ""
+      username: ""
+      password: ""
+
+scan:
+  enabled: true
+  interval: 10s
+  batch_size: 100
+  max_retries: 3
+  retry_delay: 5s
+  confirmations: 6
+  start_block_height: 0
+  auto_start: true
+  save_to_file: false
+  output_dir: "./output"
+
+log:
+  level: "info"
+  format: "json"
+  output: "stdout"
+  file:
+    enabled: false
+    path: "./logs/scanner.log"
+    max_size: 100
+    max_age: 30
+    max_backups: 10
+
+database:
+  driver: "sqlite"
+  host: "localhost"
+  port: 3306
+  username: ""
+  password: ""
+  dbname: "scanner.db"
+  enabled: false

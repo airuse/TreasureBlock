@@ -1,0 +1,302 @@
+package config
+
+import (
+	"fmt"
+	"os"
+	"strconv"
+	"time"
+
+	"github.com/joho/godotenv"
+	"github.com/sirupsen/logrus"
+	"gopkg.in/yaml.v3"
+)
+
+// Config 应用配置结构
+type Config struct {
+	Server     ServerConfig     `yaml:"server"`
+	Database   DatabaseConfig   `yaml:"database"`
+	Log        LogConfig        `yaml:"log"`
+	WebSocket  WebSocketConfig  `yaml:"websocket"`
+	CORS       CORSConfig       `yaml:"cors"`
+	API        APIConfig        `yaml:"api"`
+	Blockchain BlockchainConfig `yaml:"blockchain"`
+	Cache      CacheConfig      `yaml:"cache"`
+	Security   SecurityConfig   `yaml:"security"`
+}
+
+// ServerConfig 服务器配置
+type ServerConfig struct {
+	Host           string        `yaml:"host"`
+	Port           int           `yaml:"port"`
+	ReadTimeout    time.Duration `yaml:"read_timeout"`
+	WriteTimeout   time.Duration `yaml:"write_timeout"`
+	MaxConnections int           `yaml:"max_connections"`
+}
+
+// DatabaseConfig 数据库配置
+type DatabaseConfig struct {
+	Driver          string        `yaml:"driver"`
+	Host            string        `yaml:"host"`
+	Port            int           `yaml:"port"`
+	Username        string        `yaml:"username"`
+	Password        string        `yaml:"password"`
+	DBName          string        `yaml:"dbname"`
+	MaxOpenConns    int           `yaml:"max_open_conns"`
+	MaxIdleConns    int           `yaml:"max_idle_conns"`
+	ConnMaxLifetime time.Duration `yaml:"conn_max_lifetime"`
+}
+
+// LogConfig 日志配置
+type LogConfig struct {
+	Level  string     `yaml:"level"`
+	Format string     `yaml:"format"`
+	Output string     `yaml:"output"`
+	File   FileConfig `yaml:"file"`
+}
+
+// FileConfig 文件配置
+type FileConfig struct {
+	Enabled    bool   `yaml:"enabled"`
+	Path       string `yaml:"path"`
+	MaxSize    int    `yaml:"max_size"`
+	MaxAge     int    `yaml:"max_age"`
+	MaxBackups int    `yaml:"max_backups"`
+}
+
+// WebSocketConfig WebSocket配置
+type WebSocketConfig struct {
+	Enabled         bool          `yaml:"enabled"`
+	Path            string        `yaml:"path"`
+	PingInterval    time.Duration `yaml:"ping_interval"`
+	PongWait        time.Duration `yaml:"pong_wait"`
+	WriteWait       time.Duration `yaml:"write_wait"`
+	ReadBufferSize  int           `yaml:"read_buffer_size"`
+	WriteBufferSize int           `yaml:"write_buffer_size"`
+}
+
+// CORSConfig CORS配置
+type CORSConfig struct {
+	AllowedOrigins   []string `yaml:"allowed_origins"`
+	AllowedMethods   []string `yaml:"allowed_methods"`
+	AllowedHeaders   []string `yaml:"allowed_headers"`
+	AllowCredentials bool     `yaml:"allow_credentials"`
+	MaxAge           int      `yaml:"max_age"`
+}
+
+// APIConfig API配置
+type APIConfig struct {
+	Version   string          `yaml:"version"`
+	Prefix    string          `yaml:"prefix"`
+	RateLimit RateLimitConfig `yaml:"rate_limit"`
+}
+
+// RateLimitConfig 速率限制配置
+type RateLimitConfig struct {
+	Enabled           bool `yaml:"enabled"`
+	RequestsPerMinute int  `yaml:"requests_per_minute"`
+	Burst             int  `yaml:"burst"`
+}
+
+// BlockchainConfig 区块链配置
+type BlockchainConfig struct {
+	Chains map[string]ChainConfig `yaml:"chains"`
+}
+
+// ChainConfig 链配置
+type ChainConfig struct {
+	Name     string `yaml:"name"`
+	Symbol   string `yaml:"symbol"`
+	Decimals int    `yaml:"decimals"`
+	Enabled  bool   `yaml:"enabled"`
+}
+
+// CacheConfig 缓存配置
+type CacheConfig struct {
+	Enabled bool        `yaml:"enabled"`
+	Driver  string      `yaml:"driver"`
+	Redis   RedisConfig `yaml:"redis"`
+}
+
+// RedisConfig Redis配置
+type RedisConfig struct {
+	Host     string `yaml:"host"`
+	Port     int    `yaml:"port"`
+	Password string `yaml:"password"`
+	DB       int    `yaml:"db"`
+	PoolSize int    `yaml:"pool_size"`
+}
+
+// SecurityConfig 安全配置
+type SecurityConfig struct {
+	JWTSecret     string        `yaml:"jwt_secret"`
+	JWTExpiration time.Duration `yaml:"jwt_expiration"`
+	BcryptCost    int           `yaml:"bcrypt_cost"`
+}
+
+var AppConfig *Config
+
+// Load 加载配置
+func Load() error {
+	// 首先尝试加载YAML配置文件
+	if err := loadYAMLConfig(); err != nil {
+		logrus.Warn("Failed to load YAML config, falling back to environment variables")
+		// 如果YAML加载失败，回退到环境变量
+		if err := loadEnvConfig(); err != nil {
+			return fmt.Errorf("failed to load any configuration: %w", err)
+		}
+	}
+
+	// 设置日志级别
+	level, err := logrus.ParseLevel(AppConfig.Log.Level)
+	if err != nil {
+		level = logrus.InfoLevel
+	}
+	logrus.SetLevel(level)
+
+	return nil
+}
+
+// loadYAMLConfig 加载YAML配置文件
+func loadYAMLConfig() error {
+	configPath := getConfigPath()
+
+	data, err := os.ReadFile(configPath)
+	if err != nil {
+		return fmt.Errorf("failed to read config file: %w", err)
+	}
+
+	AppConfig = &Config{}
+	if err := yaml.Unmarshal(data, AppConfig); err != nil {
+		return fmt.Errorf("failed to parse YAML config: %w", err)
+	}
+
+	logrus.Info("Configuration loaded from YAML file")
+	return nil
+}
+
+// loadEnvConfig 加载环境变量配置（回退方案）
+func loadEnvConfig() error {
+	// 加载环境变量文件
+	if err := godotenv.Load(); err != nil {
+		logrus.Warn("No .env file found, using system environment variables")
+	}
+
+	AppConfig = &Config{
+		Server: ServerConfig{
+			Host:           getEnv("SERVER_HOST", "localhost"),
+			Port:           getEnvAsInt("SERVER_PORT", 8080),
+			ReadTimeout:    getEnvAsDuration("SERVER_READ_TIMEOUT", 30*time.Second),
+			WriteTimeout:   getEnvAsDuration("SERVER_WRITE_TIMEOUT", 30*time.Second),
+			MaxConnections: getEnvAsInt("SERVER_MAX_CONNECTIONS", 1000),
+		},
+		Database: DatabaseConfig{
+			Driver:          getEnv("DB_DRIVER", "sqlite"),
+			Host:            getEnv("DB_HOST", "localhost"),
+			Port:            getEnvAsInt("DB_PORT", 3306),
+			Username:        getEnv("DB_USERNAME", ""),
+			Password:        getEnv("DB_PASSWORD", ""),
+			DBName:          getEnv("DB_NAME", "blockchain.db"),
+			MaxOpenConns:    getEnvAsInt("DB_MAX_OPEN_CONNS", 100),
+			MaxIdleConns:    getEnvAsInt("DB_MAX_IDLE_CONNS", 10),
+			ConnMaxLifetime: getEnvAsDuration("DB_CONN_MAX_LIFETIME", 3600*time.Second),
+		},
+		Log: LogConfig{
+			Level:  getEnv("LOG_LEVEL", "info"),
+			Format: getEnv("LOG_FORMAT", "json"),
+			Output: getEnv("LOG_OUTPUT", "stdout"),
+		},
+		WebSocket: WebSocketConfig{
+			Enabled:         getEnvAsBool("WS_ENABLED", true),
+			Path:            getEnv("WS_PATH", "/ws"),
+			PingInterval:    getEnvAsDuration("WS_PING_INTERVAL", 30*time.Second),
+			PongWait:        getEnvAsDuration("WS_PONG_WAIT", 60*time.Second),
+			WriteWait:       getEnvAsDuration("WS_WRITE_WAIT", 10*time.Second),
+			ReadBufferSize:  getEnvAsInt("WS_READ_BUFFER_SIZE", 1024),
+			WriteBufferSize: getEnvAsInt("WS_WRITE_BUFFER_SIZE", 1024),
+		},
+		CORS: CORSConfig{
+			AllowedOrigins:   []string{getEnv("CORS_ALLOW_ORIGIN", "*")},
+			AllowedMethods:   []string{"GET", "POST", "PUT", "DELETE", "OPTIONS"},
+			AllowedHeaders:   []string{"Origin", "Content-Type", "Content-Length", "Accept-Encoding", "X-CSRF-Token", "Authorization"},
+			AllowCredentials: getEnvAsBool("CORS_ALLOW_CREDENTIALS", true),
+			MaxAge:           getEnvAsInt("CORS_MAX_AGE", 86400),
+		},
+		API: APIConfig{
+			Version: getEnv("API_VERSION", "v1"),
+			Prefix:  getEnv("API_PREFIX", "/api"),
+			RateLimit: RateLimitConfig{
+				Enabled:           getEnvAsBool("API_RATE_LIMIT_ENABLED", true),
+				RequestsPerMinute: getEnvAsInt("API_RATE_LIMIT_REQUESTS_PER_MINUTE", 100),
+				Burst:             getEnvAsInt("API_RATE_LIMIT_BURST", 20),
+			},
+		},
+	}
+
+	logrus.Info("Configuration loaded from environment variables")
+	return nil
+}
+
+// getConfigPath 获取配置文件路径
+func getConfigPath() string {
+	// 按优先级查找配置文件
+	paths := []string{
+		"config/config.yaml",
+		"config/config.yml",
+		"./config/config.yaml",
+		"./config/config.yml",
+		"../config/config.yaml",
+		"../config/config.yml",
+		"config.yaml",
+		"config.yml",
+		"./config.yaml",
+		"./config.yml",
+		"../config.yaml",
+		"../config.yml",
+	}
+
+	for _, path := range paths {
+		if _, err := os.Stat(path); err == nil {
+			return path
+		}
+	}
+
+	return "config/config.yaml" // 默认路径
+}
+
+// getEnv 获取环境变量，如果不存在则返回默认值
+func getEnv(key, defaultValue string) string {
+	if value := os.Getenv(key); value != "" {
+		return value
+	}
+	return defaultValue
+}
+
+// getEnvAsInt 获取环境变量并转换为整数
+func getEnvAsInt(key string, defaultValue int) int {
+	if value := os.Getenv(key); value != "" {
+		if intValue, err := strconv.Atoi(value); err == nil {
+			return intValue
+		}
+	}
+	return defaultValue
+}
+
+// getEnvAsBool 获取环境变量并转换为布尔值
+func getEnvAsBool(key string, defaultValue bool) bool {
+	if value := os.Getenv(key); value != "" {
+		if boolValue, err := strconv.ParseBool(value); err == nil {
+			return boolValue
+		}
+	}
+	return defaultValue
+}
+
+// getEnvAsDuration 获取环境变量并转换为时间间隔
+func getEnvAsDuration(key string, defaultValue time.Duration) time.Duration {
+	if value := os.Getenv(key); value != "" {
+		if duration, err := time.ParseDuration(value); err == nil {
+			return duration
+		}
+	}
+	return defaultValue
+}

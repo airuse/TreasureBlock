@@ -1,0 +1,76 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  html {
+    font-family: 'Inter', system-ui, sans-serif;
+  }
+}
+
+@layer components {
+  .btn-primary {
+    background-color: rgb(37 99 235);
+    color: white;
+    font-weight: 500;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    transition-property: color, background-color;
+    transition-duration: 200ms;
+}
+
+  .btn-primary:hover {
+    background-color: rgb(29 78 216);
+  }
+  
+  .btn-secondary {
+    background-color: rgb(229 231 235);
+    color: rgb(31 41 55);
+    font-weight: 500;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    transition-property: color, background-color;
+    transition-duration: 200ms;
+  }
+  
+  .btn-secondary:hover {
+    background-color: rgb(209 213 219);
+  }
+  
+  .card {
+    background-color: white;
+    border-radius: 0.5rem;
+    box-shadow: 0 1px 2px 0 rgb(0 0 0 / 0.05);
+    border: 1px solid rgb(229 231 235);
+    padding: 1.5rem;
+  }
+  
+  .sidebar-item {
+    display: flex;
+    align-items: center;
+    padding: 0.5rem 1rem;
+    font-size: 0.875rem;
+    font-weight: 500;
+    color: rgb(75 85 99);
+    border-radius: 0.375rem;
+    transition-property: color, background-color;
+    transition-duration: 200ms;
+  }
+  
+  .sidebar-item:hover {
+    background-color: rgb(249 250 251);
+    color: rgb(17 24 39);
+  }
+  
+  .sidebar-item svg {
+    flex-shrink: 0;
+    width: 1.25rem;
+    height: 1.25rem;
+    margin-right: 0.75rem;
+  }
+  
+  .sidebar-item.active {
+    background-color: rgb(239 246 255);
+    color: rgb(29 78 216);
+  }
+}

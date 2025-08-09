@@ -1,0 +1,99 @@
+# 区块链浏览器后端服务配置
+
+server:
+  host: "localhost"
+  port: 8080
+  read_timeout: 30s
+  write_timeout: 30s
+  max_connections: 1000
+
+database:
+  driver: "mysql"
+  host: "127.0.0.1"
+  port: 3306
+  username: "root"
+  password: "123"
+  dbname: "blockchain_browser"
+  max_open_conns: 100
+  max_idle_conns: 10
+  conn_max_lifetime: 3600s
+
+log:
+  level: "info"
+  format: "json"
+  output: "stdout"
+  file:
+    enabled: false
+    path: "logs/app.log"
+    max_size: 100
+    max_age: 30
+    max_backups: 10
+
+websocket:
+  enabled: true
+  path: "/ws"
+  ping_interval: 30s
+  pong_wait: 60s
+  write_wait: 10s
+  read_buffer_size: 1024
+  write_buffer_size: 1024
+
+cors:
+  allowed_origins:
+    - "*"
+  allowed_methods:
+    - "GET"
+    - "POST"
+    - "PUT"
+    - "DELETE"
+    - "OPTIONS"
+  allowed_headers:
+    - "Origin"
+    - "Content-Type"
+    - "Content-Length"
+    - "Accept-Encoding"
+    - "X-CSRF-Token"
+    - "Authorization"
+  allow_credentials: true
+  max_age: 86400
+
+api:
+  version: "v1"
+  prefix: "/api"
+  rate_limit:
+    enabled: true
+    requests_per_minute: 100
+    burst: 20
+
+blockchain:
+  chains:
+    btc:
+      name: "Bitcoin"
+      symbol: "BTC"
+      decimals: 8
+      enabled: true
+    eth:
+      name: "Ethereum"
+      symbol: "ETH"
+      decimals: 18
+      enabled: true
+    bsc:
+      name: "Binance Smart Chain"
+      symbol: "BNB"
+      decimals: 18
+      enabled: false
+
+cache:
+  enabled: false
+  driver: "memory"
+  redis:
+    host: "localhost"
+    port: 6379
+    password: ""
+    db: 0
+    pool_size: 10
+
+security:
+  jwt_secret: "blockchain-browser-secret-key"
+  jwt_expiration: 24h
+  bcrypt_cost: 12 
