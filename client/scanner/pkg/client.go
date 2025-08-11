@@ -6,29 +6,82 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"sync"
 	"time"
 )
 
 // Client HTTP客户端
 type Client struct {
-	baseURL    string
-	httpClient *http.Client
-	apiKey     string
+	baseURL     string
+	httpClient  *http.Client
+	apiKey      string
+	secretKey   string
+	accessToken string
+	tokenExpiry time.Time
+	mutex       sync.RWMutex
 }
 
 // NewClient 创建新的API客户端
-func NewClient(baseURL, apiKey string) *Client {
+func NewClient(baseURL, apiKey, secretKey string) *Client {
 	return &Client{
 		baseURL: baseURL,
 		httpClient: &http.Client{
 			Timeout: 30 * time.Second,
 		},
-		apiKey: apiKey,
+		apiKey:    apiKey,
+		secretKey: secretKey,
 	}
 }
 
-// request 执行HTTP请求的核心方法
-func (c *Client) request(method, endpoint string, payload interface{}, result interface{}) error {
+// GetAccessTokenRequest 获取访问令牌请求
+type GetAccessTokenRequest struct {
+	APIKey    string `json:"api_key"`
+	SecretKey string `json:"secret_key"`
+}
+
+// GetAccessTokenResponse 获取访问令牌响应
+type GetAccessTokenResponse struct {
+	AccessToken string `json:"access_token"`
+	TokenType   string `json:"token_type"`
+	ExpiresIn   int64  `json:"expires_in"`
+	ExpiresAt   int64  `json:"expires_at"`
+}
+
+// getAccessToken 获取访问令牌
+func (c *Client) getAccessToken() error {
+	req := GetAccessTokenRequest{
+		APIKey:    c.apiKey,
+		SecretKey: c.secretKey,
+	}
+
+	var resp GetAccessTokenResponse
+	err := c.requestWithoutAuth("POST", "/api/auth/token", req, &resp)
+	if err != nil {
+		return fmt.Errorf("获取访问令牌失败: %w", err)
+	}
+
+	c.mutex.Lock()
+	c.accessToken = resp.AccessToken
+	c.tokenExpiry = time.Unix(resp.ExpiresAt, 0).Add(-5 * time.Minute) // 提前5分钟刷新
+	c.mutex.Unlock()
+
+	return nil
+}
+
+// ensureValidToken 确保有有效的访问令牌
+func (c *Client) ensureValidToken() error {
+	c.mutex.RLock()
+	needRefresh := c.accessToken == "" || time.Now().After(c.tokenExpiry)
+	c.mutex.RUnlock()
+
+	if needRefresh {
+		return c.getAccessToken()
+	}
+	return nil
+}
+
+// requestWithoutAuth 执行不需要认证的HTTP请求
+func (c *Client) requestWithoutAuth(method, endpoint string, payload interface{}, result interface{}) error {
 	url := c.baseURL + endpoint
 
 	var body io.Reader
@@ -47,9 +100,77 @@ func (c *Client) request(method, endpoint string, payload interface{}, result in
 
 	// 设置请求头
 	req.Header.Set("Content-Type", "application/json")
-	if c.apiKey != "" {
-		req.Header.Set("Authorization", "Bearer "+c.apiKey)
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("request failed: %w", err)
 	}
+	defer resp.Body.Close()
+
+	responseBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read response failed: %w", err)
+	}
+
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return fmt.Errorf("HTTP %d: %s", resp.StatusCode, string(responseBody))
+	}
+
+	// 解析通用响应格式
+	var apiResp APIResponse
+	if err := json.Unmarshal(responseBody, &apiResp); err != nil {
+		return fmt.Errorf("unmarshal response failed: %w", err)
+	}
+
+	if !apiResp.Success {
+		return fmt.Errorf("API error: %s", apiResp.Error)
+	}
+
+	// 如果需要解析result
+	if result != nil && apiResp.Data != nil {
+		dataBytes, err := json.Marshal(apiResp.Data)
+		if err != nil {
+			return fmt.Errorf("marshal data failed: %w", err)
+		}
+
+		if err := json.Unmarshal(dataBytes, result); err != nil {
+			return fmt.Errorf("unmarshal result failed: %w", err)
+		}
+	}
+
+	return nil
+}
+
+// request 执行HTTP请求的核心方法
+func (c *Client) request(method, endpoint string, payload interface{}, result interface{}) error {
+	// 确保有有效的访问令牌
+	if err := c.ensureValidToken(); err != nil {
+		return fmt.Errorf("确保访问令牌失败: %w", err)
+	}
+
+	url := c.baseURL + endpoint
+
+	var body io.Reader
+	if payload != nil {
+		jsonData, err := json.Marshal(payload)
+		if err != nil {
+			return fmt.Errorf("marshal payload failed: %w", err)
+		}
+		body = bytes.NewReader(jsonData)
+	}
+
+	req, err := http.NewRequest(method, url, body)
+	if err != nil {
+		return fmt.Errorf("create request failed: %w", err)
+	}
+
+	// 设置请求头
+	req.Header.Set("Content-Type", "application/json")
+	c.mutex.RLock()
+	if c.accessToken != "" {
+		req.Header.Set("Authorization", "Bearer "+c.accessToken)
+	}
+	c.mutex.RUnlock()
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {

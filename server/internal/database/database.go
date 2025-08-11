@@ -65,6 +65,10 @@ func autoMigrate() error {
 		&models.Block{},
 		&models.Transaction{},
 		&models.Address{},
+		&models.User{},
+		&models.APIKey{},
+		&models.AccessToken{},
+		&models.RequestLog{},
 	)
 }
 

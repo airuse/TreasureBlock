@@ -1,7 +1,12 @@
 package routes
 
 import (
+	"time"
+
 	"blockChainBrowser/server/internal/handlers"
+	"blockChainBrowser/server/internal/middleware"
+	"blockChainBrowser/server/internal/repository"
+	"blockChainBrowser/server/internal/services"
 
 	"github.com/gin-gonic/gin"
 )
@@ -15,14 +20,75 @@ func SetupRoutes(
 	assetHandler *handlers.AssetHandler,
 	coinConfigHandler *handlers.CoinConfigHandler,
 	scannerHandler *handlers.ScannerHandler,
+	authHandler *handlers.AuthHandler,
+	authService services.AuthService,
+	apiKeyRepo repository.APIKeyRepository,
+	requestLogRepo repository.RequestLogRepository,
 ) *gin.Engine {
 	router := gin.Default()
 
-	// 添加CORS中间件
+	// 添加安全相关中间件
+	router.Use(middleware.SecurityHeadersMiddleware())
+	router.Use(middleware.RequestSizeLimitMiddleware(10 * 1024 * 1024)) // 10MB限制
+	router.Use(middleware.HTTPSRedirectMiddleware())
 	router.Use(corsMiddleware())
 
-	// API版本分组
-	v1 := router.Group("/api/v1")
+	// 创建暴力破解防护器
+	bruteForceProtector := middleware.NewBruteForceProtector()
+	router.Use(bruteForceProtector.LoginAttemptMiddleware())
+
+	// 创建认证和限流中间件实例
+	jwtAuthMiddleware := middleware.JWTAuthMiddleware(authService)
+	rateLimitMiddleware := middleware.RateLimitMiddleware(apiKeyRepo, requestLogRepo)
+	requestLogMiddleware := middleware.RequestLogMiddleware(requestLogRepo)
+
+	// 公开API路由（不需要认证）
+	api := router.Group("/api")
+	{
+		// 认证相关路由
+		auth := api.Group("/auth")
+		{
+			auth.POST("/register", authHandler.Register)                       // 用户注册
+			auth.POST("/login", authHandler.Login)                             // 用户登录
+			auth.POST("/token", authHandler.GetAccessToken)                    // 获取访问令牌
+			auth.POST("/refresh", jwtAuthMiddleware, authHandler.RefreshToken) // 刷新令牌（需要登录令牌）
+		}
+	}
+
+	// 需要用户认证的路由（使用登录令牌）
+	userAPI := api.Group("/user")
+	userAPI.Use(jwtAuthMiddleware) // 使用JWT认证中间件
+	{
+		userAPI.GET("/profile", authHandler.GetProfile)              // 获取用户资料
+		userAPI.POST("/change-password", authHandler.ChangePassword) // 修改密码
+
+		// API密钥管理
+		apiKeys := userAPI.Group("/api-keys")
+		{
+			apiKeys.POST("", authHandler.CreateAPIKey)           // 创建API密钥
+			apiKeys.GET("", authHandler.GetAPIKeys)              // 获取API密钥列表
+			apiKeys.PUT("/:id", authHandler.UpdateAPIKey)        // 更新API密钥
+			apiKeys.DELETE("/:id", authHandler.DeleteAPIKey)     // 删除API密钥
+			apiKeys.GET("/:id/stats", authHandler.GetUsageStats) // 获取使用统计
+		}
+	}
+
+	// 创建公开API限流器（每小时100次请求）
+	publicRateLimiter := middleware.NewPublicRateLimiter(100, time.Hour)
+
+	// 不需要JWT认证的API路由，仅限查看区块等信息（带限流保护）
+	noAuthAPI := api.Group("/no-auth")
+	noAuthAPI.Use(publicRateLimiter.PublicRateLimitMiddleware()) // 添加限流中间件
+	{
+		noAuthAPI.GET("/blocks", blockHandler.ListBlocksPublic)          // 限制最多20个区块
+		noAuthAPI.GET("/transactions", txHandler.ListTransactionsPublic) // 限制最多1000条交易
+	}
+
+	// 需要AccessToken认证的API路由（区块链数据API）
+	v1 := api.Group("/v1")
+	v1.Use(jwtAuthMiddleware)    // JWT认证
+	v1.Use(rateLimitMiddleware)  // 限流
+	v1.Use(requestLogMiddleware) // 请求日志
 	{
 		// 区块相关路由
 		blocks := v1.Group("/blocks")
@@ -61,6 +127,8 @@ func SetupRoutes(
 			coinConfigs.POST("/:symbol", coinConfigHandler.CreateCoinConfig)
 			coinConfigs.GET("/:symbol", coinConfigHandler.GetCoinConfigBySymbol)
 		}
+
+		// 扫描器相关路由
 		scanner := v1.Group("/scanner")
 		{
 			scanner.GET("/getconfig", scannerHandler.GetScannerConfig)

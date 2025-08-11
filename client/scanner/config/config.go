@@ -24,10 +24,11 @@ type Config struct {
 
 // ServerConfig 服务器配置
 type ServerConfig struct {
-	Host     string `yaml:"host"`
-	Port     int    `yaml:"port"`
-	Protocol string `yaml:"protocol"`
-	APIKey   string `yaml:"api_key"`
+	Host      string `yaml:"host"`
+	Port      int    `yaml:"port"`
+	Protocol  string `yaml:"protocol"`
+	APIKey    string `yaml:"api_key"`
+	SecretKey string `yaml:"secret_key"`
 }
 
 // BlockchainConfig 区块链配置
@@ -270,7 +271,7 @@ func loadServerConfig() error {
 		AppConfig.Server.Port)
 
 	// 创建API实例
-	api := pkg.NewScannerAPI(serverURL, AppConfig.Server.APIKey, logrus.StandardLogger())
+	api := pkg.NewScannerAPI(serverURL, AppConfig.Server.APIKey, AppConfig.Server.SecretKey, logrus.StandardLogger())
 
 	// 健康检查
 	if err := api.HealthCheck(); err != nil {
@@ -329,5 +330,5 @@ func GetScannerAPI() *pkg.ScannerAPI {
 		AppConfig.Server.Host,
 		AppConfig.Server.Port)
 
-	return pkg.NewScannerAPI(serverURL, AppConfig.Server.APIKey, logrus.StandardLogger())
+	return pkg.NewScannerAPI(serverURL, AppConfig.Server.APIKey, AppConfig.Server.SecretKey, logrus.StandardLogger())
 }

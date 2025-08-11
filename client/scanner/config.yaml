@@ -3,6 +3,7 @@ server:
   port: 8080
   protocol: "http"
   api_key: ""
+  secret_key: ""
 
 blockchain:
   chains:

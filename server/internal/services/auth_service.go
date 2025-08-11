@@ -1,0 +1,487 @@
+package services
+
+import (
+	"crypto/rand"
+	"crypto/sha256"
+	"encoding/hex"
+	"errors"
+	"fmt"
+	"time"
+
+	"blockChainBrowser/server/internal/dto"
+	"blockChainBrowser/server/internal/models"
+	"blockChainBrowser/server/internal/repository"
+
+	"github.com/golang-jwt/jwt/v5"
+	"golang.org/x/crypto/bcrypt"
+)
+
+type AuthService interface {
+	Register(req *dto.RegisterRequest) (*models.User, error)
+	Login(req *dto.LoginRequest) (*dto.LoginResponse, error)
+	CreateAPIKey(userID uint, req *dto.CreateAPIKeyRequest) (*dto.CreateAPIKeyResponse, error)
+	GetAPIKeys(userID uint) ([]*dto.APIKeyResponse, error)
+	UpdateAPIKey(userID uint, keyID uint, req *dto.UpdateAPIKeyRequest) (*dto.APIKeyResponse, error)
+	DeleteAPIKey(userID uint, keyID uint) error
+	GetAccessToken(req *dto.GetAccessTokenRequest) (*dto.GetAccessTokenResponse, error)
+	ValidateAccessToken(tokenString string) (*jwt.Token, error)
+	RefreshToken(userID uint) (*dto.LoginResponse, error)
+	GetUserProfile(userID uint) (*dto.UserProfileResponse, error)
+	ChangePassword(userID uint, req *dto.ChangePasswordRequest) error
+	GetUsageStats(userID uint, apiKeyID uint) (*dto.APIUsageStatsResponse, error)
+}
+
+type authService struct {
+	userRepo       repository.UserRepository
+	apiKeyRepo     repository.APIKeyRepository
+	requestLogRepo repository.RequestLogRepository
+	jwtSecret      string
+	jwtExpiration  time.Duration
+}
+
+func NewAuthService(
+	userRepo repository.UserRepository,
+	apiKeyRepo repository.APIKeyRepository,
+	requestLogRepo repository.RequestLogRepository,
+	jwtSecret string,
+	jwtExpiration time.Duration,
+) AuthService {
+	return &authService{
+		userRepo:       userRepo,
+		apiKeyRepo:     apiKeyRepo,
+		requestLogRepo: requestLogRepo,
+		jwtSecret:      jwtSecret,
+		jwtExpiration:  jwtExpiration,
+	}
+}
+
+func (s *authService) Register(req *dto.RegisterRequest) (*models.User, error) {
+	// 检查用户名是否已存在
+	exists, err := s.userRepo.IsUsernameExists(req.Username)
+	if err != nil {
+		return nil, fmt.Errorf("检查用户名失败: %w", err)
+	}
+	if exists {
+		return nil, errors.New("用户名已存在")
+	}
+
+	// 检查邮箱是否已存在
+	exists, err = s.userRepo.IsEmailExists(req.Email)
+	if err != nil {
+		return nil, fmt.Errorf("检查邮箱失败: %w", err)
+	}
+	if exists {
+		return nil, errors.New("邮箱已存在")
+	}
+
+	// 加密密码
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.Password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, fmt.Errorf("密码加密失败: %w", err)
+	}
+
+	// 创建用户
+	user := &models.User{
+		Username: req.Username,
+		Email:    req.Email,
+		Password: string(hashedPassword),
+		IsActive: true,
+	}
+
+	err = s.userRepo.Create(user)
+	if err != nil {
+		return nil, fmt.Errorf("创建用户失败: %w", err)
+	}
+
+	return user, nil
+}
+
+func (s *authService) Login(req *dto.LoginRequest) (*dto.LoginResponse, error) {
+	// 根据用户名查找用户
+	user, err := s.userRepo.GetByUsername(req.Username)
+	if err != nil {
+		return nil, errors.New("用户名或密码错误")
+	}
+
+	// 检查用户是否激活
+	if !user.IsActive {
+		return nil, errors.New("用户账户已被禁用")
+	}
+
+	// 验证密码
+	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password))
+	if err != nil {
+		return nil, errors.New("用户名或密码错误")
+	}
+
+	// 更新最后登录时间
+	now := time.Now()
+	err = s.userRepo.UpdateLastLogin(user.ID, now)
+	if err != nil {
+		// 不影响登录流程，只记录错误
+		fmt.Printf("更新用户最后登录时间失败: %v\n", err)
+	}
+
+	// 生成JWT令牌
+	token, expiresAt, err := s.generateJWT(user.ID, user.Username)
+	if err != nil {
+		return nil, fmt.Errorf("生成令牌失败: %w", err)
+	}
+
+	return &dto.LoginResponse{
+		UserID:    user.ID,
+		Username:  user.Username,
+		Email:     user.Email,
+		Token:     token,
+		ExpiresAt: expiresAt.Unix(),
+	}, nil
+}
+
+func (s *authService) CreateAPIKey(userID uint, req *dto.CreateAPIKeyRequest) (*dto.CreateAPIKeyResponse, error) {
+	// 生成API Key和Secret Key
+	apiKey, err := s.generateAPIKey()
+	if err != nil {
+		return nil, fmt.Errorf("生成API密钥失败: %w", err)
+	}
+
+	secretKey, err := s.generateSecretKey()
+	if err != nil {
+		return nil, fmt.Errorf("生成Secret密钥失败: %w", err)
+	}
+
+	// 加密Secret Key存储
+	hashedSecretKey, err := bcrypt.GenerateFromPassword([]byte(secretKey), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, fmt.Errorf("加密Secret密钥失败: %w", err)
+	}
+
+	// 创建API密钥记录
+	key := &models.APIKey{
+		UserID:    userID,
+		Name:      req.Name,
+		APIKey:    apiKey,
+		SecretKey: string(hashedSecretKey),
+		IsActive:  true,
+		ExpiresAt: req.ExpiresAt,
+		RateLimit: req.RateLimit,
+	}
+
+	err = s.apiKeyRepo.Create(key)
+	if err != nil {
+		return nil, fmt.Errorf("创建API密钥失败: %w", err)
+	}
+
+	return &dto.CreateAPIKeyResponse{
+		ID:        key.ID,
+		Name:      key.Name,
+		APIKey:    key.APIKey,
+		SecretKey: secretKey, // 只在创建时返回
+		ExpiresAt: key.ExpiresAt,
+		RateLimit: key.RateLimit,
+		CreatedAt: key.CreatedAt,
+	}, nil
+}
+
+func (s *authService) GetAPIKeys(userID uint) ([]*dto.APIKeyResponse, error) {
+	keys, err := s.apiKeyRepo.GetByUserID(userID)
+	if err != nil {
+		return nil, fmt.Errorf("获取API密钥列表失败: %w", err)
+	}
+
+	var responses []*dto.APIKeyResponse
+	for _, key := range keys {
+		responses = append(responses, &dto.APIKeyResponse{
+			ID:         key.ID,
+			Name:       key.Name,
+			APIKey:     key.APIKey,
+			IsActive:   key.IsActive,
+			ExpiresAt:  key.ExpiresAt,
+			LastUsedAt: key.LastUsedAt,
+			UsageCount: key.UsageCount,
+			RateLimit:  key.RateLimit,
+			CreatedAt:  key.CreatedAt,
+			UpdatedAt:  key.UpdatedAt,
+		})
+	}
+
+	return responses, nil
+}
+
+func (s *authService) UpdateAPIKey(userID uint, keyID uint, req *dto.UpdateAPIKeyRequest) (*dto.APIKeyResponse, error) {
+	// 获取API密钥
+	key, err := s.apiKeyRepo.GetByID(keyID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 检查所有权
+	if key.UserID != userID {
+		return nil, errors.New("无权限修改此API密钥")
+	}
+
+	// 更新字段
+	if req.Name != nil {
+		key.Name = *req.Name
+	}
+	if req.IsActive != nil {
+		key.IsActive = *req.IsActive
+	}
+	if req.RateLimit != nil {
+		key.RateLimit = *req.RateLimit
+	}
+
+	// 保存更改
+	err = s.apiKeyRepo.Update(key)
+	if err != nil {
+		return nil, fmt.Errorf("更新API密钥失败: %w", err)
+	}
+
+	return &dto.APIKeyResponse{
+		ID:         key.ID,
+		Name:       key.Name,
+		APIKey:     key.APIKey,
+		IsActive:   key.IsActive,
+		ExpiresAt:  key.ExpiresAt,
+		LastUsedAt: key.LastUsedAt,
+		UsageCount: key.UsageCount,
+		RateLimit:  key.RateLimit,
+		CreatedAt:  key.CreatedAt,
+		UpdatedAt:  key.UpdatedAt,
+	}, nil
+}
+
+func (s *authService) DeleteAPIKey(userID uint, keyID uint) error {
+	// 获取API密钥
+	key, err := s.apiKeyRepo.GetByID(keyID)
+	if err != nil {
+		return err
+	}
+
+	// 检查所有权
+	if key.UserID != userID {
+		return errors.New("无权限删除此API密钥")
+	}
+
+	// 删除密钥
+	return s.apiKeyRepo.Delete(keyID)
+}
+
+func (s *authService) GetAccessToken(req *dto.GetAccessTokenRequest) (*dto.GetAccessTokenResponse, error) {
+	// 根据API Key获取密钥记录
+	key, err := s.apiKeyRepo.GetActiveByAPIKey(req.APIKey)
+	if err != nil {
+		return nil, err
+	}
+
+	// 验证Secret Key
+	err = bcrypt.CompareHashAndPassword([]byte(key.SecretKey), []byte(req.SecretKey))
+	if err != nil {
+		return nil, errors.New("API密钥或Secret密钥错误")
+	}
+
+	// 更新最后使用时间和使用次数
+	now := time.Now()
+	_ = s.apiKeyRepo.UpdateLastUsed(key.ID, now)
+	_ = s.apiKeyRepo.IncrementUsageCount(key.ID)
+
+	// 生成Access Token
+	expiresAt := time.Now().Add(s.jwtExpiration)
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"user_id":    key.UserID,
+		"api_key_id": key.ID,
+		"username":   key.User.Username,
+		"exp":        expiresAt.Unix(),
+		"iat":        time.Now().Unix(),
+		"type":       "access_token",
+	})
+
+	tokenString, err := token.SignedString([]byte(s.jwtSecret))
+	if err != nil {
+		return nil, fmt.Errorf("生成访问令牌失败: %w", err)
+	}
+
+	return &dto.GetAccessTokenResponse{
+		AccessToken: tokenString,
+		TokenType:   "Bearer",
+		ExpiresIn:   int64(s.jwtExpiration.Seconds()),
+		ExpiresAt:   expiresAt.Unix(),
+	}, nil
+}
+
+func (s *authService) ValidateAccessToken(tokenString string) (*jwt.Token, error) {
+	token, err := jwt.Parse(tokenString, func(token *jwt.Token) (interface{}, error) {
+		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
+			return nil, fmt.Errorf("意外的签名方法: %v", token.Header["alg"])
+		}
+		return []byte(s.jwtSecret), nil
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("令牌解析失败: %w", err)
+	}
+
+	if !token.Valid {
+		return nil, errors.New("令牌无效")
+	}
+
+	return token, nil
+}
+
+func (s *authService) GetUserProfile(userID uint) (*dto.UserProfileResponse, error) {
+	user, err := s.userRepo.GetByID(userID)
+	if err != nil {
+		return nil, err
+	}
+
+	return &dto.UserProfileResponse{
+		ID:        user.ID,
+		Username:  user.Username,
+		Email:     user.Email,
+		IsActive:  user.IsActive,
+		LastLogin: user.LastLogin,
+		CreatedAt: user.CreatedAt,
+		UpdatedAt: user.UpdatedAt,
+	}, nil
+}
+
+func (s *authService) ChangePassword(userID uint, req *dto.ChangePasswordRequest) error {
+	// 获取用户
+	user, err := s.userRepo.GetByID(userID)
+	if err != nil {
+		return err
+	}
+
+	// 验证当前密码
+	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.CurrentPassword))
+	if err != nil {
+		return errors.New("当前密码错误")
+	}
+
+	// 加密新密码
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(req.NewPassword), bcrypt.DefaultCost)
+	if err != nil {
+		return fmt.Errorf("新密码加密失败: %w", err)
+	}
+
+	// 更新密码
+	user.Password = string(hashedPassword)
+	return s.userRepo.Update(user)
+}
+
+func (s *authService) GetUsageStats(userID uint, apiKeyID uint) (*dto.APIUsageStatsResponse, error) {
+	stats, err := s.requestLogRepo.GetUsageStats(userID, apiKeyID)
+	if err != nil {
+		return nil, fmt.Errorf("获取使用统计失败: %w", err)
+	}
+
+	return &dto.APIUsageStatsResponse{
+		TotalRequests:    stats.TotalRequests,
+		TodayRequests:    stats.TodayRequests,
+		ThisHourRequests: stats.ThisHourRequests,
+		AvgResponseTime:  stats.AvgResponseTime,
+	}, nil
+}
+
+// 生成JWT令牌
+func (s *authService) generateJWT(userID uint, username string) (string, time.Time, error) {
+	expiresAt := time.Now().Add(s.jwtExpiration)
+	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
+		"user_id":  userID,
+		"username": username,
+		"exp":      expiresAt.Unix(),
+		"iat":      time.Now().Unix(),
+		"type":     "login_token",
+	})
+
+	tokenString, err := token.SignedString([]byte(s.jwtSecret))
+	return tokenString, expiresAt, err
+}
+
+// 生成API Key
+func (s *authService) generateAPIKey() (string, error) {
+	bytes := make([]byte, 16)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	return "ak_" + hex.EncodeToString(bytes), nil
+}
+
+// 生成Secret Key
+func (s *authService) generateSecretKey() (string, error) {
+	bytes := make([]byte, 32)
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	return "sk_" + hex.EncodeToString(bytes), nil
+}
+
+// 生成令牌哈希
+func (s *authService) generateTokenHash(token string) string {
+	hash := sha256.Sum256([]byte(token))
+	return hex.EncodeToString(hash[:])
+}
+
+// 从JWT令牌中提取用户ID
+func ExtractUserIDFromToken(token *jwt.Token) (uint, error) {
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return 0, errors.New("无效的令牌声明")
+	}
+
+	userIDFloat, ok := claims["user_id"].(float64)
+	if !ok {
+		return 0, errors.New("无效的用户ID")
+	}
+
+	return uint(userIDFloat), nil
+}
+
+// 从JWT令牌中提取API Key ID
+func ExtractAPIKeyIDFromToken(token *jwt.Token) (uint, error) {
+	claims, ok := token.Claims.(jwt.MapClaims)
+	if !ok {
+		return 0, errors.New("无效的令牌声明")
+	}
+
+	apiKeyIDFloat, ok := claims["api_key_id"].(float64)
+	if !ok {
+		return 0, errors.New("无效的API密钥ID")
+	}
+
+	return uint(apiKeyIDFloat), nil
+}
+
+// RefreshToken 刷新JWT令牌
+func (s *authService) RefreshToken(userID uint) (*dto.LoginResponse, error) {
+	// 获取用户信息
+	user, err := s.userRepo.GetByID(userID)
+	if err != nil {
+		return nil, fmt.Errorf("获取用户信息失败: %w", err)
+	}
+
+	// 检查用户是否激活
+	if !user.IsActive {
+		return nil, errors.New("用户账户已被禁用")
+	}
+
+	// 生成新的JWT令牌
+	token, expiresAt, err := s.generateJWT(user.ID, user.Username)
+	if err != nil {
+		return nil, fmt.Errorf("生成令牌失败: %w", err)
+	}
+
+	// 更新用户最后登录时间
+	user.LastLogin = &expiresAt
+	if err := s.userRepo.Update(user); err != nil {
+		// 记录错误但不影响令牌刷新
+		// 这里可以添加日志记录
+	}
+
+	return &dto.LoginResponse{
+		UserID:    user.ID,
+		Username:  user.Username,
+		Email:     user.Email,
+		Token:     token,
+		ExpiresAt: expiresAt.Unix(),
+	}, nil
+}

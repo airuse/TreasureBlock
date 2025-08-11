@@ -3,6 +3,10 @@
 server:
   host: "localhost"
   port: 8080
+  tls_enabled: true
+  tls_port: 8443
+  cert_file: "./certs/localhost.crt"
+  key_file: "./certs/localhost.key"
   read_timeout: 30s
   write_timeout: 30s
   max_connections: 1000

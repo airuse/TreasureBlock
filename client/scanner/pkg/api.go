@@ -15,13 +15,13 @@ type ScannerAPI struct {
 }
 
 // NewScannerAPI 创建扫块器API实例
-func NewScannerAPI(baseURL, apiKey string, logger *logrus.Logger) *ScannerAPI {
+func NewScannerAPI(baseURL, apiKey, secretKey string, logger *logrus.Logger) *ScannerAPI {
 	if logger == nil {
 		logger = logrus.StandardLogger()
 	}
 
 	return &ScannerAPI{
-		client: NewClient(baseURL, apiKey),
+		client: NewClient(baseURL, apiKey, secretKey),
 		logger: logger,
 	}
 }

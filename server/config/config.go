@@ -28,6 +28,10 @@ type Config struct {
 type ServerConfig struct {
 	Host           string        `yaml:"host"`
 	Port           int           `yaml:"port"`
+	TLSEnabled     bool          `yaml:"tls_enabled"`
+	TLSPort        int           `yaml:"tls_port"`
+	CertFile       string        `yaml:"cert_file"`
+	KeyFile        string        `yaml:"key_file"`
 	ReadTimeout    time.Duration `yaml:"read_timeout"`
 	WriteTimeout   time.Duration `yaml:"write_timeout"`
 	MaxConnections int           `yaml:"max_connections"`
@@ -185,6 +189,10 @@ func loadEnvConfig() error {
 		Server: ServerConfig{
 			Host:           getEnv("SERVER_HOST", "localhost"),
 			Port:           getEnvAsInt("SERVER_PORT", 8080),
+			TLSEnabled:     getEnvAsBool("TLS_ENABLED", false),
+			TLSPort:        getEnvAsInt("TLS_PORT", 8443),
+			CertFile:       getEnv("TLS_CERT_FILE", ""),
+			KeyFile:        getEnv("TLS_KEY_FILE", ""),
 			ReadTimeout:    getEnvAsDuration("SERVER_READ_TIMEOUT", 30*time.Second),
 			WriteTimeout:   getEnvAsDuration("SERVER_WRITE_TIMEOUT", 30*time.Second),
 			MaxConnections: getEnvAsInt("SERVER_MAX_CONNECTIONS", 1000),
@@ -229,6 +237,11 @@ func loadEnvConfig() error {
 				RequestsPerMinute: getEnvAsInt("API_RATE_LIMIT_REQUESTS_PER_MINUTE", 100),
 				Burst:             getEnvAsInt("API_RATE_LIMIT_BURST", 20),
 			},
+		},
+		Security: SecurityConfig{
+			JWTSecret:     getEnv("JWT_SECRET", "your-secret-key-change-this-in-production"),
+			JWTExpiration: getEnvAsDuration("JWT_EXPIRATION", 24*time.Hour),
+			BcryptCost:    getEnvAsInt("BCRYPT_COST", 12),
 		},
 	}
 
