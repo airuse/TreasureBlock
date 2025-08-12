@@ -162,6 +162,12 @@
 import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
 import { useChainWebSocket } from '@/composables/useWebSocket'
 
+// 响应式数据
+const searchQuery = ref('')
+const pageSize = ref(25)
+const currentPage = ref(1)
+const totalBlocks = ref(0)
+
 // 定义区块类型
 interface Block {
   height: number
@@ -174,11 +180,6 @@ interface Block {
   reward: number
 }
 
-// 响应式数据
-const searchQuery = ref('')
-const pageSize = ref(25)
-const currentPage = ref(1)
-const totalBlocks = ref(0)
 const blocks = ref<Block[]>([])
 
 // 计算属性

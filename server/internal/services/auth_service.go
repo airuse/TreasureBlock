@@ -4,6 +4,7 @@ import (
 	"crypto/rand"
 	"crypto/sha256"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"time"
@@ -155,15 +156,22 @@ func (s *authService) CreateAPIKey(userID uint, req *dto.CreateAPIKeyRequest) (*
 		return nil, fmt.Errorf("加密Secret密钥失败: %w", err)
 	}
 
+	// 设置默认限流值
+	rateLimit := req.RateLimit
+	if rateLimit == 0 {
+		rateLimit = 1000 // 默认每小时1000次请求
+	}
+
 	// 创建API密钥记录
 	key := &models.APIKey{
-		UserID:    userID,
-		Name:      req.Name,
-		APIKey:    apiKey,
-		SecretKey: string(hashedSecretKey),
-		IsActive:  true,
-		ExpiresAt: req.ExpiresAt,
-		RateLimit: req.RateLimit,
+		UserID:      userID,
+		Name:        req.Name,
+		APIKey:      apiKey,
+		SecretKey:   string(hashedSecretKey),
+		Permissions: s.convertPermissionsToString(req.Permissions),
+		RateLimit:   rateLimit,
+		IsActive:    true,
+		ExpiresAt:   s.parseExpiresAt(req.ExpiresAt),
 	}
 
 	err = s.apiKeyRepo.Create(key)
@@ -177,7 +185,6 @@ func (s *authService) CreateAPIKey(userID uint, req *dto.CreateAPIKeyRequest) (*
 		APIKey:    key.APIKey,
 		SecretKey: secretKey, // 只在创建时返回
 		ExpiresAt: key.ExpiresAt,
-		RateLimit: key.RateLimit,
 		CreatedAt: key.CreatedAt,
 	}, nil
 }
@@ -191,16 +198,17 @@ func (s *authService) GetAPIKeys(userID uint) ([]*dto.APIKeyResponse, error) {
 	var responses []*dto.APIKeyResponse
 	for _, key := range keys {
 		responses = append(responses, &dto.APIKeyResponse{
-			ID:         key.ID,
-			Name:       key.Name,
-			APIKey:     key.APIKey,
-			IsActive:   key.IsActive,
-			ExpiresAt:  key.ExpiresAt,
-			LastUsedAt: key.LastUsedAt,
-			UsageCount: key.UsageCount,
-			RateLimit:  key.RateLimit,
-			CreatedAt:  key.CreatedAt,
-			UpdatedAt:  key.UpdatedAt,
+			ID:          key.ID,
+			Name:        key.Name,
+			APIKey:      key.APIKey,
+			SecretKey:   key.SecretKey, // 添加SecretKey字段
+			Permissions: s.parsePermissionsFromString(key.Permissions),
+			IsActive:    key.IsActive,
+			ExpiresAt:   key.ExpiresAt,
+			LastUsedAt:  key.LastUsedAt,
+			UsageCount:  key.UsageCount,
+			CreatedAt:   key.CreatedAt,
+			UpdatedAt:   key.UpdatedAt,
 		})
 	}
 
@@ -223,11 +231,14 @@ func (s *authService) UpdateAPIKey(userID uint, keyID uint, req *dto.UpdateAPIKe
 	if req.Name != nil {
 		key.Name = *req.Name
 	}
+	if req.Permissions != nil {
+		key.Permissions = s.convertPermissionsToString(*req.Permissions)
+	}
+	if req.ExpiresAt != nil {
+		key.ExpiresAt = s.parseExpiresAt(*req.ExpiresAt)
+	}
 	if req.IsActive != nil {
 		key.IsActive = *req.IsActive
-	}
-	if req.RateLimit != nil {
-		key.RateLimit = *req.RateLimit
 	}
 
 	// 保存更改
@@ -237,17 +248,80 @@ func (s *authService) UpdateAPIKey(userID uint, keyID uint, req *dto.UpdateAPIKe
 	}
 
 	return &dto.APIKeyResponse{
-		ID:         key.ID,
-		Name:       key.Name,
-		APIKey:     key.APIKey,
-		IsActive:   key.IsActive,
-		ExpiresAt:  key.ExpiresAt,
-		LastUsedAt: key.LastUsedAt,
-		UsageCount: key.UsageCount,
-		RateLimit:  key.RateLimit,
-		CreatedAt:  key.CreatedAt,
-		UpdatedAt:  key.UpdatedAt,
+		ID:          key.ID,
+		Name:        key.Name,
+		APIKey:      key.APIKey,
+		SecretKey:   key.SecretKey, // 添加SecretKey字段
+		Permissions: s.parsePermissionsFromString(key.Permissions),
+		IsActive:    key.IsActive,
+		ExpiresAt:   key.ExpiresAt,
+		LastUsedAt:  key.LastUsedAt,
+		UsageCount:  key.UsageCount,
+		CreatedAt:   key.CreatedAt,
+		UpdatedAt:   key.UpdatedAt,
 	}, nil
+}
+
+// 辅助方法：将权限数组转换为JSON字符串
+func (s *authService) convertPermissionsToString(permissions []string) string {
+	if len(permissions) == 0 {
+		return "[]"
+	}
+	data, err := json.Marshal(permissions)
+	if err != nil {
+		return "[]"
+	}
+	return string(data)
+}
+
+// 辅助方法：将IP白名单数组转换为JSON字符串
+func (s *authService) convertIPWhitelistToString(ipWhitelist []string) string {
+	if len(ipWhitelist) == 0 {
+		return "[]"
+	}
+	data, err := json.Marshal(ipWhitelist)
+	if err != nil {
+		return "[]"
+	}
+	return string(data)
+}
+
+// 辅助方法：解析过期时间
+func (s *authService) parseExpiresAt(expiresAt string) *time.Time {
+	if expiresAt == "" {
+		return nil
+	}
+	t, err := time.Parse("2006-01-02", expiresAt)
+	if err != nil {
+		return nil
+	}
+	return &t
+}
+
+// 辅助方法：将JSON字符串解析为权限数组
+func (s *authService) parsePermissionsFromString(permissions string) []string {
+	if permissions == "" || permissions == "[]" {
+		return []string{}
+	}
+	var perms []string
+	err := json.Unmarshal([]byte(permissions), &perms)
+	if err != nil {
+		return []string{}
+	}
+	return perms
+}
+
+// 辅助方法：将JSON字符串解析为IP白名单数组
+func (s *authService) parseIPWhitelistFromString(ipWhitelist string) []string {
+	if ipWhitelist == "" || ipWhitelist == "[]" {
+		return []string{}
+	}
+	var ips []string
+	err := json.Unmarshal([]byte(ipWhitelist), &ips)
+	if err != nil {
+		return []string{}
+	}
+	return ips
 }
 
 func (s *authService) DeleteAPIKey(userID uint, keyID uint) error {

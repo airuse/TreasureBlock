@@ -34,7 +34,7 @@ func (r *baseConfigRepository) GetByConfigType(ctx context.Context, configType u
 
 func (r *baseConfigRepository) GetByConfigGroup(ctx context.Context, configGroup string) ([]*models.BaseConfig, error) {
 	var baseConfigs []*models.BaseConfig
-	err := r.db.WithContext(ctx).Where("group = ?", configGroup).Find(&baseConfigs).Error
+	err := r.db.WithContext(ctx).Where("`group` = ?", configGroup).Find(&baseConfigs).Error
 	if err != nil {
 		return nil, err
 	}
@@ -43,7 +43,7 @@ func (r *baseConfigRepository) GetByConfigGroup(ctx context.Context, configGroup
 
 func (r *baseConfigRepository) GetByConfigKey(ctx context.Context, configKey string, configType uint8, configGroup string) (*models.BaseConfig, error) {
 	var baseConfig models.BaseConfig
-	err := r.db.WithContext(ctx).Where("config_key = ? AND config_type = ? AND group = ?", configKey, configType, configGroup).First(&baseConfig).Error
+	err := r.db.WithContext(ctx).Where("config_key = ? AND config_type = ? AND `group` = ?", configKey, configType, configGroup).First(&baseConfig).Error
 	if err != nil {
 		return nil, err
 	}

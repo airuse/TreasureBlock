@@ -25,7 +25,7 @@ export function useWebSocket(options?: Partial<WebSocketOptions>) {
 
   // 默认配置
   const defaultOptions: WebSocketOptions = {
-    url: 'ws://localhost:8080/ws', // 默认WebSocket地址
+    url: 'wss://localhost:8443/ws', // 使用WSS协议连接HTTPS后端
     autoReconnect: true,
     reconnectInterval: 3000,
     maxReconnectAttempts: 5,

@@ -32,28 +32,25 @@ func New() *Server {
 		log.Fatal("Failed to initialize database:", err)
 	}
 
-	// 创建仓储层
+	// 创建仓库
 	blockRepo := repository.NewBlockRepository()
 	txRepo := repository.NewTransactionRepository()
 	addressRepo := repository.NewAddressRepository()
 	assetRepo := repository.NewAssetRepository()
-	coinConfigRepo := repository.NewCoinConfigRepository()
 	baseConfigRepo := repository.NewBaseConfigRepository()
-
-	// 认证相关仓储层
+	coinConfigRepo := repository.NewCoinConfigRepository()
 	userRepo := repository.NewUserRepository(database.GetDB())
 	apiKeyRepo := repository.NewAPIKeyRepository(database.GetDB())
 	requestLogRepo := repository.NewRequestLogRepository(database.GetDB())
+	userAddressRepo := repository.NewUserAddressRepository(database.GetDB())
 
-	// 创建服务层
+	// 创建服务
 	blockService := services.NewBlockService(blockRepo)
 	txService := services.NewTransactionService(txRepo)
 	addressService := services.NewAddressService(addressRepo)
 	assetService := services.NewAssetService(assetRepo)
-	coinConfigService := services.NewCoinConfigService(coinConfigRepo)
 	baseConfigService := services.NewBaseConfigService(baseConfigRepo)
-
-	// 认证服务
+	coinConfigService := services.NewCoinConfigService(coinConfigRepo)
 	authService := services.NewAuthService(
 		userRepo,
 		apiKeyRepo,
@@ -61,6 +58,7 @@ func New() *Server {
 		config.AppConfig.Security.JWTSecret,
 		config.AppConfig.Security.JWTExpiration,
 	)
+	userAddressService := services.NewUserAddressService(userAddressRepo)
 
 	// 创建处理器
 	blockHandler := handlers.NewBlockHandler(blockService)
@@ -71,12 +69,29 @@ func New() *Server {
 	coinConfigHandler := handlers.NewCoinConfigHandler(coinConfigService)
 	scannerHandler := handlers.NewScannerHandler(baseConfigService)
 	authHandler := handlers.NewAuthHandler(authService)
+	userAddressHandler := handlers.NewUserAddressHandler(userAddressService)
+	baseConfigHandler := handlers.NewBaseConfigHandler(baseConfigService)
 
 	// 启动WebSocket处理器
 	wsHandler.Start()
 
 	// 设置路由
-	router := routes.SetupRoutes(blockHandler, txHandler, wsHandler, addressHandler, assetHandler, coinConfigHandler, scannerHandler, authHandler, authService, apiKeyRepo, requestLogRepo)
+	router := routes.SetupRoutes(
+		blockHandler,
+		txHandler,
+		wsHandler,
+		addressHandler,
+		assetHandler,
+		coinConfigHandler,
+		scannerHandler,
+		authHandler,
+		userAddressHandler,
+		baseConfigHandler,
+		authService,
+		apiKeyRepo,
+		requestLogRepo,
+		config.AppConfig.Server.TLSEnabled, // 传递TLS配置
+	)
 
 	// 创建HTTP服务器
 	httpAddr := fmt.Sprintf("%s:%d", config.AppConfig.Server.Host, config.AppConfig.Server.Port)

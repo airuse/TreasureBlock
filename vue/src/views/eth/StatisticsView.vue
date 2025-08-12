@@ -149,15 +149,30 @@
 import { ref, onMounted } from 'vue'
 
 // 响应式数据
+const searchQuery = ref('')
+const timeRange = ref('24h')
+const pageSize = ref(25)
+const currentPage = ref(1)
+const totalMetrics = ref(0)
 const lastUpdateTime = ref('')
+
+// 定义网络指标类型
+interface NetworkMetric {
+  name: string
+  currentValue: string
+  change24h: number
+  change7d: number
+}
+
+const networkMetrics = ref<NetworkMetric[]>([])
+
+// 统计数据
 const stats = ref({
   dailyVolume: 0,
   avgGasPrice: 0,
   avgBlockTime: 0,
   difficulty: 0
 })
-
-const networkMetrics = ref([])
 
 // 格式化函数
 const formatAmount = (amount: number) => {

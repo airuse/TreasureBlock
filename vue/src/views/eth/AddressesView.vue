@@ -179,7 +179,18 @@ const typeFilter = ref('')
 const pageSize = ref(25)
 const currentPage = ref(1)
 const totalAddresses = ref(0)
-const addresses = ref([])
+
+// 定义地址类型
+interface Address {
+  hash: string
+  type: string
+  balance: number
+  transactionCount: number
+  lastActivity: number
+  label: string | null
+}
+
+const addresses = ref<Address[]>([])
 
 // 计算属性
 const totalPages = computed(() => Math.ceil(totalAddresses.value / pageSize.value))

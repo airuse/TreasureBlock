@@ -28,19 +28,20 @@ func (User) TableName() string {
 
 // APIKey API密钥模型
 type APIKey struct {
-	ID         uint           `json:"id" gorm:"primaryKey"`
-	UserID     uint           `json:"user_id" gorm:"not null;index"`
-	Name       string         `json:"name" gorm:"type:varchar(100);not null"` // 密钥名称，便于用户管理
-	APIKey     string         `json:"api_key" gorm:"type:varchar(64);uniqueIndex;not null"`
-	SecretKey  string         `json:"-" gorm:"type:varchar(128);not null"` // 不返回到前端
-	IsActive   bool           `json:"is_active" gorm:"default:true"`
-	ExpiresAt  *time.Time     `json:"expires_at"` // 过期时间，可以为空表示永久有效
-	LastUsedAt *time.Time     `json:"last_used_at"`
-	UsageCount int64          `json:"usage_count" gorm:"default:0"`
-	RateLimit  int            `json:"rate_limit" gorm:"default:1000"` // 每小时请求限制
-	CreatedAt  time.Time      `json:"created_at"`
-	UpdatedAt  time.Time      `json:"updated_at"`
-	DeletedAt  gorm.DeletedAt `json:"deleted_at,omitempty" gorm:"index"`
+	ID          uint           `json:"id" gorm:"primaryKey"`
+	UserID      uint           `json:"user_id" gorm:"not null;index"`
+	Name        string         `json:"name" gorm:"type:varchar(100);not null"` // 密钥名称，便于用户管理
+	APIKey      string         `json:"api_key" gorm:"type:varchar(64);uniqueIndex;not null"`
+	SecretKey   string         `json:"-" gorm:"type:varchar(128);not null"`   // 不返回到前端
+	Permissions string         `json:"permissions" gorm:"type:text;not null"` // JSON格式的权限数组
+	RateLimit   int64          `json:"rate_limit" gorm:"default:1000"`        // 每小时请求限制
+	IsActive    bool           `json:"is_active" gorm:"default:true"`
+	ExpiresAt   *time.Time     `json:"expires_at"` // 过期时间，可以为空表示永久有效
+	LastUsedAt  *time.Time     `json:"last_used_at"`
+	UsageCount  int64          `json:"usage_count" gorm:"default:0"`
+	CreatedAt   time.Time      `json:"created_at"`
+	UpdatedAt   time.Time      `json:"updated_at"`
+	DeletedAt   gorm.DeletedAt `json:"deleted_at,omitempty" gorm:"index"`
 
 	// 关联的用户
 	User User `json:"user,omitempty" gorm:"foreignKey:UserID"`

@@ -57,8 +57,101 @@
                 <span>BTC</span>
               </button>
             </div>
-            
 
+            <!-- 认证状态 -->
+            <div class="flex items-center space-x-3">
+              <!-- 未登录状态 -->
+              <div v-if="!authStore.isAuthenticated" class="flex items-center space-x-2">
+                <span class="text-sm text-gray-600">游客模式</span>
+                <button
+                  @click="showLoginModal = true"
+                  class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors"
+                >
+                  登录
+                </button>
+              </div>
+
+              <!-- 已登录状态 -->
+              <div v-else class="flex items-center space-x-3">
+                <!-- 用户信息 -->
+                <div class="flex items-center space-x-2">
+                  <div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
+                    <span class="text-blue-600 font-medium text-sm">
+                      {{ authStore.user?.username?.charAt(0)?.toUpperCase() || 'U' }}
+                    </span>
+                  </div>
+                  <div class="text-sm">
+                    <div class="font-medium text-gray-900">{{ authStore.user?.username }}</div>
+                    <div class="text-gray-500">{{ authStore.user?.email }}</div>
+                  </div>
+                </div>
+
+                <!-- 用户菜单 -->
+                <div class="relative">
+                  <button
+                    @click="showUserMenu = !showUserMenu"
+                    class="p-2 text-gray-400 hover:text-gray-600 transition-colors"
+                  >
+                    <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M5.293 7.293a1 1 0 011.414 0L10 10.586l3.293-3.293a1 1 0 111.414 1.414l-4 4a1 1 0 01-1.414 0l-4-4a1 1 0 010-1.414z" clip-rule="evenodd" />
+                    </svg>
+                  </button>
+
+                  <!-- 下拉菜单 -->
+                  <div
+                    v-if="showUserMenu"
+                    class="absolute right-0 mt-2 w-56 bg-white rounded-md shadow-lg py-1 z-50 border border-gray-200"
+                  >
+                    <!-- 个人中心 -->
+                    <button
+                      @click="showProfileModal = true; showUserMenu = false"
+                      class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+                    >
+                      <svg class="w-4 h-4 mr-3 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                      </svg>
+                      个人中心
+                    </button>
+                    
+                    <!-- 地址管理 -->
+                    <button
+                      @click="showAddressModal = true; showUserMenu = false"
+                      class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+                    >
+                      <svg class="w-4 h-4 mr-3 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
+                      </svg>
+                      地址管理
+                    </button>
+                    
+                    <!-- API密钥管理 -->
+                    <button
+                      @click="showAPIKeyModal = true; showUserMenu = false"
+                      class="block w-full text-left px-4 py-2 text-sm text-gray-700 hover:bg-gray-100 flex items-center"
+                    >
+                      <svg class="w-4 h-4 mr-3 text-gray-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 7a2 2 0 012 2m4 0a6 6 0 01-7.743 5.743L11 17H9v2H7v2H4a1 1 0 01-1-1v-2.586a1 1 0 01.293-.707l5.964-5.964A6 6 0 1121 9z" />
+                      </svg>
+                      API密钥管理
+                    </button>
+                    
+                    <div class="border-t border-gray-200 my-1"></div>
+                    
+                    <!-- 退出登录 -->
+                    <button
+                      @click="handleLogout"
+                      class="block w-full text-left px-4 py-2 text-sm text-red-600 hover:bg-red-50 flex items-center"
+                    >
+                      <svg class="w-4 h-4 mr-3 text-red-500" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" />
+                      </svg>
+                      退出登录
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -93,18 +186,64 @@
       <main class="flex-1 p-6">
         <router-view />
       </main>
+      <!-- 登录模态框 -->
+      <LoginModal 
+        :isVisible="showLoginModal"
+        @close="showLoginModal = false"
+        @success="showLoginModal = false"
+      />
+      
+      <!-- 个人中心模态框 -->
+      <ProfileModal 
+        :isVisible="showProfileModal"
+        @close="showProfileModal = false"
+      />
+      
+      <!-- API密钥管理模态框 -->
+      <APIKeyModal 
+        :isVisible="showAPIKeyModal"
+        @close="showAPIKeyModal = false"
+      />
+      
+      <!-- 地址管理模态框 -->
+      <AddressModal 
+        :isVisible="showAddressModal"
+        @close="showAddressModal = false"
+      />
     </div>
-
-
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useWebSocket } from '@/composables/useWebSocket'
+import { useAuthStore } from '@/stores/auth'
+import LoginModal from '../auth/LoginModal.vue'
+import ProfileModal from '../auth/ProfileModal.vue'
+import APIKeyModal from '../auth/APIKeyModal.vue'
+import AddressModal from '../auth/AddressModal.vue'
 
 const router = useRouter()
+
+// 认证
+const authStore = useAuthStore()
+
+// 初始化认证状态
+onMounted(() => {
+  authStore.initialize()
+})
+
+const showLoginModal = ref(false)
+const showUserMenu = ref(false)
+const showAPIKeyModal = ref(false)
+const showProfileModal = ref(false)
+const showAddressModal = ref(false) // Added for address management
+
+const handleLogout = () => {
+  authStore.logout()
+  showUserMenu.value = false
+}
 
 // 响应式数据
 const currentChain = ref('eth')
@@ -121,7 +260,7 @@ const menuItems = computed(() => {
     { name: '交易', path: `${basePath}/transactions` },
     { name: '地址', path: `${basePath}/addresses` },
     { name: '统计', path: `${basePath}/statistics` },
-]
+  ]
 })
 
 // 链切换方法
@@ -144,5 +283,18 @@ const switchChain = (chain: string) => {
   router.push(newPath)
 }
 
+</script>
 
-</script> 
+<style scoped>
+.sidebar-item {
+  @apply flex items-center px-3 py-2 text-sm font-medium text-gray-600 rounded-md hover:text-gray-900 hover:bg-gray-100 transition-colors;
+}
+
+.sidebar-item.active {
+  @apply bg-blue-50 text-blue-700;
+}
+
+.sidebar-item.active:hover {
+  @apply bg-blue-100;
+}
+</style>

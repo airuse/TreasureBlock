@@ -69,6 +69,8 @@ func autoMigrate() error {
 		&models.APIKey{},
 		&models.AccessToken{},
 		&models.RequestLog{},
+		&models.UserAddress{},
+		&models.BaseConfig{},
 	)
 }
 

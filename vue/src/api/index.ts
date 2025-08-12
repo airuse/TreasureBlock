@@ -1,7 +1,7 @@
 import type { Block, Transaction, Address, NetworkStats, ApiResponse } from '@/types'
 
 // API基础配置
-const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8080'
+const API_BASE_URL = import.meta.env.VITE_API_BASE_URL || 'https://localhost:8443'
 
 // 通用请求函数
 async function request<T>(endpoint: string, options?: RequestInit): Promise<ApiResponse<T>> {

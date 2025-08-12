@@ -204,8 +204,14 @@ func SecurityHeadersMiddleware() gin.HandlerFunc {
 }
 
 // HTTPSRedirectMiddleware HTTPS重定向中间件
-func HTTPSRedirectMiddleware() gin.HandlerFunc {
+func HTTPSRedirectMiddleware(enabled bool) gin.HandlerFunc {
 	return func(c *gin.Context) {
+		// 如果HTTPS重定向被禁用，直接通过
+		if !enabled {
+			c.Next()
+			return
+		}
+
 		// 检查是否为HTTPS
 		if c.Request.TLS == nil && c.GetHeader("X-Forwarded-Proto") != "https" {
 			// 只对GET请求进行重定向

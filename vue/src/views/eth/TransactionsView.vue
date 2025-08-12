@@ -191,7 +191,21 @@ const statusFilter = ref('')
 const pageSize = ref(25)
 const currentPage = ref(1)
 const totalTransactions = ref(0)
-const transactions = ref([])
+
+// 定义交易类型
+interface Transaction {
+  hash: string
+  blockHeight: number
+  timestamp: number
+  from: string
+  to: string
+  amount: number
+  gasUsed: number
+  gasPrice: number
+  status: string
+}
+
+const transactions = ref<Transaction[]>([])
 
 // 计算属性
 const totalPages = computed(() => Math.ceil(totalTransactions.value / pageSize.value))

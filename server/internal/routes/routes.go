@@ -21,16 +21,19 @@ func SetupRoutes(
 	coinConfigHandler *handlers.CoinConfigHandler,
 	scannerHandler *handlers.ScannerHandler,
 	authHandler *handlers.AuthHandler,
+	userAddressHandler *handlers.UserAddressHandler,
+	baseConfigHandler *handlers.BaseConfigHandler,
 	authService services.AuthService,
 	apiKeyRepo repository.APIKeyRepository,
 	requestLogRepo repository.RequestLogRepository,
+	tlsEnabled bool, // 添加TLS配置参数
 ) *gin.Engine {
 	router := gin.Default()
 
 	// 添加安全相关中间件
 	router.Use(middleware.SecurityHeadersMiddleware())
 	router.Use(middleware.RequestSizeLimitMiddleware(10 * 1024 * 1024)) // 10MB限制
-	router.Use(middleware.HTTPSRedirectMiddleware())
+	router.Use(middleware.HTTPSRedirectMiddleware(tlsEnabled))          // 根据配置启用HTTPS重定向
 	router.Use(corsMiddleware())
 
 	// 创建暴力破解防护器
@@ -53,6 +56,13 @@ func SetupRoutes(
 			auth.POST("/token", authHandler.GetAccessToken)                    // 获取访问令牌
 			auth.POST("/refresh", jwtAuthMiddleware, authHandler.RefreshToken) // 刷新令牌（需要登录令牌）
 		}
+
+		// 权限相关路由（公开）
+		api.GET("/permissions", baseConfigHandler.GetPermissionTypes) // 获取权限类型列表
+
+		// 基础配置相关路由（公开）
+		api.GET("/base-configs/group/:group", baseConfigHandler.GetConfigsByGroup) // 根据分组获取配置
+		api.GET("/base-configs/type/:type", baseConfigHandler.GetConfigsByType)    // 根据类型获取配置
 	}
 
 	// 需要用户认证的路由（使用登录令牌）
@@ -70,6 +80,16 @@ func SetupRoutes(
 			apiKeys.PUT("/:id", authHandler.UpdateAPIKey)        // 更新API密钥
 			apiKeys.DELETE("/:id", authHandler.DeleteAPIKey)     // 删除API密钥
 			apiKeys.GET("/:id/stats", authHandler.GetUsageStats) // 获取使用统计
+		}
+
+		// 用户地址管理
+		addresses := userAPI.Group("/addresses")
+		{
+			addresses.POST("", userAddressHandler.CreateAddress)       // 创建地址
+			addresses.GET("", userAddressHandler.GetUserAddresses)     // 获取地址列表
+			addresses.GET("/:id", userAddressHandler.GetAddressByID)   // 获取地址详情
+			addresses.PUT("/:id", userAddressHandler.UpdateAddress)    // 更新地址
+			addresses.DELETE("/:id", userAddressHandler.DeleteAddress) // 删除地址
 		}
 	}
 

@@ -1,0 +1,186 @@
+package handlers
+
+import (
+	"blockChainBrowser/server/internal/dto"
+	"blockChainBrowser/server/internal/services"
+	"blockChainBrowser/server/internal/utils"
+	"net/http"
+	"strconv"
+
+	"github.com/gin-gonic/gin"
+)
+
+// UserAddressHandler 用户地址处理器
+type UserAddressHandler struct {
+	userAddressService services.UserAddressService
+}
+
+// NewUserAddressHandler 创建用户地址处理器
+func NewUserAddressHandler(userAddressService services.UserAddressService) *UserAddressHandler {
+	return &UserAddressHandler{
+		userAddressService: userAddressService,
+	}
+}
+
+// CreateAddress 创建用户地址
+// @Summary 创建用户地址
+// @Description 创建新的用户地址
+// @Tags 用户地址管理
+// @Accept json
+// @Produce json
+// @Param request body dto.CreateUserAddressRequest true "地址信息"
+// @Success 200 {object} utils.Response{data=dto.UserAddressResponse}
+// @Failure 400 {object} utils.Response
+// @Failure 401 {object} utils.Response
+// @Router /api/user/addresses [post]
+func (h *UserAddressHandler) CreateAddress(c *gin.Context) {
+	userID := c.GetUint("user_id")
+	if userID == 0 {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "未授权")
+		return
+	}
+
+	var req dto.CreateUserAddressRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		return
+	}
+
+	address, err := h.userAddressService.CreateAddress(userID, &req)
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	utils.SuccessResponse(c, http.StatusOK, "地址创建成功", address)
+}
+
+// GetUserAddresses 获取用户地址列表
+// @Summary 获取用户地址列表
+// @Description 获取当前用户的所有地址
+// @Tags 用户地址管理
+// @Produce json
+// @Success 200 {object} utils.Response{data=[]dto.UserAddressResponse}
+// @Failure 401 {object} utils.Response
+// @Router /api/user/addresses [get]
+func (h *UserAddressHandler) GetUserAddresses(c *gin.Context) {
+	userID := c.GetUint("user_id")
+	if userID == 0 {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "未授权")
+		return
+	}
+
+	addresses, err := h.userAddressService.GetUserAddresses(userID)
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusInternalServerError, "获取地址列表失败")
+		return
+	}
+
+	utils.SuccessResponse(c, http.StatusOK, "获取地址列表成功", addresses)
+}
+
+// UpdateAddress 更新用户地址
+// @Summary 更新用户地址
+// @Description 更新指定地址的信息
+// @Tags 用户地址管理
+// @Accept json
+// @Produce json
+// @Param id path int true "地址ID"
+// @Param request body dto.UpdateUserAddressRequest true "更新信息"
+// @Success 200 {object} utils.Response{data=dto.UserAddressResponse}
+// @Failure 400 {object} utils.Response
+// @Failure 401 {object} utils.Response
+// @Router /api/user/addresses/{id} [put]
+func (h *UserAddressHandler) UpdateAddress(c *gin.Context) {
+	userID := c.GetUint("user_id")
+	if userID == 0 {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "未授权")
+		return
+	}
+
+	addressIDStr := c.Param("id")
+	addressID, err := strconv.ParseUint(addressIDStr, 10, 32)
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "无效的地址ID")
+		return
+	}
+
+	var req dto.UpdateUserAddressRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		return
+	}
+
+	address, err := h.userAddressService.UpdateAddress(userID, uint(addressID), &req)
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	utils.SuccessResponse(c, http.StatusOK, "地址更新成功", address)
+}
+
+// DeleteAddress 删除用户地址
+// @Summary 删除用户地址
+// @Description 删除指定的用户地址
+// @Tags 用户地址管理
+// @Produce json
+// @Param id path int true "地址ID"
+// @Success 200 {object} utils.Response
+// @Failure 400 {object} utils.Response
+// @Failure 401 {object} utils.Response
+// @Router /api/user/addresses/{id} [delete]
+func (h *UserAddressHandler) DeleteAddress(c *gin.Context) {
+	userID := c.GetUint("user_id")
+	if userID == 0 {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "未授权")
+		return
+	}
+
+	addressIDStr := c.Param("id")
+	addressID, err := strconv.ParseUint(addressIDStr, 10, 32)
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "无效的地址ID")
+		return
+	}
+
+	if err := h.userAddressService.DeleteAddress(userID, uint(addressID)); err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	utils.SuccessResponse(c, http.StatusOK, "地址删除成功", nil)
+}
+
+// GetAddressByID 根据ID获取地址
+// @Summary 获取地址详情
+// @Description 根据ID获取指定地址的详细信息
+// @Tags 用户地址管理
+// @Produce json
+// @Param id path int true "地址ID"
+// @Success 200 {object} utils.Response{data=dto.UserAddressResponse}
+// @Failure 400 {object} utils.Response
+// @Failure 401 {object} utils.Response
+// @Router /api/user/addresses/{id} [get]
+func (h *UserAddressHandler) GetAddressByID(c *gin.Context) {
+	userID := c.GetUint("user_id")
+	if userID == 0 {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "未授权")
+		return
+	}
+
+	addressIDStr := c.Param("id")
+	addressID, err := strconv.ParseUint(addressIDStr, 10, 32)
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "无效的地址ID")
+		return
+	}
+
+	address, err := h.userAddressService.GetAddressByID(userID, uint(addressID))
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	utils.SuccessResponse(c, http.StatusOK, "获取地址详情成功", address)
+}
