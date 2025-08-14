@@ -63,17 +63,6 @@ func (api *ScannerAPI) GetScanConfig(chain string) (*ScanConfig, error) {
 		config.ScanInterval = 10 * time.Second
 	}
 
-	// 批次大小
-	if batchSize, err := api.getConfigValue(1, "scan", "batch_size_"+chain); err == nil {
-		if size, err := strconv.Atoi(batchSize); err == nil {
-			config.BatchSize = size
-		} else {
-			config.BatchSize = 10
-		}
-	} else {
-		config.BatchSize = 10
-	}
-
 	// 确认数
 	if confirmations, err := api.getConfigValue(1, "scan", "confirmations_"+chain); err == nil {
 		if conf, err := strconv.Atoi(confirmations); err == nil {

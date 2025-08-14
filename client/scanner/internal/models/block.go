@@ -43,18 +43,6 @@ type BlockListResponse struct {
 	Limit   int     `json:"limit,omitempty"`
 }
 
-// BlockScanResult 区块扫描结果
-type BlockScanResult struct {
-	Chain       string    `json:"chain"`
-	Height      uint64    `json:"height"`
-	Hash        string    `json:"hash"`
-	Timestamp   time.Time `json:"timestamp"`
-	Status      string    `json:"status"` // success, failed, skipped
-	Error       string    `json:"error,omitempty"`
-	RetryCount  int       `json:"retry_count"`
-	ProcessTime int64     `json:"process_time_ms"`
-}
-
 // ScanProgress 扫描进度
 type ScanProgress struct {
 	Chain           string    `json:"chain"`

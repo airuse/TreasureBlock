@@ -16,9 +16,6 @@ import (
 
 var (
 	configFile string
-	startBlock uint64
-	chain      string
-	interval   time.Duration
 )
 
 // rootCmd 根命令
@@ -38,9 +35,6 @@ var rootCmd = &cobra.Command{
 // init 初始化命令
 func init() {
 	rootCmd.PersistentFlags().StringVarP(&configFile, "config", "c", "", "Configuration file path")
-	rootCmd.PersistentFlags().Uint64VarP(&startBlock, "start", "s", 0, "Start block height (0 = from config or resume)")
-	rootCmd.PersistentFlags().StringVarP(&chain, "chain", "n", "", "Specific chain to scan (btc, eth, or empty for all)")
-	rootCmd.PersistentFlags().DurationVarP(&interval, "interval", "i", 0, "Scanning interval (0 = use config default)")
 }
 
 // run 运行主程序
@@ -48,19 +42,6 @@ func run(cmd *cobra.Command, args []string) error {
 	// 加载配置
 	if err := config.Load(configFile); err != nil {
 		return fmt.Errorf("failed to load configuration: %w", err)
-	}
-
-	// 应用命令行参数
-	if startBlock > 0 {
-		config.AppConfig.Scan.StartBlockHeight = startBlock
-	}
-	// 如果指定了间隔，则使用命令行参数
-	if interval > 0 {
-		config.AppConfig.Scan.Interval = interval
-	}
-	// 如果指定了链，则使用命令行参数
-	if chain != "" {
-		logrus.Infof("Will scan specific chain: %s", chain)
 	}
 
 	// 设置日志格式
@@ -72,13 +53,22 @@ func run(cmd *cobra.Command, args []string) error {
 	// 创建扫块器
 	blockScanner := scanner.NewBlockScanner(config.AppConfig)
 
-	// 如果配置了自动启动，则启动扫描器
-	if config.AppConfig.Scan.AutoStart {
-		logrus.Info("Auto-starting block scanner...")
+	// 检查是否有启用的链
+	enabledChains := 0
+	for _, chainConfig := range config.AppConfig.Blockchain.Chains {
+		if chainConfig.Enabled && chainConfig.Scan.AutoStart {
+			enabledChains++
+		}
+	}
+
+	if enabledChains > 0 {
+		logrus.Infof("Auto-starting block scanner for %d enabled chains...", enabledChains)
 		if err := blockScanner.Start(); err != nil {
 			logrus.Errorf("Failed to start block scanner: %v", err)
 			return err
 		}
+	} else {
+		logrus.Warn("No enabled chains found or auto-start disabled")
 	}
 
 	// 等待中断信号

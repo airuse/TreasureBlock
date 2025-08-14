@@ -1,166 +1,292 @@
 package scanners
 
 import (
-	"encoding/json"
+	"context"
 	"fmt"
-	"net/http"
-	"strconv"
+	"math/big"
 	"time"
 
 	"blockChainBrowser/client/scanner/config"
 	"blockChainBrowser/client/scanner/internal/models"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/core/types"
+	"github.com/ethereum/go-ethereum/ethclient"
 )
 
-// EthereumScanner 以太坊扫块器
+// EthereumScanner 以太坊扫块器 - 使用官方go-ethereum包
 type EthereumScanner struct {
-	config     *config.ChainConfig
-	httpClient *http.Client
+	config *config.ChainConfig
+	// 客户端连接池
+	localClient      *ethclient.Client
+	externalClients  []*ethclient.Client
+	currentNodeIndex int // 当前使用的外部节点索引
 }
 
 // NewEthereumScanner 创建新的以太坊扫块器
 func NewEthereumScanner(cfg *config.ChainConfig) *EthereumScanner {
-	return &EthereumScanner{
-		config: cfg,
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
+	scanner := &EthereumScanner{
+		config:           cfg,
+		externalClients:  make([]*ethclient.Client, 0),
+		currentNodeIndex: 0,
 	}
+
+	// 初始化本地节点客户端
+	if cfg.RPCURL != "" {
+		if client, err := ethclient.Dial(cfg.RPCURL); err == nil {
+			scanner.localClient = client
+		}
+	}
+
+	// 初始化多个外部API客户端
+	if len(cfg.ExplorerAPIURLs) > 0 {
+		for _, apiURL := range cfg.ExplorerAPIURLs {
+			if client, err := ethclient.Dial(apiURL); err == nil {
+				scanner.externalClients = append(scanner.externalClients, client)
+				fmt.Printf("[ETH Scanner] Successfully connected to external API: %s\n", apiURL)
+			} else {
+				fmt.Printf("[ETH Scanner] Warning: Failed to connect to external API %s: %v\n", apiURL, err)
+			}
+		}
+	}
+
+	return scanner
+}
+
+// callWithFailoverUint64 通用的故障转移调用方法（返回uint64）
+func (es *EthereumScanner) callWithFailoverUint64(operation string, clientCall func(*ethclient.Client) (uint64, error)) (uint64, error) {
+	// 首先尝试本地节点
+	if es.localClient != nil {
+		result, err := clientCall(es.localClient)
+		if err == nil {
+			return result, nil
+		}
+		fmt.Printf("[ETH Scanner] Local node failed for %s: %v, trying external APIs\n", operation, err)
+	}
+
+	// 如果本地节点失败或不存在，尝试外部节点
+	if len(es.externalClients) > 0 {
+		// 从当前节点开始尝试
+		startIndex := es.currentNodeIndex
+		for i := 0; i < len(es.externalClients); i++ {
+			currentIndex := (startIndex + i) % len(es.externalClients)
+			client := es.externalClients[currentIndex]
+
+			result, err := clientCall(client)
+			if err == nil {
+				// 成功获取，更新当前节点索引
+				es.currentNodeIndex = currentIndex
+				return result, nil
+			}
+
+			fmt.Printf("[ETH Scanner] External API node %d failed for %s: %v\n", currentIndex, operation, err)
+		}
+	}
+
+	return 0, fmt.Errorf("failed to %s: all nodes failed", operation)
+}
+
+// callWithFailoverBlock 通用的故障转移调用方法（返回*models.Block）
+func (es *EthereumScanner) callWithFailoverBlock(operation string, clientCall func(*ethclient.Client) (*models.Block, error)) (*models.Block, error) {
+	// 首先尝试本地节点
+	if es.localClient != nil {
+		result, err := clientCall(es.localClient)
+		if err == nil {
+			return result, nil
+		}
+		fmt.Printf("[ETH Scanner] Local node failed for %s: %v, trying external APIs\n", operation, err)
+	}
+
+	// 如果本地节点失败或不存在，尝试外部节点
+	if len(es.externalClients) > 0 {
+		// 从当前节点开始尝试
+		startIndex := es.currentNodeIndex
+		for i := 0; i < len(es.externalClients); i++ {
+			currentIndex := (startIndex + i) % len(es.externalClients)
+			client := es.externalClients[currentIndex]
+
+			result, err := clientCall(client)
+			if err == nil {
+				// 成功获取，更新当前节点索引
+				es.currentNodeIndex = currentIndex
+				return result, nil
+			}
+
+			fmt.Printf("[ETH Scanner] External API node %d failed for %s: %v\n", currentIndex, operation, err)
+		}
+	}
+
+	return nil, fmt.Errorf("failed to %s: all nodes failed", operation)
+}
+
+// callWithFailoverTransactions 通用的故障转移调用方法（返回[]map[string]interface{}）
+func (es *EthereumScanner) callWithFailoverTransactions(operation string, clientCall func(*ethclient.Client) ([]map[string]interface{}, error)) ([]map[string]interface{}, error) {
+	// 首先尝试本地节点
+	if es.localClient != nil {
+		result, err := clientCall(es.localClient)
+		if err == nil {
+			return result, nil
+		}
+		fmt.Printf("[ETH Scanner] Local node failed for %s: %v, trying external APIs\n", operation, err)
+	}
+
+	// 如果本地节点失败或不存在，尝试外部节点
+	if len(es.externalClients) > 0 {
+		// 从当前节点开始尝试
+		startIndex := es.currentNodeIndex
+		for i := 0; i < len(es.externalClients); i++ {
+			currentIndex := (startIndex + i) % len(es.externalClients)
+			client := es.externalClients[currentIndex]
+
+			result, err := clientCall(client)
+			if err == nil {
+				// 成功获取，更新当前节点索引
+				es.currentNodeIndex = currentIndex
+				return result, nil
+			}
+
+			fmt.Printf("[ETH Scanner] External API node %d failed for %s: %v\n", currentIndex, operation, err)
+		}
+	}
+
+	return nil, fmt.Errorf("failed to %s: all nodes failed", operation)
+}
+
+// callWithFailoverRawBlock 通用的故障转移调用方法（返回*types.Block）
+func (es *EthereumScanner) callWithFailoverRawBlock(operation string, clientCall func(*ethclient.Client) (*types.Block, error)) (*types.Block, error) {
+	// 首先尝试本地节点
+	if es.localClient != nil {
+		result, err := clientCall(es.localClient)
+		if err == nil {
+			return result, nil
+		}
+		fmt.Printf("[ETH Scanner] Local node failed for %s: %v, trying external APIs\n", operation, err)
+	}
+
+	// 如果本地节点失败或不存在，尝试外部节点
+	if len(es.externalClients) > 0 {
+		// 从当前节点开始尝试
+		startIndex := es.currentNodeIndex
+		for i := 0; i < len(es.externalClients); i++ {
+			currentIndex := (startIndex + i) % len(es.externalClients)
+			client := es.externalClients[currentIndex]
+
+			result, err := clientCall(client)
+			if err == nil {
+				// 成功获取，更新当前节点索引
+				es.currentNodeIndex = currentIndex
+				return result, nil
+			}
+
+			fmt.Printf("[ETH Scanner] External API node %d failed for %s: %v\n", currentIndex, operation, err)
+		}
+	}
+
+	return nil, fmt.Errorf("failed to %s: all nodes failed", operation)
+}
+
+// callWithFailoverReceipt 通用的故障转移调用方法（返回*types.Receipt）
+func (es *EthereumScanner) callWithFailoverReceipt(operation string, clientCall func(*ethclient.Client) (*types.Receipt, error)) (*types.Receipt, error) {
+	// 首先尝试本地节点
+	if es.localClient != nil {
+		result, err := clientCall(es.localClient)
+		if err == nil {
+			return result, nil
+		}
+		fmt.Printf("[ETH Scanner] Local node failed for %s: %v, trying external APIs\n", operation, err)
+	}
+
+	// 如果本地节点失败或不存在，尝试外部节点
+	if len(es.externalClients) > 0 {
+		// 从当前节点开始尝试
+		startIndex := es.currentNodeIndex
+		for i := 0; i < len(es.externalClients); i++ {
+			currentIndex := (startIndex + i) % len(es.externalClients)
+			client := es.externalClients[currentIndex]
+
+			result, err := clientCall(client)
+			if err == nil {
+				// 成功获取，更新当前节点索引
+				es.currentNodeIndex = currentIndex
+				return result, nil
+			}
+
+			fmt.Printf("[ETH Scanner] External API node %d failed for %s: %v\n", currentIndex, operation, err)
+		}
+	}
+
+	return nil, fmt.Errorf("failed to %s: all nodes failed", operation)
 }
 
 // GetLatestBlockHeight 获取最新区块高度
 func (es *EthereumScanner) GetLatestBlockHeight() (uint64, error) {
-	// 使用Etherscan API获取最新区块高度
-	url := fmt.Sprintf("%s?module=proxy&action=eth_blockNumber&apikey=%s",
-		es.config.ExplorerAPIURL, es.config.APIKey)
+	result, err := es.callWithFailoverUint64("get latest block height", func(client *ethclient.Client) (uint64, error) {
+		return client.BlockNumber(context.Background())
+	})
 
-	resp, err := es.httpClient.Get(url)
-	if err != nil {
-		return 0, fmt.Errorf("failed to get latest block height: %w", err)
+	if err == nil {
+		fmt.Printf("[ETH Scanner] Latest block height: %d\n", result)
 	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return 0, fmt.Errorf("API returned status %d", resp.StatusCode)
-	}
-
-	var response map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		return 0, fmt.Errorf("failed to decode response: %w", err)
-	}
-
-	if result, ok := response["result"].(string); ok {
-		// 移除0x前缀并转换为十进制
-		if len(result) > 2 && result[:2] == "0x" {
-			result = result[2:]
-		}
-		height, err := strconv.ParseUint(result, 16, 64)
-		if err != nil {
-			return 0, fmt.Errorf("failed to parse height: %w", err)
-		}
-		return height, nil
-	}
-
-	return 0, fmt.Errorf("invalid response format")
+	return result, err
 }
 
 // GetBlockByHeight 根据高度获取区块
 func (es *EthereumScanner) GetBlockByHeight(height uint64) (*models.Block, error) {
-	// 使用Etherscan API获取区块信息
-	hexHeight := fmt.Sprintf("0x%x", height)
-	url := fmt.Sprintf("%s?module=proxy&action=eth_getBlockByNumber&tag=%s&boolean=true&apikey=%s",
-		es.config.ExplorerAPIURL, hexHeight, es.config.APIKey)
+	fmt.Printf("[ETH Scanner] Scanning block at height: %d\n", height)
 
-	resp, err := es.httpClient.Get(url)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get block: %w", err)
+	result, err := es.callWithFailoverBlock("get block by height", func(client *ethclient.Client) (*models.Block, error) {
+		block, err := client.BlockByNumber(context.Background(), big.NewInt(int64(height)))
+		if err != nil {
+			return nil, err
+		}
+		return es.parseBlock(block), nil
+	})
+
+	if err == nil {
+		fmt.Printf("[ETH Scanner] Successfully scanned block %d (hash: %s) with %d transactions\n",
+			result.Height, result.Hash[:16]+"...", result.TransactionCount)
 	}
-	defer resp.Body.Close()
+	return result, err
+}
 
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
+// GetBlockByHash 根据哈希获取区块
+func (es *EthereumScanner) GetBlockByHash(blockHash string) (*models.Block, error) {
+	fmt.Printf("[ETH Scanner] Scanning block with hash: %s\n", blockHash)
+
+	result, err := es.callWithFailoverBlock("get block by hash", func(client *ethclient.Client) (*models.Block, error) {
+		hash := common.HexToHash(blockHash)
+		block, err := client.BlockByHash(context.Background(), hash)
+		if err != nil {
+			return nil, err
+		}
+		return es.parseBlock(block), nil
+	})
+
+	if err == nil {
+		fmt.Printf("[ETH Scanner] Successfully scanned block %d (hash: %s) with %d transactions\n",
+			result.Height, result.Hash[:16]+"...", result.TransactionCount)
 	}
+	return result, err
+}
 
-	var response map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		return nil, fmt.Errorf("failed to decode block: %w", err)
+// parseBlock 解析以太坊区块数据
+func (es *EthereumScanner) parseBlock(block *types.Block) *models.Block {
+	return &models.Block{
+		Chain:            "eth",
+		Hash:             block.Hash().Hex(),
+		Height:           block.NumberU64(),
+		Version:          0, // 以太坊区块没有Version字段，设为0
+		Timestamp:        time.Unix(int64(block.Time()), 0),
+		Size:             uint64(block.Size()),
+		Weight:           block.GasLimit(),
+		StrippedSize:     block.GasUsed(),
+		TransactionCount: len(block.Transactions()),
+		Difficulty:       float64(block.Difficulty().Uint64()),
+		Nonce:            block.Nonce(),
+		PreviousHash:     block.ParentHash().Hex(),
+		MerkleRoot:       block.Root().Hex(),
+		Confirmations:    1, // 简化处理
 	}
-
-	if result, ok := response["result"].(map[string]interface{}); ok {
-		block := &models.Block{
-			Chain: "eth",
-		}
-
-		// 设置基本字段
-		if hash, ok := result["hash"].(string); ok {
-			block.Hash = hash
-		}
-		if number, ok := result["number"].(string); ok {
-			if len(number) > 2 && number[:2] == "0x" {
-				number = number[2:]
-			}
-			if heightVal, err := strconv.ParseUint(number, 16, 64); err == nil {
-				block.Height = heightVal
-			}
-		}
-		if timestamp, ok := result["timestamp"].(string); ok {
-			if len(timestamp) > 2 && timestamp[:2] == "0x" {
-				timestamp = timestamp[2:]
-			}
-			if ts, err := strconv.ParseUint(timestamp, 16, 64); err == nil {
-				block.Timestamp = time.Unix(int64(ts), 0)
-			}
-		}
-		if size, ok := result["size"].(string); ok {
-			if len(size) > 2 && size[:2] == "0x" {
-				size = size[2:]
-			}
-			if sizeVal, err := strconv.ParseUint(size, 16, 64); err == nil {
-				block.Size = sizeVal
-			}
-		}
-		if nonce, ok := result["nonce"].(string); ok {
-			if len(nonce) > 2 && nonce[:2] == "0x" {
-				nonce = nonce[2:]
-			}
-			if nonceVal, err := strconv.ParseUint(nonce, 16, 64); err == nil {
-				block.Nonce = nonceVal
-			}
-		}
-		if difficulty, ok := result["difficulty"].(string); ok {
-			if len(difficulty) > 2 && difficulty[:2] == "0x" {
-				difficulty = difficulty[2:]
-			}
-			if diffVal, err := strconv.ParseUint(difficulty, 16, 64); err == nil {
-				block.Difficulty = float64(diffVal)
-			}
-		}
-		if gasLimit, ok := result["gasLimit"].(string); ok {
-			if len(gasLimit) > 2 && gasLimit[:2] == "0x" {
-				gasLimit = gasLimit[2:]
-			}
-			if gasLimitVal, err := strconv.ParseUint(gasLimit, 16, 64); err == nil {
-				block.Weight = gasLimitVal // 使用Weight字段存储gasLimit
-			}
-		}
-		if gasUsed, ok := result["gasUsed"].(string); ok {
-			if len(gasUsed) > 2 && gasUsed[:2] == "0x" {
-				gasUsed = gasUsed[2:]
-			}
-			if gasUsedVal, err := strconv.ParseUint(gasUsed, 16, 64); err == nil {
-				block.StrippedSize = gasUsedVal // 使用StrippedSize字段存储gasUsed
-			}
-		}
-		if parentHash, ok := result["parentHash"].(string); ok {
-			block.PreviousHash = parentHash
-		}
-		if transactions, ok := result["transactions"].([]interface{}); ok {
-			block.TransactionCount = len(transactions)
-		}
-
-		return block, nil
-	}
-
-	return nil, fmt.Errorf("invalid response format")
 }
 
 // ValidateBlock 验证区块
@@ -195,56 +321,183 @@ func (es *EthereumScanner) ValidateBlock(block *models.Block) error {
 
 // GetBlockTransactions 获取区块交易
 func (es *EthereumScanner) GetBlockTransactions(blockHash string) ([]map[string]interface{}, error) {
-	// 使用Etherscan API获取区块交易
-	url := fmt.Sprintf("%s?module=proxy&action=eth_getBlockByHash&tag=%s&boolean=true&apikey=%s",
-		es.config.ExplorerAPIURL, blockHash, es.config.APIKey)
+	fmt.Printf("[ETH Scanner] Getting transactions for block: %s\n", blockHash)
 
-	resp, err := es.httpClient.Get(url)
+	result, err := es.callWithFailoverTransactions("get block transactions", func(client *ethclient.Client) ([]map[string]interface{}, error) {
+		return es.getTransactionsFromClient(client, blockHash)
+	})
+
+	if err == nil {
+		fmt.Printf("[ETH Scanner] Retrieved %d transactions from block %s\n", len(result), blockHash[:16]+"...")
+	}
+	return result, err
+}
+
+// getTransactionsFromClient 从指定客户端获取交易信息
+func (es *EthereumScanner) getTransactionsFromClient(client *ethclient.Client, blockHash string) ([]map[string]interface{}, error) {
+	// 使用故障转移机制获取原始区块数据
+	ethBlock, err := es.callWithFailoverRawBlock("get block by hash for transactions", func(c *ethclient.Client) (*types.Block, error) {
+		hash := common.HexToHash(blockHash)
+		return c.BlockByHash(context.Background(), hash)
+	})
+
 	if err != nil {
-		return nil, fmt.Errorf("failed to get block transactions: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK {
-		return nil, fmt.Errorf("API returned status %d", resp.StatusCode)
+		return nil, fmt.Errorf("failed to get block for transactions: %w", err)
 	}
 
-	var response map[string]interface{}
-	if err := json.NewDecoder(resp.Body).Decode(&response); err != nil {
-		return nil, fmt.Errorf("failed to decode response: %w", err)
-	}
+	transactions := make([]map[string]interface{}, len(ethBlock.Transactions()))
+	for i, tx := range ethBlock.Transactions() {
+		// 获取交易签名
+		v, r, s := tx.RawSignatureValues()
 
-	if result, ok := response["result"].(map[string]interface{}); ok {
-		if transactions, ok := result["transactions"].([]interface{}); ok {
-			var txs []map[string]interface{}
-			for _, tx := range transactions {
-				if txMap, ok := tx.(map[string]interface{}); ok {
-					txs = append(txs, txMap)
-				}
-			}
-			return txs, nil
+		// 获取交易收据以获取实际的gasUsed - 使用故障转移机制
+		var gasUsed uint64
+		receipt, err := es.callWithFailoverReceipt("get transaction receipt", func(c *ethclient.Client) (*types.Receipt, error) {
+			return c.TransactionReceipt(context.Background(), tx.Hash())
+		})
+
+		if err == nil {
+			gasUsed = receipt.GasUsed
+		} else {
+			// 如果无法获取收据，使用gas limit作为备选
+			gasUsed = tx.Gas()
+			fmt.Printf("[ETH Scanner] Warning: Could not get receipt for tx %s, using gas limit %d\n",
+				tx.Hash().Hex()[:16]+"...", gasUsed)
 		}
+
+		// 处理EIP-1559交易
+		var gasPriceStr, maxFeePerGas, maxPriorityFeePerGas, effectiveGasPrice string
+		var txType uint8
+
+		if tx.Type() == 2 { // EIP-1559 交易
+			txType = 2
+			// EIP-1559 交易使用 MaxFeePerGas 和 MaxPriorityFeePerGas
+			maxFeePerGas = tx.GasFeeCap().String()
+			maxPriorityFeePerGas = tx.GasTipCap().String()
+
+			// 计算有效gas价格 (base fee + priority fee)
+			// 注意：这里我们需要从区块头获取base fee
+			if ethBlock.BaseFee() != nil {
+				baseFee := ethBlock.BaseFee()
+				priorityFee := tx.GasTipCap()
+				if priorityFee.Cmp(baseFee) > 0 {
+					effectiveGasPrice = new(big.Int).Add(baseFee, priorityFee).String()
+				} else {
+					effectiveGasPrice = new(big.Int).Mul(baseFee, big.NewInt(2)).String()
+				}
+			} else {
+				effectiveGasPrice = maxFeePerGas // 如果无法获取base fee，使用max fee
+			}
+
+			// 为了兼容性，设置gasPrice为effectiveGasPrice
+			gasPriceStr = effectiveGasPrice
+		} else { // Legacy 交易
+			txType = 0
+			gasPriceStr = tx.GasPrice().String()
+			maxFeePerGas = "0"
+			maxPriorityFeePerGas = "0"
+			effectiveGasPrice = gasPriceStr
+		}
+
+		txData := map[string]interface{}{
+			"hash":                 tx.Hash().Hex(),
+			"nonce":                tx.Nonce(),
+			"type":                 txType,
+			"gasPrice":             gasPriceStr,
+			"maxFeePerGas":         maxFeePerGas,
+			"maxPriorityFeePerGas": maxPriorityFeePerGas,
+			"effectiveGasPrice":    effectiveGasPrice,
+			"gasLimit":             tx.Gas(), // 原始gas limit
+			"gasUsed":              gasUsed,  // 实际使用的gas
+			"to":                   tx.To().Hex(),
+			"value":                tx.Value().String(),
+			"data":                 tx.Data(),
+			"v":                    v.String(),
+			"r":                    r.String(),
+			"s":                    s.String(),
+		}
+		transactions[i] = txData
 	}
 
-	return nil, fmt.Errorf("invalid response format")
+	return transactions, nil
 }
 
 // CalculateBlockStats 计算区块统计信息
 func (es *EthereumScanner) CalculateBlockStats(block *models.Block, transactions []map[string]interface{}) {
-	// 计算总金额（以太坊中通常通过gas费用计算）
+	// 计算总gas使用量和总费用
 	var totalGasUsed uint64
+	totalFee := big.NewInt(0)
+	totalValue := big.NewInt(0)
+	legacyTxCount := 0
+	eip1559TxCount := 0
+
 	for _, tx := range transactions {
-		if gasUsed, ok := tx["gasUsed"].(string); ok {
-			if len(gasUsed) > 2 && gasUsed[:2] == "0x" {
-				gasUsed = gasUsed[2:]
+		// 获取实际的gas使用量
+		if gasUsed, ok := tx["gasUsed"].(uint64); ok {
+			totalGasUsed += gasUsed
+		} else {
+			// 如果没有gasUsed，回退到gasLimit
+			if gasLimit, ok := tx["gasLimit"].(uint64); ok {
+				totalGasUsed += gasLimit
+				fmt.Printf("[ETH Scanner] Warning: Using gasLimit %d instead of gasUsed for tx\n", gasLimit)
 			}
-			if gasUsedVal, err := strconv.ParseUint(gasUsed, 16, 64); err == nil {
-				totalGasUsed += gasUsedVal
+		}
+
+		// 获取交易类型
+		txType, _ := tx["type"].(uint8)
+		if txType == 2 {
+			eip1559TxCount++
+		} else {
+			legacyTxCount++
+		}
+
+		// 计算费用 - 优先使用effectiveGasPrice（EIP-1559兼容）
+		var gasPrice *big.Int
+		if effectiveGasPriceStr, ok := tx["effectiveGasPrice"].(string); ok && effectiveGasPriceStr != "" {
+			if price, ok := new(big.Int).SetString(effectiveGasPriceStr, 10); ok {
+				gasPrice = price
+			}
+		} else if gasPriceStr, ok := tx["gasPrice"].(string); ok {
+			if price, ok := new(big.Int).SetString(gasPriceStr, 10); ok {
+				gasPrice = price
+			}
+		}
+
+		if gasPrice != nil {
+			// 优先使用gasUsed，如果没有则使用gasLimit
+			var gasForFee uint64
+			if gasUsed, ok := tx["gasUsed"].(uint64); ok {
+				gasForFee = gasUsed
+			} else if gasLimit, ok := tx["gasLimit"].(uint64); ok {
+				gasForFee = gasLimit
+			} else {
+				continue // 跳过这笔交易
+			}
+
+			// 计算这笔交易的费用：gasUsed * effectiveGasPrice
+			txFee := new(big.Int).Mul(big.NewInt(int64(gasForFee)), gasPrice)
+			totalFee.Add(totalFee, txFee)
+		}
+
+		// 获取交易价值
+		if valueStr, ok := tx["value"].(string); ok {
+			if value, ok := new(big.Int).SetString(valueStr, 10); ok {
+				totalValue.Add(totalValue, value)
 			}
 		}
 	}
 
-	// 计算总费用（简化计算）
-	block.TotalAmount = float64(totalGasUsed) * 20e9 // 假设gas price为20 Gwei
+	// 转换为ETH单位
+	ethFee := new(big.Float).Quo(new(big.Float).SetInt(totalFee), new(big.Float).SetInt(big.NewInt(1e18)))
+	ethValue := new(big.Float).Quo(new(big.Float).SetInt(totalValue), new(big.Float).SetInt(big.NewInt(1e18)))
+
+	// 设置区块统计信息
+	block.TotalAmount, _ = ethValue.Float64()
+	block.Fee, _ = ethFee.Float64()
 	block.Confirmations = 1
+
+	// 记录详细的统计信息
+	fmt.Printf("[ETH Scanner] Block %d stats: Gas used: %d, Total fee: %s ETH, Total value: %s ETH\n",
+		block.Height, totalGasUsed, ethFee.Text('f', 18), ethValue.Text('f', 18))
+	fmt.Printf("[ETH Scanner] Transaction types: Legacy: %d, EIP-1559: %d\n", legacyTxCount, eip1559TxCount)
 }

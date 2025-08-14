@@ -2,12 +2,17 @@ package pkg
 
 import (
 	"bytes"
+	"crypto/tls"
+	"crypto/x509"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
+	"os"
 	"sync"
 	"time"
+
+	"github.com/sirupsen/logrus"
 )
 
 // Client HTTP客户端
@@ -23,13 +28,58 @@ type Client struct {
 
 // NewClient 创建新的API客户端
 func NewClient(baseURL, apiKey, secretKey string) *Client {
+	// 创建支持HTTPS的HTTP客户端
+	httpClient := &http.Client{
+		Timeout: 30 * time.Second,
+	}
+
+	// 如果使用HTTPS，配置TLS
+	if len(baseURL) > 5 && baseURL[:5] == "https" {
+		// 尝试使用自定义CA证书，支持多个可能的路径
+		caCertPaths := []string{
+			"../server/certs/localhost.crt",
+			"../../server/certs/localhost.crt",
+			"./certs/localhost.crt",
+			"../certs/localhost.crt",
+			"../../certs/localhost.crt",
+		}
+
+		var caCertPool *x509.CertPool
+		for _, certPath := range caCertPaths {
+			if caCert, err := os.ReadFile(certPath); err == nil {
+				caCertPool = x509.NewCertPool()
+				if caCertPool.AppendCertsFromPEM(caCert) {
+					logrus.Infof("Successfully loaded CA certificate from: %s", certPath)
+					break
+				}
+			}
+		}
+
+		if caCertPool != nil {
+			// 使用自定义CA证书
+			transport := &http.Transport{
+				TLSClientConfig: &tls.Config{
+					RootCAs: caCertPool,
+				},
+			}
+			httpClient.Transport = transport
+		} else {
+			// 如果无法加载证书，使用跳过验证（仅用于开发环境）
+			logrus.Warn("Failed to load CA certificate, using InsecureSkipVerify (not recommended for production)")
+			transport := &http.Transport{
+				TLSClientConfig: &tls.Config{
+					InsecureSkipVerify: true,
+				},
+			}
+			httpClient.Transport = transport
+		}
+	}
+
 	return &Client{
-		baseURL: baseURL,
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
-		apiKey:    apiKey,
-		secretKey: secretKey,
+		baseURL:    baseURL,
+		httpClient: httpClient,
+		apiKey:     apiKey,
+		secretKey:  secretKey,
 	}
 }
 

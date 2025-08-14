@@ -30,7 +30,6 @@ type ScannerConfigResponse struct {
 // ScanConfig 客户端扫块配置
 type ScanConfig struct {
 	ScanInterval     time.Duration `json:"scan_interval"`
-	BatchSize        int           `json:"batch_size"`
 	Confirmations    int           `json:"confirmations"`
 	StartBlockHeight uint64        `json:"start_block_height"`
 	MaxRetries       int           `json:"max_retries"`

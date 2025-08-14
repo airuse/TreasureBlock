@@ -1,9 +1,14 @@
 server:
   host: "localhost"
-  port: 8080
-  protocol: "http"
-  api_key: ""
-  secret_key: ""
+  port: 8443
+  protocol: "https"
+  api_key: "ak_89122f261460d428b5d3610936fd9926"
+  secret_key: "sk_b091041355066b9aec69f0e4cc1bda5d9fbdae93d4646f450734da850ee6e4ff"
+  # HTTPS相关配置
+  tls:
+    enabled: true
+    skip_verify: false
+    ca_cert: "../server/certs/localhost.crt"
 
 blockchain:
   chains:
@@ -12,33 +17,58 @@ blockchain:
       symbol: "BTC"
       decimals: 8
       enabled: true
-      rpc_url: "http://localhost:8332"
-      explorer_api_url: "https://blockstream.info/api"
+      rpc_url: "http://192.168.1.70:8332"
+      explorer_api_urls:
+        - "https://alpha-clean-yard.btc.quiknode.pro/7979488c04b1a36bdc4230b23e3eaac3e9c1c1af"
       api_key: ""
-      username: ""
-      password: ""
+      username: "bitcoin"      # bitcoind RPC用户名
+      password: "bitcoin123"  # bitcoind RPC密码
+      # BTC链特定的扫描配置
+      scan:
+        enabled: true
+        interval: 10s
+        max_retries: 3
+        retry_delay: 5s
+        confirmations: 6
+        start_block_height: 0
+        auto_start: true
+        save_to_file: false
+        output_dir: "./output/btc"
+        priority: 1  # 高优先级
+        max_concurrent: 5
+        block_timeout: 30s
+        rescan_interval: 60s
+        enable_mempool: true
+        mempool_interval: 5s
     eth:
       name: "Ethereum"
       symbol: "ETH"
       decimals: 18
       enabled: true
-      rpc_url: "http://localhost:8545"
-      explorer_api_url: "https://api.etherscan.io/api"
-      api_key: ""
+      # rpc_url: "http://192.168.1.70:8545"
+      explorer_api_urls:
+        - "https://alpha-clean-yard.ethereum-sepolia.quiknode.pro/7979488c04b1a36bdc4230b23e3eaac3e9c1c1af"
+        - "https://yolo-smart-tree.ethereum-sepolia.quiknode.pro/52836b8f979fca7325258c42925d6c245ca45079"
+      api_key: ""  # 如果需要的话
       username: ""
       password: ""
-
-scan:
-  enabled: true
-  interval: 10s
-  batch_size: 100
-  max_retries: 3
-  retry_delay: 5s
-  confirmations: 6
-  start_block_height: 0
-  auto_start: true
-  save_to_file: false
-  output_dir: "./output"
+      # ETH链特定的扫描配置
+      scan:
+        enabled: true
+        interval: 15s
+        max_retries: 3
+        retry_delay: 3s
+        confirmations: 12
+        start_block_height: 0
+        auto_start: true
+        save_to_file: false
+        output_dir: "./output/eth"
+        priority: 2  # 中等优先级
+        max_concurrent: 3
+        block_timeout: 45s
+        rescan_interval: 120s
+        enable_mempool: true
+        mempool_interval: 10s
 
 log:
   level: "info"

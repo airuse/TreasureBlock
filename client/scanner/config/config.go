@@ -3,6 +3,7 @@ package config
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
@@ -17,18 +18,25 @@ import (
 type Config struct {
 	Server     ServerConfig     `yaml:"server"`
 	Blockchain BlockchainConfig `yaml:"blockchain"`
-	Scan       ScanConfig       `yaml:"scan"`
 	Log        LogConfig        `yaml:"log"`
 	Database   DatabaseConfig   `yaml:"database"`
 }
 
 // ServerConfig 服务器配置
 type ServerConfig struct {
-	Host      string `yaml:"host"`
-	Port      int    `yaml:"port"`
-	Protocol  string `yaml:"protocol"`
-	APIKey    string `yaml:"api_key"`
-	SecretKey string `yaml:"secret_key"`
+	Host      string    `yaml:"host"`
+	Port      int       `yaml:"port"`
+	Protocol  string    `yaml:"protocol"`
+	APIKey    string    `yaml:"api_key"`
+	SecretKey string    `yaml:"secret_key"`
+	TLS       TLSConfig `yaml:"tls"`
+}
+
+// TLSConfig TLS配置
+type TLSConfig struct {
+	Enabled    bool   `yaml:"enabled"`
+	SkipVerify bool   `yaml:"skip_verify"`
+	CACert     string `yaml:"ca_cert"`
 }
 
 // BlockchainConfig 区块链配置
@@ -38,22 +46,23 @@ type BlockchainConfig struct {
 
 // ChainConfig 链配置
 type ChainConfig struct {
-	Name           string `yaml:"name"`
-	Symbol         string `yaml:"symbol"`
-	Decimals       int    `yaml:"decimals"`
-	Enabled        bool   `yaml:"enabled"`
-	RPCURL         string `yaml:"rpc_url"`
-	ExplorerAPIURL string `yaml:"explorer_api_url"`
-	APIKey         string `yaml:"api_key"`
-	Username       string `yaml:"username"`
-	Password       string `yaml:"password"`
+	Name            string   `yaml:"name"`
+	Symbol          string   `yaml:"symbol"`
+	Decimals        int      `yaml:"decimals"`
+	Enabled         bool     `yaml:"enabled"`
+	RPCURL          string   `yaml:"rpc_url"`
+	ExplorerAPIURLs []string `yaml:"explorer_api_urls"` // 支持多个外部API节点
+	APIKey          string   `yaml:"api_key"`
+	Username        string   `yaml:"username"`
+	Password        string   `yaml:"password"`
+	// 每个链的独立扫描配置
+	Scan ChainScanConfig `yaml:"scan"`
 }
 
-// ScanConfig 扫描配置
-type ScanConfig struct {
+// ChainScanConfig 链扫描配置
+type ChainScanConfig struct {
 	Enabled          bool          `yaml:"enabled"`
 	Interval         time.Duration `yaml:"interval"`
-	BatchSize        int           `yaml:"batch_size"`
 	MaxRetries       int           `yaml:"max_retries"`
 	RetryDelay       time.Duration `yaml:"retry_delay"`
 	Confirmations    int           `yaml:"confirmations"`
@@ -61,6 +70,13 @@ type ScanConfig struct {
 	AutoStart        bool          `yaml:"auto_start"`
 	SaveToFile       bool          `yaml:"save_to_file"`
 	OutputDir        string        `yaml:"output_dir"`
+	// 链特定的扫描配置
+	Priority        int           `yaml:"priority"`         // 扫描优先级，数字越小优先级越高
+	MaxConcurrent   int           `yaml:"max_concurrent"`   // 最大并发扫描数
+	BlockTimeout    time.Duration `yaml:"block_timeout"`    // 单个区块扫描超时时间
+	RescanInterval  time.Duration `yaml:"rescan_interval"`  // 重新扫描间隔（用于处理分叉）
+	EnableMempool   bool          `yaml:"enable_mempool"`   // 是否启用内存池监控
+	MempoolInterval time.Duration `yaml:"mempool_interval"` // 内存池检查间隔
 }
 
 // LogConfig 日志配置
@@ -92,6 +108,7 @@ type DatabaseConfig struct {
 }
 
 var AppConfig *Config
+var ScannerAPIInstance *pkg.ScannerAPI // 全局API实例
 
 // Load 加载配置
 func Load(configPath string) error {
@@ -103,6 +120,9 @@ func Load(configPath string) error {
 			return fmt.Errorf("failed to load any configuration: %w", err)
 		}
 	}
+
+	// 为每个链设置默认扫描配置
+	setDefaultChainScanConfigs()
 
 	// 关于配置信息中的扫块配置，由于是多客户端统一扫块，因此需要将客户端的扫块配置取中央服务器配置信息！
 	// 首先调用api接口 获取配置信息
@@ -151,23 +171,16 @@ func loadEnvConfig() error {
 			Port:     getEnvAsInt("SERVER_PORT", 8080),
 			Protocol: getEnv("SERVER_PROTOCOL", "http"),
 			APIKey:   getEnv("SERVER_API_KEY", ""),
+			TLS: TLSConfig{
+				Enabled:    getEnvAsBool("SERVER_TLS_ENABLED", false),
+				SkipVerify: getEnvAsBool("SERVER_TLS_SKIP_VERIFY", true),
+				CACert:     getEnv("SERVER_TLS_CA_CERT", ""),
+			},
 		},
 		Log: LogConfig{
 			Level:  getEnv("LOG_LEVEL", "info"),
 			Format: getEnv("LOG_FORMAT", "json"),
 			Output: getEnv("LOG_OUTPUT", "stdout"),
-		},
-		Scan: ScanConfig{
-			Enabled:          getEnvAsBool("SCAN_ENABLED", true),
-			Interval:         getEnvAsDuration("SCAN_INTERVAL", 10*time.Second),
-			BatchSize:        getEnvAsInt("SCAN_BATCH_SIZE", 100),
-			MaxRetries:       getEnvAsInt("SCAN_MAX_RETRIES", 3),
-			RetryDelay:       getEnvAsDuration("SCAN_RETRY_DELAY", 5*time.Second),
-			Confirmations:    getEnvAsInt("SCAN_CONFIRMATIONS", 6),
-			StartBlockHeight: getEnvAsUint64("SCAN_START_BLOCK_HEIGHT", 0),
-			AutoStart:        getEnvAsBool("SCAN_AUTO_START", true),
-			SaveToFile:       getEnvAsBool("SCAN_SAVE_TO_FILE", false),
-			OutputDir:        getEnv("SCAN_OUTPUT_DIR", "./output"),
 		},
 		Database: DatabaseConfig{
 			Driver:   getEnv("DB_DRIVER", "sqlite"),
@@ -272,6 +285,9 @@ func loadServerConfig() error {
 
 	// 创建API实例
 	api := pkg.NewScannerAPI(serverURL, AppConfig.Server.APIKey, AppConfig.Server.SecretKey, logrus.StandardLogger())
+	ScannerAPIInstance = api // 保存全局API实例
+
+	logrus.Infof("Initializing scanner API with server: %s", serverURL)
 
 	// 健康检查
 	if err := api.HealthCheck(); err != nil {
@@ -295,12 +311,11 @@ func loadServerConfig() error {
 		}
 
 		// 更新本地配置
-		AppConfig.Scan.Interval = scanConfig.ScanInterval
-		AppConfig.Scan.BatchSize = scanConfig.BatchSize
-		AppConfig.Scan.Confirmations = scanConfig.Confirmations
-		AppConfig.Scan.StartBlockHeight = scanConfig.StartBlockHeight
-		AppConfig.Scan.MaxRetries = scanConfig.MaxRetries
-		AppConfig.Scan.RetryDelay = scanConfig.RetryDelay
+		chainConfig.Scan.Interval = scanConfig.ScanInterval
+		chainConfig.Scan.MaxRetries = scanConfig.MaxRetries
+		chainConfig.Scan.RetryDelay = scanConfig.RetryDelay
+		chainConfig.Scan.Confirmations = scanConfig.Confirmations
+		chainConfig.Scan.StartBlockHeight = scanConfig.StartBlockHeight
 
 		// 获取RPC配置（可选）
 		rpcConfig, err := api.GetRPCConfig(chainKey)
@@ -308,14 +323,15 @@ func loadServerConfig() error {
 			logrus.Warnf("Failed to load RPC config for chain %s: %v", chainKey, err)
 		} else {
 			// 更新RPC配置
-			chain := AppConfig.Blockchain.Chains[chainKey]
-			chain.RPCURL = rpcConfig.URL
-			chain.APIKey = rpcConfig.APIKey
-			chain.Username = rpcConfig.Username
-			chain.Password = rpcConfig.Password
-			AppConfig.Blockchain.Chains[chainKey] = chain
+			chainConfig.RPCURL = rpcConfig.URL
+			chainConfig.APIKey = rpcConfig.APIKey
+			chainConfig.Username = rpcConfig.Username
+			chainConfig.Password = rpcConfig.Password
 			logrus.Infof("Updated RPC config for chain %s", chainKey)
 		}
+
+		// 更新链配置到全局配置中
+		AppConfig.Blockchain.Chains[chainKey] = chainConfig
 
 		logrus.Infof("Successfully loaded server config for chain: %s", chainKey)
 	}
@@ -323,12 +339,47 @@ func loadServerConfig() error {
 	return nil
 }
 
+// setDefaultChainScanConfigs 为每个链设置默认扫描配置
+func setDefaultChainScanConfigs() {
+	for chainKey, chainConfig := range AppConfig.Blockchain.Chains {
+		// 如果链没有扫描配置，设置默认值
+		if chainConfig.Scan.Interval == 0 {
+			chainConfig.Scan.Interval = 10 * time.Second // 默认间隔
+		}
+		if chainConfig.Scan.MaxRetries == 0 {
+			chainConfig.Scan.MaxRetries = 3 // 默认最大重试次数
+		}
+		if chainConfig.Scan.RetryDelay == 0 {
+			chainConfig.Scan.RetryDelay = 5 * time.Second // 默认重试延迟
+		}
+		if chainConfig.Scan.Confirmations == 0 {
+			chainConfig.Scan.Confirmations = 6 // 默认确认数
+		}
+		if chainConfig.Scan.StartBlockHeight == 0 {
+			chainConfig.Scan.StartBlockHeight = 0 // 默认起始块高
+		}
+		if chainConfig.Scan.OutputDir == "" {
+			chainConfig.Scan.OutputDir = filepath.Join("./output", chainKey)
+		}
+		if chainConfig.Scan.MaxConcurrent == 0 {
+			chainConfig.Scan.MaxConcurrent = 3 // 默认并发数
+		}
+		if chainConfig.Scan.BlockTimeout == 0 {
+			chainConfig.Scan.BlockTimeout = 30 * time.Second // 默认超时时间
+		}
+		if chainConfig.Scan.RescanInterval == 0 {
+			chainConfig.Scan.RescanInterval = 60 * time.Second // 默认重新扫描间隔
+		}
+		if chainConfig.Scan.MempoolInterval == 0 {
+			chainConfig.Scan.MempoolInterval = 10 * time.Second // 默认内存池检查间隔
+		}
+
+		// 更新配置
+		AppConfig.Blockchain.Chains[chainKey] = chainConfig
+	}
+}
+
 // GetScannerAPI 获取扫块器API实例
 func GetScannerAPI() *pkg.ScannerAPI {
-	serverURL := fmt.Sprintf("%s://%s:%d",
-		AppConfig.Server.Protocol,
-		AppConfig.Server.Host,
-		AppConfig.Server.Port)
-
-	return pkg.NewScannerAPI(serverURL, AppConfig.Server.APIKey, AppConfig.Server.SecretKey, logrus.StandardLogger())
+	return ScannerAPIInstance
 }

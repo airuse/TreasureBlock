@@ -266,3 +266,10 @@ go fmt ./...
 ## 许可证
 
 本项目采用 MIT 许可证。
+
+
+## btc/eth启动命令
+bitcoind.exe -server=1 -rpcuser=bitcoin -rpcpassword=bitcoin123 -rpcallowip=0.0.0.0/0 -rpcbind=0.0.0.0 -rpcport=8332 -listen=1 -bind=0.0.0.0 -port=8333 -prune=550 -maxmempool=100 -dbcache=1000 -maxconnections=10 -blocksonly=1 -datadir="%APPDATA%\Bitcoin"
+
+geth --syncmode=snap --cache=1024 --datadir=C:\ethereum-data --http --http.addr=192.168.1.70 --http.port=8545 --http.api="eth,net,web3" --maxpeers=15 --maxpendpeers=5
+

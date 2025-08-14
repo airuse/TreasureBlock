@@ -3,7 +3,6 @@ package scanner
 import (
 	"encoding/json"
 	"fmt"
-	"net/http"
 	"os"
 	"path/filepath"
 	"sync"
@@ -12,20 +11,18 @@ import (
 	"blockChainBrowser/client/scanner/config"
 	"blockChainBrowser/client/scanner/internal/models"
 	"blockChainBrowser/client/scanner/internal/scanners"
+	"blockChainBrowser/client/scanner/pkg"
 
 	"github.com/sirupsen/logrus"
 )
 
 // BlockScanner 主扫块器
 type BlockScanner struct {
-	config        *config.Config
-	scanners      map[string]interface{}
-	progress      map[string]*models.ScanProgress
-	progressMutex sync.RWMutex
-	stopChan      chan struct{}
-	running       bool
-	runningMutex  sync.RWMutex
-	httpClient    *http.Client
+	config       *config.Config
+	scanners     map[string]Scanner
+	stopChan     chan struct{}
+	running      bool
+	runningMutex sync.RWMutex
 }
 
 // Scanner 扫块器接口
@@ -41,12 +38,8 @@ type Scanner interface {
 func NewBlockScanner(cfg *config.Config) *BlockScanner {
 	scanner := &BlockScanner{
 		config:   cfg,
-		scanners: make(map[string]interface{}),
-		progress: make(map[string]*models.ScanProgress),
+		scanners: make(map[string]Scanner),
 		stopChan: make(chan struct{}),
-		httpClient: &http.Client{
-			Timeout: 30 * time.Second,
-		},
 	}
 
 	// 初始化各种链的扫块器
@@ -58,7 +51,7 @@ func NewBlockScanner(cfg *config.Config) *BlockScanner {
 // initializeScanners 初始化各种链的扫块器
 func (bs *BlockScanner) initializeScanners() {
 	for chainName, chainConfig := range bs.config.Blockchain.Chains {
-		if !chainConfig.Enabled {
+		if !chainConfig.Enabled || !chainConfig.Scan.Enabled {
 			continue
 		}
 
@@ -75,16 +68,7 @@ func (bs *BlockScanner) initializeScanners() {
 
 		bs.scanners[chainName] = scanner
 
-		// 初始化进度
-		bs.progress[chainName] = &models.ScanProgress{
-			Chain:           chainName,
-			CurrentHeight:   bs.config.Scan.StartBlockHeight,
-			ProcessedBlocks: 0,
-			FailedBlocks:    0,
-			StartTime:       time.Now(),
-			LastUpdateTime:  time.Now(),
-			Status:          "stopped",
-		}
+		logrus.Infof("Initialized scanner for chain: %s", chainName)
 	}
 }
 
@@ -118,14 +102,6 @@ func (bs *BlockScanner) Stop() {
 	logrus.Info("Stopping block scanner...")
 	close(bs.stopChan)
 	bs.running = false
-
-	// 更新所有链的状态为停止
-	bs.progressMutex.Lock()
-	for _, progress := range bs.progress {
-		progress.Status = "stopped"
-		progress.LastUpdateTime = time.Now()
-	}
-	bs.progressMutex.Unlock()
 }
 
 // IsRunning 检查是否正在运行
@@ -156,7 +132,7 @@ func (bs *BlockScanner) scanAllChains() {
 		go func(chain string, s Scanner) {
 			defer wg.Done()
 			bs.scanChain(chain, s)
-		}(chainName, scanner.(Scanner))
+		}(chainName, scanner)
 	}
 
 	wg.Wait()
@@ -164,208 +140,159 @@ func (bs *BlockScanner) scanAllChains() {
 
 // scanChain 扫描指定链 - 持续扫描模式
 func (bs *BlockScanner) scanChain(chainName string, scanner Scanner) {
-	// 初始化时已经确保所有启用的链都有进度记录
-	progress := bs.getProgress(chainName)
+	chainConfig := bs.getChainConfig(chainName)
 
-	// 更新状态为运行中
-	bs.updateProgress(chainName, func(p *models.ScanProgress) {
-		p.Status = "running"
-		p.LastUpdateTime = time.Now()
-	})
+	if chainConfig == nil {
+		logrus.Errorf("[%s] Failed to get config for chain", chainName)
+		return
+	}
 
-	logrus.Infof("Starting continuous scanning for chain %s", chainName)
+	logrus.Infof("[%s] Starting continuous scanning for chain %s", chainName, chainName)
+
+	// 保存一下上次扫描的高度，避免重复扫描
+	lastScanHeight := uint64(0)
 
 	// 持续扫描循环 - 永不停止直到程序关闭
 	for bs.IsRunning() {
 		// 获取最新区块高度
 		latestHeight, err := scanner.GetLatestBlockHeight()
 		if err != nil {
-			logrus.Errorf("Failed to get latest block height for %s: %v", chainName, err)
-			// 出错时等待一下再重试
-			time.Sleep(bs.config.Scan.RetryDelay)
+			logrus.Errorf("[%s] Failed to get latest block height: %v", chainName, err)
+			time.Sleep(chainConfig.Scan.RetryDelay)
 			continue
-		}
-
-		// 更新最新高度到进度中
-		bs.updateProgress(chainName, func(p *models.ScanProgress) {
-			p.LatestHeight = latestHeight
-		})
-
-		// 确定当前需要扫描的起始高度
-		currentHeight := progress.CurrentHeight
-		if currentHeight == 0 {
-			// 如果是第一次运行，从配置的起始高度开始
-			if bs.config.Scan.StartBlockHeight > 0 {
-				currentHeight = bs.config.Scan.StartBlockHeight
-			} else {
-				currentHeight = 1
-			}
 		}
 
 		// 计算确认后的安全高度
 		safeHeight := latestHeight
-		if latestHeight > uint64(bs.config.Scan.Confirmations) {
-			safeHeight = latestHeight - uint64(bs.config.Scan.Confirmations)
+		if latestHeight > uint64(chainConfig.Scan.Confirmations) {
+			safeHeight = latestHeight - uint64(chainConfig.Scan.Confirmations)
 		}
 
-		// 如果当前高度已经达到安全高度，等待新区块
-		if currentHeight > safeHeight {
-			logrus.Debugf("Chain %s: waiting for new blocks (current: %d, safe: %d, latest: %d)",
-				chainName, currentHeight, safeHeight, latestHeight)
-			time.Sleep(5 * time.Second) // 等待5秒再检查
+		if lastScanHeight > 0 && lastScanHeight >= safeHeight {
+			time.Sleep(chainConfig.Scan.Interval)
 			continue
 		}
 
-		// 计算本轮扫描的结束高度
-		batchEnd := currentHeight + uint64(bs.config.Scan.BatchSize) - 1
-		if batchEnd > safeHeight {
-			batchEnd = safeHeight
+		// 如果安全高度为0，说明还没有足够的确认，等待新区块
+		if safeHeight == 0 {
+			logrus.Debugf("[%s] Safe height is 0, waiting for more confirmations (latest: %d, confirmations: %d)",
+				chainName, latestHeight, chainConfig.Scan.Confirmations)
+			time.Sleep(chainConfig.Scan.Interval)
+			continue
 		}
 
-		logrus.Infof("Chain %s: scanning blocks %d to %d (latest: %d)",
-			chainName, currentHeight, batchEnd, latestHeight)
+		// 扫描当前高度的区块
+		logrus.Infof("[%s] Scanning block at height %d (latest: %d, safe: %d)", chainName, safeHeight, latestHeight, safeHeight)
 
-		// 扫描这一批区块
-		bs.scanBlockBatch(chainName, scanner, currentHeight, batchEnd)
+		// 扫描单个区块
+		bs.scanSingleBlock(chainName, scanner, safeHeight, chainConfig)
 
-		// 更新当前高度到下一个区块
-		bs.updateProgress(chainName, func(p *models.ScanProgress) {
-			p.CurrentHeight = batchEnd + 1
-			p.LastUpdateTime = time.Now()
-		})
-
-		// 重新获取更新后的进度
-		progress = bs.getProgress(chainName)
-
-		// 短暂休息，避免过于频繁的请求
-		time.Sleep(1 * time.Second)
+		lastScanHeight = safeHeight
+		// 按照配置的间隔休息
+		time.Sleep(chainConfig.Scan.Interval)
 	}
 
-	// 更新状态为停止
-	bs.updateProgress(chainName, func(p *models.ScanProgress) {
-		p.Status = "stopped"
-		p.LastUpdateTime = time.Now()
-	})
-
-	logrus.Infof("Stopped continuous scanning for chain %s", chainName)
+	logrus.Infof("[%s] Stopped continuous scanning", chainName)
 }
 
-// scanBlockBatch 批量扫描区块
-func (bs *BlockScanner) scanBlockBatch(chainName string, scanner Scanner, startHeight, endHeight uint64) {
-	for height := startHeight; height <= endHeight; height++ {
-		startTime := time.Now()
-		result := &models.BlockScanResult{
-			Chain:      chainName,
-			Height:     height,
-			Status:     "success",
-			RetryCount: 0,
-		}
+// scanSingleBlock 扫描单个区块
+func (bs *BlockScanner) scanSingleBlock(chainName string, scanner Scanner, height uint64, chainConfig *config.ChainConfig) {
+	startTime := time.Now()
 
-		// 重试机制
-		for retry := 0; retry <= bs.config.Scan.MaxRetries; retry++ {
-			block, err := scanner.GetBlockByHeight(height)
-			if err != nil {
-				result.RetryCount = retry
-				if retry < bs.config.Scan.MaxRetries {
-					logrus.Warnf("Failed to get block %d for chain %s (retry %d/%d): %v",
-						height, chainName, retry+1, bs.config.Scan.MaxRetries, err)
-					time.Sleep(bs.config.Scan.RetryDelay)
-					continue
-				} else {
-					result.Status = "failed"
-					result.Error = err.Error()
-					logrus.Errorf("Failed to get block %d for chain %s after %d retries: %v",
-						height, chainName, bs.config.Scan.MaxRetries, err)
-					break
-				}
-			}
-
-			// 验证区块
-			if err := scanner.ValidateBlock(block); err != nil {
-				result.Status = "failed"
-				result.Error = fmt.Sprintf("block validation failed: %v", err)
-				logrus.Errorf("Block validation failed for block %d on chain %s: %v", height, chainName, err)
-				break
-			}
-
-			// 获取交易信息
-			transactions, err := scanner.GetBlockTransactions(block.Hash)
-			if err != nil {
-				logrus.Warnf("Failed to get transactions for block %d on chain %s: %v", height, chainName, err)
+	// 重试机制
+	for retry := 0; retry <= chainConfig.Scan.MaxRetries; retry++ {
+		block, err := scanner.GetBlockByHeight(height)
+		if err != nil {
+			if retry < chainConfig.Scan.MaxRetries {
+				logrus.Warnf("[%s] Failed to get block %d (retry %d/%d): %v",
+					chainName, height, retry+1, chainConfig.Scan.MaxRetries, err)
+				time.Sleep(chainConfig.Scan.RetryDelay)
+				continue
 			} else {
-				scanner.CalculateBlockStats(block, transactions)
+				logrus.Errorf("[%s] Failed to get block %d after %d retries: %v",
+					chainName, height, chainConfig.Scan.MaxRetries, err)
+				return
 			}
-
-			// 提交到服务器
-			if err := bs.submitBlockToServer(block); err != nil {
-				result.Status = "failed"
-				result.Error = fmt.Sprintf("failed to submit to server: %v", err)
-				logrus.Errorf("Failed to submit block %d to server for chain %s: %v", height, chainName, err)
-				break
-			}
-
-			// 保存到文件（如果启用）
-			if bs.config.Scan.SaveToFile {
-				if err := bs.saveBlockToFile(block); err != nil {
-					logrus.Warnf("Failed to save block %d to file for chain %s: %v", height, chainName, err)
-				}
-			}
-
-			result.Hash = block.Hash
-			result.Timestamp = block.Timestamp
-			result.ProcessTime = time.Since(startTime).Milliseconds()
-
-			logrus.Infof("Successfully processed block %d for chain %s", height, chainName)
-			break
 		}
 
+		// 验证区块
+		if err := scanner.ValidateBlock(block); err != nil {
+			logrus.Errorf("[%s] Block validation failed for block %d: %v", chainName, height, err)
+			return
+		}
+
+		// 获取交易信息
+		transactions, err := scanner.GetBlockTransactions(block.Hash)
+		if err != nil {
+			logrus.Warnf("[%s] Failed to get transactions for block %d: %v", chainName, height, err)
+		} else {
+			scanner.CalculateBlockStats(block, transactions)
+		}
+
+		// 提交到服务器
+		if err := bs.submitBlockToServer(block); err != nil {
+			logrus.Errorf("[%s] Failed to submit block %d to server: %v", chainName, height, err)
+			return
+		}
+
+		// 保存到文件（如果启用）
+		if chainConfig.Scan.SaveToFile {
+			if err := bs.saveBlockToFile(block, chainConfig.Scan.OutputDir); err != nil {
+				logrus.Warnf("[%s] Failed to save block %d to file: %v", chainName, height, err)
+			}
+		}
+
+		processTime := time.Since(startTime).Milliseconds()
+		logrus.Infof("[%s] Successfully processed block %d (hash: %s, %d tx, %dms)",
+			chainName, height, block.Hash[:16]+"...", block.TransactionCount, processTime)
+		return // 单个区块扫描成功后退出
 	}
 }
 
 // submitBlockToServer 提交区块到服务器
 func (bs *BlockScanner) submitBlockToServer(block *models.Block) error {
-	serverURL := fmt.Sprintf("%s://%s:%d/api/v1/blocks",
-		bs.config.Server.Protocol,
-		bs.config.Server.Host,
-		bs.config.Server.Port)
+	// 获取API实例
+	api := config.GetScannerAPI()
+	if api == nil {
+		return fmt.Errorf("scanner API not initialized")
+	}
 
-	_, err := json.Marshal(block)
+	// 构建区块上传请求
+	blockRequest := &pkg.BlockUploadRequest{
+		Hash:             block.Hash,
+		Height:           block.Height,
+		PreviousHash:     block.PreviousHash,
+		MerkleRoot:       block.MerkleRoot,
+		Timestamp:        block.Timestamp,
+		Difficulty:       block.Difficulty,
+		Nonce:            block.Nonce,
+		Size:             block.Size,
+		TransactionCount: block.TransactionCount,
+		TotalAmount:      block.TotalAmount,
+		Fee:              block.Fee,
+		Confirmations:    block.Confirmations,
+		IsOrphan:         block.IsOrphan,
+		Chain:            block.Chain,
+	}
+
+	// 使用API上传区块
+	_, err := api.UploadBlock(blockRequest)
 	if err != nil {
-		return fmt.Errorf("failed to marshal block: %w", err)
-	}
-
-	req, err := http.NewRequest("POST", serverURL, nil)
-	if err != nil {
-		return fmt.Errorf("failed to create request: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-	if bs.config.Server.APIKey != "" {
-		req.Header.Set("Authorization", "Bearer "+bs.config.Server.APIKey)
-	}
-
-	resp, err := bs.httpClient.Do(req)
-	if err != nil {
-		return fmt.Errorf("failed to submit block: %w", err)
-	}
-	defer resp.Body.Close()
-
-	if resp.StatusCode != http.StatusOK && resp.StatusCode != http.StatusCreated {
-		return fmt.Errorf("server returned status %d", resp.StatusCode)
+		return fmt.Errorf("failed to upload block via API: %w", err)
 	}
 
 	return nil
 }
 
 // saveBlockToFile 保存区块到文件
-func (bs *BlockScanner) saveBlockToFile(block *models.Block) error {
+func (bs *BlockScanner) saveBlockToFile(block *models.Block, outputDir string) error {
 	// 确保输出目录存在
-	if err := os.MkdirAll(bs.config.Scan.OutputDir, 0755); err != nil {
+	if err := os.MkdirAll(outputDir, 0755); err != nil {
 		return fmt.Errorf("failed to create output directory: %w", err)
 	}
 
 	// 创建链目录
-	chainDir := filepath.Join(bs.config.Scan.OutputDir, block.Chain)
+	chainDir := filepath.Join(outputDir, block.Chain)
 	if err := os.MkdirAll(chainDir, 0755); err != nil {
 		return fmt.Errorf("failed to create chain directory: %w", err)
 	}
@@ -388,33 +315,10 @@ func (bs *BlockScanner) saveBlockToFile(block *models.Block) error {
 	return nil
 }
 
-// getProgress 获取扫描进度
-func (bs *BlockScanner) getProgress(chainName string) *models.ScanProgress {
-	bs.progressMutex.RLock()
-	defer bs.progressMutex.RUnlock()
-	return bs.progress[chainName]
-}
-
-// updateProgress 更新扫描进度
-func (bs *BlockScanner) updateProgress(chainName string, updater func(*models.ScanProgress)) {
-	bs.progressMutex.Lock()
-	defer bs.progressMutex.Unlock()
-
-	// 初始化时已经确保所有启用的链都有进度记录，无需检查exists
-	updater(bs.progress[chainName])
-}
-
-// GetProgress 获取所有链的扫描进度
-func (bs *BlockScanner) GetProgress() map[string]*models.ScanProgress {
-	bs.progressMutex.RLock()
-	defer bs.progressMutex.RUnlock()
-
-	result := make(map[string]*models.ScanProgress)
-	for chain, progress := range bs.progress {
-		// 创建副本避免并发访问问题
-		progressCopy := *progress
-		result[chain] = &progressCopy
+// getChainConfig 获取指定链的配置
+func (bs *BlockScanner) getChainConfig(chainName string) *config.ChainConfig {
+	if chainConfig, exists := bs.config.Blockchain.Chains[chainName]; exists {
+		return &chainConfig
 	}
-
-	return result
+	return nil
 }
