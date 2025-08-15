@@ -78,16 +78,6 @@
           />
         </div>
 
-        <!-- 错误提示 -->
-        <div v-if="error" class="text-red-600 text-sm bg-red-50 p-3 rounded-md">
-          {{ error }}
-        </div>
-
-        <!-- 成功提示 -->
-        <div v-if="success" class="text-green-600 text-sm bg-green-50 p-3 rounded-md">
-          {{ success }}
-        </div>
-
         <!-- 提交按钮 -->
         <button
           type="submit"
@@ -125,6 +115,7 @@
 import { ref, reactive, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
 import type { LoginRequest, RegisterRequest } from '@/types/auth'
+import { showSuccess, showError } from '@/composables/useToast'
 
 interface Props {
   isVisible: boolean
@@ -147,8 +138,6 @@ const authStore = useAuthStore()
 // 响应式数据
 const isLogin = ref(props.defaultMode === 'login') // 根据props初始化
 const isLoading = ref(false)
-const error = ref('')
-const success = ref('')
 
 // 表单数据
 const form = reactive({
@@ -169,8 +158,6 @@ const resetForm = () => {
   form.email = ''
   form.password = ''
   form.confirmPassword = ''
-  error.value = ''
-  success.value = ''
 }
 
 // 切换模式
@@ -191,8 +178,6 @@ const handleSubmit = async () => {
   }
 
   isLoading.value = true
-  error.value = ''
-  success.value = '' // Clear previous success message
 
   try {
     if (isLogin.value) {
@@ -205,11 +190,11 @@ const handleSubmit = async () => {
       const response = await authStore.login(loginData)
       
       if (response.success) {
-        success.value = '登录成功！'
+        showSuccess('登录成功！')
         emit('success')
         close()
       } else {
-        error.value = response.message || '登录失败，请检查用户名或密码'
+        showError(response.message || '登录失败，请检查用户名或密码')
       }
     } else {
       // 注册
@@ -222,15 +207,15 @@ const handleSubmit = async () => {
       const response = await authStore.register(registerData)
       
       if (response.success) {
-        success.value = '注册成功！请使用新账号登录。'
+        showSuccess('注册成功！请使用新账号登录。')
         // 注册成功后自动切换到登录模式
         isLogin.value = true
       } else {
-        error.value = response.message || '注册失败，请重试'
+        showError(response.message || '注册失败，请重试')
       }
     }
-  } catch (err: any) {
-    error.value = err.message || '操作失败，请重试'
+  } catch (err: unknown) {
+    showError('操作失败，请重试')
   } finally {
     isLoading.value = false
   }
@@ -239,34 +224,34 @@ const handleSubmit = async () => {
 // 验证表单
 const validateForm = (): boolean => {
   if (!form.username.trim()) {
-    error.value = '请输入用户名'
+    showError('请输入用户名')
     return false
   }
 
   if (!isLogin.value) {
     if (!form.email.trim()) {
-      error.value = '请输入邮箱'
+      showError('请输入邮箱')
       return false
     }
 
     if (!form.email.includes('@')) {
-      error.value = '请输入有效的邮箱地址'
+      showError('请输入有效的邮箱地址')
       return false
     }
 
     if (form.password.length < 6) {
-      error.value = '密码长度至少6位'
+      showError('密码长度至少6位')
       return false
     }
 
     if (form.password !== form.confirmPassword) {
-      error.value = '两次输入的密码不一致'
+      showError('两次输入的密码不一致')
       return false
     }
   }
 
   if (!form.password.trim()) {
-    error.value = '请输入密码'
+    showError('请输入密码')
     return false
   }
 

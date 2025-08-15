@@ -127,6 +127,7 @@ func SetupRoutes(
 			transactions.GET("/hash/:hash", txHandler.GetTransactionByHash)             // 根据哈希获取交易
 			transactions.GET("/address/:address", txHandler.GetTransactionsByAddress)   // 根据地址获取交易
 			transactions.GET("/block/:blockHash", txHandler.GetTransactionsByBlockHash) // 根据区块哈希获取交易
+			transactions.POST("/create", txHandler.CreateTransaction)                   // 创建交易记录
 		}
 
 		// 地址相关路由

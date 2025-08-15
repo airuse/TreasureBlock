@@ -97,3 +97,18 @@ export interface RateLimitError {
   message: string
   retry_after: string
 }
+
+// 权限配置项
+export interface PermissionConfig {
+  id: number
+  group: string
+  no: number
+  config_type: number
+  config_name: string
+  config_key: string
+  config_value: string
+  description: string
+  created_at: string
+  updated_at: string
+  deleted_at?: string
+}

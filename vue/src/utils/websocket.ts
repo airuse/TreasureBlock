@@ -4,7 +4,7 @@ import { ref, computed } from 'vue'
 export interface WebSocketMessage {
   type: 'event' | 'notification'  // 第一级别：事件或通知
   category: 'transaction' | 'block' | 'address' | 'stats' | 'network'  // 第二级别：数据类型
-  data: any  // 第三级别：真实数据
+  data: Record<string, unknown>  // 第三级别：真实数据
   timestamp: number
   chain?: 'eth' | 'btc'  // 可选：指定链类型
 }
@@ -33,12 +33,17 @@ export enum WebSocketStatus {
   ERROR = 'error'
 }
 
+// 定义回调函数类型
+type WebSocketCallback = (message: WebSocketMessage) => void
+type PromiseResolve<T> = (value: T | PromiseLike<T>) => void
+type PromiseReject = (reason?: unknown) => void
+
 class WebSocketManager {
   private ws: WebSocket | null = null
   private reconnectTimer: number | null = null
   private heartbeatTimer: number | null = null
   private reconnectAttempts = 0
-  private eventListeners: Map<string, Set<Function>> = new Map()
+  private eventListeners: Map<string, Set<WebSocketCallback>> = new Map()
   private options: WebSocketOptions
   private isManualClose = false
 
@@ -60,7 +65,7 @@ class WebSocketManager {
 
   // 连接WebSocket
   public connect(): Promise<void> {
-    return new Promise((resolve, reject) => {
+    return new Promise((resolve: PromiseResolve<void>, reject: PromiseReject) => {
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
         resolve()
         return
@@ -80,7 +85,7 @@ class WebSocketManager {
   }
 
   // 设置事件处理器
-  private setupEventHandlers(resolve: Function, reject: Function) {
+  private setupEventHandlers(resolve: PromiseResolve<void>, reject: PromiseReject) {
     if (!this.ws) return
 
     this.ws.onopen = () => {
@@ -138,31 +143,25 @@ class WebSocketManager {
         }
       })
     }
-
-    // 触发通用监听器
-    const generalListeners = this.eventListeners.get('*')
-    if (generalListeners) {
-      generalListeners.forEach(listener => {
-        try {
-          listener(message)
-        } catch (error) {
-          console.error('Error in general event listener:', error)
-        }
-      })
-    }
   }
 
   // 验证消息格式
-  private validateMessage(message: any): message is WebSocketMessage {
+  private validateMessage(message: unknown): message is WebSocketMessage {
     return (
       message &&
-      typeof message.type === 'string' &&
-      ['event', 'notification'].includes(message.type) &&
-      typeof message.category === 'string' &&
-      ['transaction', 'block', 'address', 'stats', 'network'].includes(message.category) &&
-      message.data !== undefined &&
-      typeof message.timestamp === 'number'
-    )
+      typeof message === 'object' &&
+      message !== null &&
+      'type' in message &&
+      typeof (message as WebSocketMessage).type === 'string' &&
+      ['event', 'notification'].includes((message as WebSocketMessage).type) &&
+      'category' in message &&
+      typeof (message as WebSocketMessage).category === 'string' &&
+      ['transaction', 'block', 'address', 'stats', 'network'].includes((message as WebSocketMessage).category) &&
+      'data' in message &&
+      (message as WebSocketMessage).data !== undefined &&
+      'timestamp' in message &&
+      typeof (message as WebSocketMessage).timestamp === 'number'
+    ) as boolean
   }
 
   // 发送消息
@@ -182,7 +181,7 @@ class WebSocketManager {
   }
 
   // 订阅事件
-  public subscribe(eventKey: string, callback: Function): () => void {
+  public subscribe(eventKey: string, callback: WebSocketCallback): () => void {
     if (!this.eventListeners.has(eventKey)) {
       this.eventListeners.set(eventKey, new Set())
     }
@@ -202,7 +201,7 @@ class WebSocketManager {
   }
 
   // 取消订阅
-  public unsubscribe(eventKey: string, callback: Function): void {
+  public unsubscribe(eventKey: string, callback: WebSocketCallback): void {
     const listeners = this.eventListeners.get(eventKey)
     if (listeners) {
       listeners.delete(callback)

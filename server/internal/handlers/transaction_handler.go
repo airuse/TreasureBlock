@@ -205,3 +205,37 @@ func (h *TransactionHandler) ListTransactionsPublic(c *gin.Context) {
 		},
 	})
 }
+
+// CreateTransaction 创建交易记录
+func (h *TransactionHandler) CreateTransaction(c *gin.Context) {
+	var req dto.CreateTransactionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "请求参数验证失败",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	// 转换为模型
+	tx := req.ToModel()
+
+	// 调用服务创建交易
+	err := h.txService.CreateTransaction(c.Request.Context(), tx)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "创建交易失败",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	response := dto.NewTransactionResponse(tx)
+	c.JSON(http.StatusCreated, gin.H{
+		"success": true,
+		"data":    response,
+		"message": "交易创建成功",
+	})
+}

@@ -58,31 +58,31 @@
             </tr>
           </thead>
           <tbody class="bg-white divide-y divide-gray-200">
-            <tr v-for="block in blocks" :key="block.height" class="hover:bg-gray-50">
+            <tr v-for="block in blocks" :key="block.number" class="hover:bg-gray-50">
               <td class="px-6 py-4 whitespace-nowrap">
-                <router-link :to="`/btc/blocks/${block.height}`" class="text-blue-600 hover:text-blue-700 font-medium">
-                  #{{ block.height.toLocaleString() }}
+                <router-link :to="`/btc/blocks/${block.number}`" class="text-blue-600 hover:text-blue-700 font-medium">
+                  #{{ block.number.toLocaleString() }}
                 </router-link>
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {{ formatTimestamp(block.timestamp) }}
+                {{ formatTimestamp(typeof block.timestamp === 'string' ? parseInt(block.timestamp) : block.timestamp) }}
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {{ block.transactions }}
+                {{ block.transactions_count }}
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                 {{ formatBytes(block.size) }}
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                  {{ block.confirmations }}
+                  {{ Math.floor(Math.random() * 100) + 1 }}
                 </span>
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                <span class="font-mono">{{ formatAddress(block.miner) }}</span>
+                <span class="font-mono">{{ formatAddress(block.miner || '') }}</span>
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {{ formatAmount(block.reward) }} BTC
+                {{ formatAmount(block.reward || 0) }} BTC
               </td>
             </tr>
           </tbody>
@@ -161,17 +161,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { formatTimestamp, formatAddress, formatBytes, formatAmount } from '@/utils/formatters'
-
-// 定义区块类型
-interface Block {
-  height: number
-  timestamp: number
-  transactions: number
-  size: number
-  confirmations: number
-  miner: string
-  reward: number
-}
+import type { Block } from '@/types'
 
 // 响应式数据
 const searchQuery = ref('')
@@ -206,11 +196,14 @@ const loadData = () => {
   
   for (let i = startBlock; i >= endBlock; i--) {
     blocks.value.push({
+      hash: `0000000000000000000000000000000000000000000000000000000000000000${i.toString(16).padStart(8, '0')}`,
+      number: i,
       height: i,
       timestamp: Math.floor(Date.now() / 1000) - (totalBlocks.value - i) * 600,
+      transactions_count: Math.floor(Math.random() * 2000) + 500,
       transactions: Math.floor(Math.random() * 2000) + 500,
       size: Math.floor(Math.random() * 1000000) + 500000,
-      confirmations: Math.floor(Math.random() * 100) + 1,
+      chain: 'btc',
       miner: '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa',
       reward: 6.25 + Math.random() * 0.1
     })

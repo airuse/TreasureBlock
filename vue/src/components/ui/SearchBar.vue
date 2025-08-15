@@ -22,7 +22,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, watch, defineProps, defineEmits } from 'vue'
+import { ref, watch, defineProps } from 'vue'
 
 const props = defineProps({
   modelValue: String,
@@ -31,7 +31,6 @@ const props = defineProps({
     default: '请输入关键词...'
   }
 })
-const emit = defineEmits(['update:modelValue'])
 
 const modelValueProxy = ref(props.modelValue)
 watch(() => props.modelValue, v => modelValueProxy.value = v)

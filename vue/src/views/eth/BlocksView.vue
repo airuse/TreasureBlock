@@ -159,7 +159,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, onUnmounted, watch, nextTick } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useChainWebSocket } from '@/composables/useWebSocket'
 
 // 响应式数据
@@ -270,7 +270,9 @@ const goToPage = (page: number) => {
 const { subscribeChainEvent } = useChainWebSocket('eth')
 
 function handleBlockCountUpdate(message: any) {
-  totalBlocks.value = message.data.totalBlocks || totalBlocks.value
+  if (message.data && typeof message.data.totalBlocks === 'number') {
+    totalBlocks.value = message.data.totalBlocks
+  }
 }
 
 function handleNewBlock(message: any) {

@@ -9,10 +9,10 @@ import (
 // Block 区块模型 - 纯数据模型，不包含验证逻辑
 type Block struct {
 	ID               uint           `json:"id" gorm:"primaryKey"`
-	Hash             string         `json:"hash" gorm:"type:char(64);uniqueIndex;not null"`
+	Hash             string         `json:"hash" gorm:"type:char(66);uniqueIndex;not null"`
 	Height           uint64         `json:"height" gorm:"uniqueIndex;not null"`
-	PreviousHash     string         `json:"previous_hash" gorm:"type:char(64);index"`
-	MerkleRoot       string         `json:"merkle_root" gorm:"type:char(64)"`
+	PreviousHash     string         `json:"previous_hash" gorm:"type:char(66);index"`
+	MerkleRoot       string         `json:"merkle_root" gorm:"type:char(66)"`
 	Timestamp        time.Time      `json:"timestamp"`
 	Difficulty       float64        `json:"difficulty"`
 	Nonce            uint64         `json:"nonce"`

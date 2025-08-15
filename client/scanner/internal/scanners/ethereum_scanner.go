@@ -9,7 +9,6 @@ import (
 	"blockChainBrowser/client/scanner/config"
 	"blockChainBrowser/client/scanner/internal/models"
 
-	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 )
@@ -249,26 +248,6 @@ func (es *EthereumScanner) GetBlockByHeight(height uint64) (*models.Block, error
 	return result, err
 }
 
-// GetBlockByHash 根据哈希获取区块
-func (es *EthereumScanner) GetBlockByHash(blockHash string) (*models.Block, error) {
-	fmt.Printf("[ETH Scanner] Scanning block with hash: %s\n", blockHash)
-
-	result, err := es.callWithFailoverBlock("get block by hash", func(client *ethclient.Client) (*models.Block, error) {
-		hash := common.HexToHash(blockHash)
-		block, err := client.BlockByHash(context.Background(), hash)
-		if err != nil {
-			return nil, err
-		}
-		return es.parseBlock(block), nil
-	})
-
-	if err == nil {
-		fmt.Printf("[ETH Scanner] Successfully scanned block %d (hash: %s) with %d transactions\n",
-			result.Height, result.Hash[:16]+"...", result.TransactionCount)
-	}
-	return result, err
-}
-
 // parseBlock 解析以太坊区块数据
 func (es *EthereumScanner) parseBlock(block *types.Block) *models.Block {
 	return &models.Block{
@@ -319,51 +298,13 @@ func (es *EthereumScanner) ValidateBlock(block *models.Block) error {
 	return nil
 }
 
-// GetBlockTransactions 获取区块交易
-func (es *EthereumScanner) GetBlockTransactions(blockHash string) ([]map[string]interface{}, error) {
-	fmt.Printf("[ETH Scanner] Getting transactions for block: %s\n", blockHash)
+// extractTransactionsFromBlock 直接从区块中提取交易信息
+func (es *EthereumScanner) extractTransactionsFromBlock(block *types.Block) []map[string]interface{} {
+	transactions := make([]map[string]interface{}, len(block.Transactions()))
 
-	result, err := es.callWithFailoverTransactions("get block transactions", func(client *ethclient.Client) ([]map[string]interface{}, error) {
-		return es.getTransactionsFromClient(client, blockHash)
-	})
-
-	if err == nil {
-		fmt.Printf("[ETH Scanner] Retrieved %d transactions from block %s\n", len(result), blockHash[:16]+"...")
-	}
-	return result, err
-}
-
-// getTransactionsFromClient 从指定客户端获取交易信息
-func (es *EthereumScanner) getTransactionsFromClient(client *ethclient.Client, blockHash string) ([]map[string]interface{}, error) {
-	// 使用故障转移机制获取原始区块数据
-	ethBlock, err := es.callWithFailoverRawBlock("get block by hash for transactions", func(c *ethclient.Client) (*types.Block, error) {
-		hash := common.HexToHash(blockHash)
-		return c.BlockByHash(context.Background(), hash)
-	})
-
-	if err != nil {
-		return nil, fmt.Errorf("failed to get block for transactions: %w", err)
-	}
-
-	transactions := make([]map[string]interface{}, len(ethBlock.Transactions()))
-	for i, tx := range ethBlock.Transactions() {
+	for i, tx := range block.Transactions() {
 		// 获取交易签名
 		v, r, s := tx.RawSignatureValues()
-
-		// 获取交易收据以获取实际的gasUsed - 使用故障转移机制
-		var gasUsed uint64
-		receipt, err := es.callWithFailoverReceipt("get transaction receipt", func(c *ethclient.Client) (*types.Receipt, error) {
-			return c.TransactionReceipt(context.Background(), tx.Hash())
-		})
-
-		if err == nil {
-			gasUsed = receipt.GasUsed
-		} else {
-			// 如果无法获取收据，使用gas limit作为备选
-			gasUsed = tx.Gas()
-			fmt.Printf("[ETH Scanner] Warning: Could not get receipt for tx %s, using gas limit %d\n",
-				tx.Hash().Hex()[:16]+"...", gasUsed)
-		}
 
 		// 处理EIP-1559交易
 		var gasPriceStr, maxFeePerGas, maxPriorityFeePerGas, effectiveGasPrice string
@@ -376,9 +317,8 @@ func (es *EthereumScanner) getTransactionsFromClient(client *ethclient.Client, b
 			maxPriorityFeePerGas = tx.GasTipCap().String()
 
 			// 计算有效gas价格 (base fee + priority fee)
-			// 注意：这里我们需要从区块头获取base fee
-			if ethBlock.BaseFee() != nil {
-				baseFee := ethBlock.BaseFee()
+			if block.BaseFee() != nil {
+				baseFee := block.BaseFee()
 				priorityFee := tx.GasTipCap()
 				if priorityFee.Cmp(baseFee) > 0 {
 					effectiveGasPrice = new(big.Int).Add(baseFee, priorityFee).String()
@@ -399,6 +339,14 @@ func (es *EthereumScanner) getTransactionsFromClient(client *ethclient.Client, b
 			effectiveGasPrice = gasPriceStr
 		}
 
+		// 安全地获取 To 地址，合约创建交易可能为 nil
+		var toAddress string
+		if tx.To() != nil {
+			toAddress = tx.To().Hex()
+		} else {
+			toAddress = "" // 合约创建交易
+		}
+
 		txData := map[string]interface{}{
 			"hash":                 tx.Hash().Hex(),
 			"nonce":                tx.Nonce(),
@@ -408,8 +356,8 @@ func (es *EthereumScanner) getTransactionsFromClient(client *ethclient.Client, b
 			"maxPriorityFeePerGas": maxPriorityFeePerGas,
 			"effectiveGasPrice":    effectiveGasPrice,
 			"gasLimit":             tx.Gas(), // 原始gas limit
-			"gasUsed":              gasUsed,  // 实际使用的gas
-			"to":                   tx.To().Hex(),
+			"gasUsed":              tx.Gas(), // 暂时使用gas limit，后续可以通过receipt获取实际值
+			"to":                   toAddress,
 			"value":                tx.Value().String(),
 			"data":                 tx.Data(),
 			"v":                    v.String(),
@@ -419,7 +367,23 @@ func (es *EthereumScanner) getTransactionsFromClient(client *ethclient.Client, b
 		transactions[i] = txData
 	}
 
-	return transactions, nil
+	return transactions
+}
+
+// GetBlockTransactionsFromBlock 直接从区块中获取交易信息（避免哈希不一致问题）
+func (es *EthereumScanner) GetBlockTransactionsFromBlock(block *models.Block) ([]map[string]interface{}, error) {
+	// 这里我们需要通过区块高度重新获取完整的区块数据
+	// 因为 models.Block 中只包含基本信息，不包含完整的交易数据
+	ethBlock, err := es.callWithFailoverRawBlock("get block by height for transactions", func(client *ethclient.Client) (*types.Block, error) {
+		return client.BlockByNumber(context.Background(), big.NewInt(int64(block.Height)))
+	})
+
+	if err != nil {
+		return nil, fmt.Errorf("failed to get block by height for transactions: %w", err)
+	}
+
+	// 直接从区块中提取交易信息
+	return es.extractTransactionsFromBlock(ethBlock), nil
 }
 
 // CalculateBlockStats 计算区块统计信息

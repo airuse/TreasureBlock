@@ -1,21 +1,18 @@
-import { ref, onMounted, onUnmounted, watch } from 'vue'
-import { useRoute } from 'vue-router'
-import type { 
-  WebSocketOptions, 
-  WebSocketMessage
-} from '@/utils/websocket'
-import { 
+import { ref, watch, onMounted, onUnmounted } from 'vue'
+import {
   WebSocketStatus,
   createWebSocketManager,
   getWebSocketManager,
-  setupVisibilityHandler,
-  cleanupVisibilityHandler
+  setupVisibilityHandler
+} from '@/utils/websocket'
+import type { 
+  WebSocketOptions, 
+  WebSocketMessage
 } from '@/utils/websocket'
 import type WebSocketManager from '@/utils/websocket'
 
 // WebSocket组合式函数
 export function useWebSocket(options?: Partial<WebSocketOptions>) {
-  const route = useRoute()
   const manager = ref<WebSocketManager | null>(null)
   const status = ref<WebSocketStatus>(WebSocketStatus.DISCONNECTED)
   const isConnected = ref(false)
@@ -174,7 +171,7 @@ export function useChainWebSocket(chain: 'eth' | 'btc') {
   const sendChainMessage = (
     type: 'event' | 'notification',
     category: 'transaction' | 'block' | 'address' | 'stats' | 'network',
-    data: any
+    data: Record<string, unknown>
   ) => {
     return send({
       type,

@@ -12,34 +12,34 @@ server:
 
 blockchain:
   chains:
-    btc:
-      name: "Bitcoin"
-      symbol: "BTC"
-      decimals: 8
-      enabled: true
-      rpc_url: "http://192.168.1.70:8332"
-      explorer_api_urls:
-        - "https://alpha-clean-yard.btc.quiknode.pro/7979488c04b1a36bdc4230b23e3eaac3e9c1c1af"
-      api_key: ""
-      username: "bitcoin"      # bitcoind RPC用户名
-      password: "bitcoin123"  # bitcoind RPC密码
-      # BTC链特定的扫描配置
-      scan:
-        enabled: true
-        interval: 10s
-        max_retries: 3
-        retry_delay: 5s
-        confirmations: 6
-        start_block_height: 0
-        auto_start: true
-        save_to_file: false
-        output_dir: "./output/btc"
-        priority: 1  # 高优先级
-        max_concurrent: 5
-        block_timeout: 30s
-        rescan_interval: 60s
-        enable_mempool: true
-        mempool_interval: 5s
+    # btc:
+    #   name: "Bitcoin"
+    #   symbol: "BTC"
+    #   decimals: 8
+    #   enabled: true
+    #   rpc_url: "http://192.168.1.70:8332"
+    #   explorer_api_urls:
+    #     - "https://alpha-clean-yard.btc.quiknode.pro/7979488c04b1a36bdc4230b23e3eaac3e9c1c1af"
+    #   api_key: ""
+    #   username: "bitcoin"      # bitcoind RPC用户名
+    #   password: "bitcoin123"  # bitcoind RPC密码
+    #   # BTC链特定的扫描配置
+    #   scan:
+    #     enabled: true
+    #     interval: 10s
+    #     max_retries: 3
+    #     retry_delay: 5s
+    #     confirmations: 6
+    #     start_block_height: 0
+    #     auto_start: true
+    #     save_to_file: false
+    #     output_dir: "./output/btc"
+    #     priority: 1  # 高优先级
+    #     max_concurrent: 5
+    #     block_timeout: 30s
+    #     rescan_interval: 60s
+    #     enable_mempool: true
+    #     mempool_interval: 5s
     eth:
       name: "Ethereum"
       symbol: "ETH"
@@ -51,14 +51,14 @@ blockchain:
         - "https://yolo-smart-tree.ethereum-sepolia.quiknode.pro/52836b8f979fca7325258c42925d6c245ca45079"
       api_key: ""  # 如果需要的话
       username: ""
-      password: ""
+      password: ""    
       # ETH链特定的扫描配置
       scan:
         enabled: true
         interval: 15s
         max_retries: 3
         retry_delay: 3s
-        confirmations: 12
+        confirmations: 61
         start_block_height: 0
         auto_start: true
         save_to_file: false

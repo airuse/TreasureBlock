@@ -492,6 +492,19 @@ func (bs *BitcoinScanner) GetBlockTransactions(blockHash string) ([]map[string]i
 	return result, err
 }
 
+// GetBlockTransactionsFromBlock 直接从区块中获取交易信息（避免哈希不一致问题）
+func (bs *BitcoinScanner) GetBlockTransactionsFromBlock(block *models.Block) ([]map[string]interface{}, error) {
+	// 通过区块高度重新获取交易信息，避免哈希不一致问题
+	result, err := bs.callWithFailoverTransactions("get block transactions by height", func(url string) ([]map[string]interface{}, error) {
+		return bs.getBlockTransactionsFromURL(url, block.Hash)
+	})
+
+	if err == nil {
+		fmt.Printf("[BTC Scanner] Retrieved %d transactions from block %d\n", len(result), block.Height)
+	}
+	return result, err
+}
+
 // getBlockTransactionsFromURL 从指定URL获取区块交易（使用btcd包改进）
 func (bs *BitcoinScanner) getBlockTransactionsFromURL(url string, blockHash string) ([]map[string]interface{}, error) {
 	if url == bs.config.RPCURL {

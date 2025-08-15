@@ -239,10 +239,10 @@ const loadAddresses = async () => {
   try {
     const response = await authStore.getUserAddresses()
     if (response.success) {
-      addresses.value = response.data || []
+      addresses.value = (response.data || []) as UserAddress[]
     }
-  } catch (err: any) {
-    error.value = '加载地址失败: ' + err.message
+  } catch (err: unknown) {
+    error.value = '加载地址失败: ' + (err instanceof Error ? err.message : '未知错误')
   }
 }
 
@@ -285,8 +285,8 @@ const addAddress = async () => {
       }, 3000)
     }
     
-  } catch (err: any) {
-    error.value = '添加失败: ' + err.message
+  } catch (err: unknown) {
+    error.value = '添加失败: ' + (err instanceof Error ? err.message : '未知错误')
   } finally {
     isLoading.value = false
   }
@@ -309,8 +309,8 @@ const editAddress = async (address: UserAddress) => {
           success.value = ''
         }, 2000)
       }
-    } catch (err: any) {
-      error.value = '更新失败: ' + err.message
+    } catch (err: unknown) {
+      error.value = '更新失败: ' + (err instanceof Error ? err.message : '未知错误')
     }
   }
 }
@@ -333,8 +333,8 @@ const removeAddress = async (address: UserAddress) => {
       }, 2000)
     }
     
-  } catch (err: any) {
-    error.value = '删除失败: ' + err.message
+  } catch (err: unknown) {
+    error.value = '删除失败: ' + (err instanceof Error ? err.message : '未知错误')
   }
 }
 
@@ -346,7 +346,7 @@ const copyAddress = async (address: string) => {
     setTimeout(() => {
       success.value = ''
     }, 2000)
-  } catch (err) {
+  } catch {
     error.value = '复制失败'
   }
 }

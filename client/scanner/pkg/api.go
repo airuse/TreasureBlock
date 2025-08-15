@@ -211,11 +211,10 @@ func (api *ScannerAPI) getConfigValue(configType uint8, configGroup, configKey s
 // ================== 新增接口示例 ==================
 // 新增一个接口只需要在这里加一个方法！
 
-// UploadTransaction 上传交易 (示例：新增接口只需加这一个方法)
-// func (api *ScannerAPI) UploadTransaction(tx *TransactionUploadRequest) (*TransactionResponse, error) {
-//     var result TransactionResponse
-//     if err := api.client.POST("/api/v1/transactions/create", tx, &result); err != nil {
-//         return nil, fmt.Errorf("upload transaction failed: %w", err)
-//     }
-//     return &result, nil
-// }
+// UploadTransaction 上传交易
+func (api *ScannerAPI) UploadTransaction(tx map[string]interface{}) error {
+	if err := api.client.POST("/api/v1/transactions/create", tx, nil); err != nil {
+		return fmt.Errorf("upload transaction failed: %w", err)
+	}
+	return nil
+}

@@ -193,10 +193,11 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { formatTimestamp, formatHash, formatAmount } from '@/utils/formatters'
+import type { AddressData } from '@/types'
 
 // 响应式数据
 const addressInput = ref('')
-const addressData = ref<any>(null)
+const addressData = ref<AddressData | null>(null)
 const activeTab = ref('transactions')
 
 // 格式化法币金额

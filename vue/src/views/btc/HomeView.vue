@@ -80,12 +80,12 @@
                 <CubeIcon class="h-4 w-4 text-orange-600" />
               </div>
               <div>
-                <p class="text-sm font-medium text-gray-900">#{{ block.height.toLocaleString() }}</p>
-                <p class="text-sm text-gray-500">{{ formatTimestamp(block.timestamp) }}</p>
+                <p class="text-sm font-medium text-gray-900">#{{ (block.height || block.number || 0).toLocaleString() }}</p>
+                <p class="text-sm text-gray-500">{{ formatTimestamp(typeof block.timestamp === 'string' ? parseInt(block.timestamp) : block.timestamp) }}</p>
               </div>
             </div>
             <div class="text-right">
-              <p class="text-sm font-medium text-gray-900">{{ block.transactions }} 交易</p>
+              <p class="text-sm font-medium text-gray-900">{{ block.transactions_count || block.transactions || 0 }} 交易</p>
               <p class="text-sm text-gray-500">{{ formatBytes(block.size) }}</p>
             </div>
           </div>
@@ -112,12 +112,12 @@
               </div>
               <div>
                 <p class="text-sm font-medium text-gray-900">{{ formatHash(tx.hash) }}</p>
-                <p class="text-sm text-gray-500">{{ formatTimestamp(tx.timestamp) }}</p>
+                <p class="text-sm text-gray-500">{{ formatTimestamp(typeof tx.timestamp === 'string' ? parseInt(tx.timestamp) : tx.timestamp) }}</p>
               </div>
             </div>
             <div class="text-right">
               <p class="text-sm font-medium text-gray-900">0.000000 BTC</p>
-              <p class="text-sm text-gray-500">{{ formatAmount(tx.amount) }} BTC</p>
+              <p class="text-sm text-gray-500">{{ formatAmount(tx.amount || 0) }} BTC</p>
             </div>
           </div>
         </div>
@@ -159,6 +159,7 @@ import {
 } from '@heroicons/vue/20/solid'
 import { formatNumber, formatTimestamp, formatHash, formatBytes, formatAmount, formatFee, formatHashrate, formatDifficulty } from '@/utils/formatters'
 import { useChainWebSocket } from '@/composables/useWebSocket'
+import type { Block, Transaction } from '@/types'
 
 // 响应式数据
 const stats = ref({
@@ -173,25 +174,13 @@ const stats = ref({
 })
 
 // 定义类型
-interface Block {
-  height: number
-  timestamp: number
-  transactions: number
-  size: number
-}
-
-interface Transaction {
-  hash: string
-  timestamp: number
-  amount: number
-  fee: number
-}
+import type { WebSocketBlockMessage, WebSocketTransactionMessage, WebSocketStatsMessage } from '@/types'
 
 const latestBlocks = ref<Block[]>([])
 const latestTransactions = ref<Transaction[]>([])
 
 // WebSocket连接
-const { subscribeChainEvent, subscribeChainNotification } = useChainWebSocket('btc')
+const { subscribeChainEvent } = useChainWebSocket('btc')
 
 // 加载数据
 const loadData = () => {
@@ -209,18 +198,29 @@ const loadData = () => {
 
   // 模拟最新区块
   latestBlocks.value = Array.from({ length: 5 }, (_, i) => ({
+    hash: `0000000000000000000000000000000000000000000000000000000000000000${(850000 - i).toString(16).padStart(8, '0')}`,
+    number: 850000 - i,
     height: 850000 - i,
     timestamp: Math.floor(Date.now() / 1000) - i * 600,
+    transactions_count: Math.floor(Math.random() * 2000) + 500,
     transactions: Math.floor(Math.random() * 2000) + 500,
-    size: Math.floor(Math.random() * 1000000) + 500000
+    size: Math.floor(Math.random() * 1000000) + 500000,
+    chain: 'btc'
   }))
 
   // 模拟最新交易
   latestTransactions.value = Array.from({ length: 5 }, (_, i) => ({
     hash: `0x${Math.random().toString(16).substring(2, 34)}`,
+    block_hash: `0000000000000000000000000000000000000000000000000000000000000000${(850000 - i).toString(16).padStart(8, '0')}`,
+    block_number: 850000 - i,
+    from_address: `1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa`,
+    to_address: `1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2`,
+    value: (Math.random() * 10).toString(),
+    gas_price: (Math.random() * 0.001).toString(),
+    gas_used: Math.floor(Math.random() * 1000) + 100,
+    nonce: i,
     timestamp: Math.floor(Date.now() / 1000) - i * 60,
-    amount: Math.random() * 10,
-    fee: Math.random() * 0.001
+    chain: 'btc'
   }))
 }
 
@@ -229,11 +229,16 @@ const unsubscribeBlocks = subscribeChainEvent('block', (message) => {
   console.log('New block received:', message.data)
   // 更新最新区块数据
   if (message.data && message.data.height) {
+    const blockData = message.data as unknown as WebSocketBlockMessage
     const newBlock: Block = {
-      height: message.data.height,
-      timestamp: message.data.timestamp || Math.floor(Date.now() / 1000),
-      transactions: message.data.transactions || 0,
-      size: message.data.size || 0
+      hash: blockData.hash || `0000000000000000000000000000000000000000000000000000000000000000${blockData.height.toString(16).padStart(8, '0')}`,
+      number: blockData.height,
+      height: blockData.height,
+      timestamp: blockData.timestamp || Math.floor(Date.now() / 1000),
+      transactions_count: blockData.transactions || 0,
+      transactions: blockData.transactions || 0,
+      size: blockData.size || 0,
+      chain: 'btc'
     }
     
     // 将新区块添加到列表开头
@@ -244,7 +249,7 @@ const unsubscribeBlocks = subscribeChainEvent('block', (message) => {
     }
     
     // 更新统计信息
-    stats.value.totalBlocks = message.data.totalBlocks || stats.value.totalBlocks
+    stats.value.totalBlocks = blockData.totalBlocks || stats.value.totalBlocks
   }
 })
 
@@ -252,11 +257,19 @@ const unsubscribeTransactions = subscribeChainEvent('transaction', (message) => 
   console.log('New transaction received:', message.data)
   // 更新最新交易数据
   if (message.data && message.data.hash) {
+    const txData = message.data as unknown as WebSocketTransactionMessage
     const newTransaction: Transaction = {
-      hash: message.data.hash,
-      timestamp: message.data.timestamp || Math.floor(Date.now() / 1000),
-      amount: message.data.amount || 0,
-      fee: message.data.fee || 0
+      hash: txData.hash,
+      block_hash: txData.blockHash || '0000000000000000000000000000000000000000000000000000000000000000',
+      block_number: txData.blockNumber || 0,
+      from_address: txData.from || '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa',
+      to_address: txData.to || '1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2',
+      value: (txData.amount || 0).toString(),
+      gas_price: (txData.fee || 0).toString(),
+      gas_used: 1000,
+      nonce: 0,
+      timestamp: txData.timestamp || Math.floor(Date.now() / 1000),
+      chain: 'btc'
     }
     
     // 将新交易添加到列表开头
@@ -267,7 +280,7 @@ const unsubscribeTransactions = subscribeChainEvent('transaction', (message) => 
     }
     
     // 更新统计信息
-    stats.value.totalTransactions = message.data.totalTransactions || stats.value.totalTransactions
+    stats.value.totalTransactions = txData.totalTransactions || stats.value.totalTransactions
   }
 })
 
@@ -275,9 +288,10 @@ const unsubscribeStats = subscribeChainEvent('stats', (message) => {
   console.log('Stats update received:', message.data)
   // 更新统计信息
   if (message.data) {
+    const statsData = message.data as unknown as WebSocketStatsMessage
     stats.value = {
       ...stats.value,
-      ...message.data
+      ...statsData
     }
   }
 })

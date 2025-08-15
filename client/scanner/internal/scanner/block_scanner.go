@@ -30,7 +30,7 @@ type Scanner interface {
 	GetLatestBlockHeight() (uint64, error)
 	GetBlockByHeight(height uint64) (*models.Block, error)
 	ValidateBlock(block *models.Block) error
-	GetBlockTransactions(blockHash string) ([]map[string]interface{}, error)
+	GetBlockTransactionsFromBlock(block *models.Block) ([]map[string]interface{}, error)
 	CalculateBlockStats(block *models.Block, transactions []map[string]interface{})
 }
 
@@ -58,9 +58,11 @@ func (bs *BlockScanner) initializeScanners() {
 		var scanner Scanner
 		switch chainName {
 		case "btc":
-			scanner = scanners.NewBitcoinScanner(&chainConfig)
+			btcconfig := &chainConfig
+			scanner = scanners.NewBitcoinScanner(btcconfig)
 		case "eth":
-			scanner = scanners.NewEthereumScanner(&chainConfig)
+			ethconfig := &chainConfig
+			scanner = scanners.NewEthereumScanner(ethconfig)
 		default:
 			logrus.Warnf("Unsupported chain: %s", chainName)
 			continue
@@ -221,12 +223,22 @@ func (bs *BlockScanner) scanSingleBlock(chainName string, scanner Scanner, heigh
 			return
 		}
 
-		// 获取交易信息
-		transactions, err := scanner.GetBlockTransactions(block.Hash)
+		// 获取交易信息 - 直接从区块获取，避免哈希不一致问题
+		transactions, err := scanner.GetBlockTransactionsFromBlock(block)
 		if err != nil {
 			logrus.Warnf("[%s] Failed to get transactions for block %d: %v", chainName, height, err)
 		} else {
 			scanner.CalculateBlockStats(block, transactions)
+			// 提取到服务器
+		}
+
+		// 上传交易信息到服务器
+		if len(transactions) > 0 {
+			if err := bs.submitTransactionsToServer(chainName, block, transactions); err != nil {
+				logrus.Warnf("[%s] Failed to submit transactions for block %d: %v", chainName, height, err)
+			} else {
+				logrus.Infof("[%s] Successfully submitted %d transactions for block %d", chainName, len(transactions), height)
+			}
 		}
 
 		// 提交到服务器
@@ -279,6 +291,51 @@ func (bs *BlockScanner) submitBlockToServer(block *models.Block) error {
 	_, err := api.UploadBlock(blockRequest)
 	if err != nil {
 		return fmt.Errorf("failed to upload block via API: %w", err)
+	}
+
+	return nil
+}
+
+// submitTransactionsToServer 将交易信息提交到服务器
+func (bs *BlockScanner) submitTransactionsToServer(chainName string, block *models.Block, transactions []map[string]interface{}) error {
+	// 获取API实例
+	api := config.GetScannerAPI()
+	if api == nil {
+		return fmt.Errorf("scanner API instance not available")
+	}
+
+	// 批量上传交易
+	for _, tx := range transactions {
+		// 构建交易请求数据
+		txRequest := map[string]interface{}{
+			"tx_id":         tx["hash"],
+			"tx_type":       0,   // 默认类型
+			"confirm":       1,   // 默认确认数
+			"status":        1,   // 成功状态
+			"send_status":   1,   // 已广播
+			"balance":       "0", // 暂时设为0
+			"amount":        tx["value"],
+			"trans_id":      0, // 暂时设为0
+			"symbol":        chainName,
+			"address_from":  tx["from"],
+			"address_to":    tx["to"],
+			"gas_limit":     tx["gasLimit"],
+			"gas_price":     tx["gasPrice"],
+			"gas_used":      tx["gasUsed"],
+			"fee":           "0", // 暂时设为0，后续计算
+			"used_fee":      nil,
+			"height":        block.Height,
+			"contract_addr": "", // 暂时设为空
+			"hex":           nil,
+			"tx_scene":      "blockchain_scan",
+			"remark":        "Scanned from blockchain",
+		}
+
+		// 上传交易
+		if err := api.UploadTransaction(txRequest); err != nil {
+			logrus.Warnf("[%s] Failed to upload transaction %s: %v", chainName, tx["hash"], err)
+			continue // 继续上传其他交易
+		}
 	}
 
 	return nil

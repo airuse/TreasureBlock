@@ -54,6 +54,27 @@ const router = createRouter({
       name: 'eth-settings',
       component: ETHSettingsView
     },
+    // 个人中心 - ETH
+    {
+      path: '/eth/personal',
+      name: 'eth-personal',
+      redirect: '/eth/personal/earnings'
+    },
+    {
+      path: '/eth/personal/earnings',
+      name: 'eth-personal-earnings',
+      component: () => import('../views/eth/personal/EarningsView.vue')
+    },
+    {
+      path: '/eth/personal/addresses',
+      name: 'eth-personal-addresses',
+      component: () => import('../views/eth/personal/AddressesView.vue')
+    },
+    {
+      path: '/eth/personal/transactions',
+      name: 'eth-personal-transactions',
+      component: () => import('../views/eth/personal/TransactionsView.vue')
+    },
     // BTC路由
     {
       path: '/btc',
@@ -79,6 +100,27 @@ const router = createRouter({
       path: '/btc/statistics',
       name: 'btc-statistics',
       component: BTCStatsView
+    },
+    // 个人中心 - BTC
+    {
+      path: '/btc/personal',
+      name: 'btc-personal',
+      redirect: '/btc/personal/earnings'
+    },
+    {
+      path: '/btc/personal/earnings',
+      name: 'btc-personal-earnings',
+      component: () => import('../views/btc/personal/EarningsView.vue')
+    },
+    {
+      path: '/btc/personal/addresses',
+      name: 'btc-personal-addresses',
+      component: () => import('../views/btc/personal/AddressesView.vue')
+    },
+    {
+      path: '/btc/personal/transactions',
+      name: 'btc-personal-transactions',
+      component: () => import('../views/btc/personal/TransactionsView.vue')
     }
   ]
 })

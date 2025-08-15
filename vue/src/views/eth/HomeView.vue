@@ -6,7 +6,7 @@ import {
   UserGroupIcon, 
   ChartBarIcon 
 } from '@heroicons/vue/20/solid'
-import type { Block, Transaction, NetworkStats } from '@/types'
+import type { Block, Transaction, NetworkStats, WebSocketBlockMessage, WebSocketTransactionMessage, WebSocketStatsMessage } from '@/types'
 import { mockData } from '@/api'
 import { 
   formatTimestamp, 
@@ -24,7 +24,7 @@ const latestBlocks = ref<Block[]>([])
 const latestTransactions = ref<Transaction[]>([])
 
 // WebSocket连接
-const { subscribeChainEvent, subscribeChainNotification } = useChainWebSocket('eth')
+const { subscribeChainEvent } = useChainWebSocket('eth')
 
 // 格式化数字
 const formatNumber = (num: number): string => {
@@ -36,19 +36,23 @@ const unsubscribeBlocks = subscribeChainEvent('block', (message) => {
   console.log('New ETH block received:', message.data)
   // 更新最新区块数据
   if (message.data && message.data.height) {
+    const blockData = message.data as unknown as WebSocketBlockMessage
     const newBlock: Block = {
-      height: message.data.height,
-      timestamp: message.data.timestamp || Math.floor(Date.now() / 1000),
-      transactions: message.data.transactions || 0,
-      size: message.data.size || 0,
-      gasUsed: message.data.gasUsed || 0,
-      gasLimit: message.data.gasLimit || 0,
-      miner: message.data.miner || '',
-      reward: message.data.reward || 0,
-      hash: message.data.hash || '',
-      parentHash: message.data.parentHash || '',
-      nonce: message.data.nonce || '',
-      difficulty: message.data.difficulty || 0
+      hash: blockData.hash || `0x${blockData.height.toString(16).padStart(64, '0')}`,
+      number: blockData.height,
+      height: blockData.height,
+      timestamp: blockData.timestamp || Math.floor(Date.now() / 1000),
+      transactions_count: blockData.transactions || 0,
+      transactions: blockData.transactions || 0,
+      size: blockData.size || 0,
+      chain: 'eth',
+      gasUsed: blockData.gasUsed || 0,
+      gasLimit: blockData.gasLimit || 0,
+      miner: blockData.miner || '',
+      reward: blockData.reward || 0,
+      parentHash: blockData.parentHash || '',
+      nonce: blockData.nonce || '',
+      difficulty: blockData.difficulty || 0
     }
     
     // 将新区块添加到列表开头
@@ -59,7 +63,7 @@ const unsubscribeBlocks = subscribeChainEvent('block', (message) => {
     }
     
     // 更新统计信息
-    stats.value.totalBlocks = message.data.totalBlocks || stats.value.totalBlocks
+    stats.value.totalBlocks = blockData.totalBlocks || stats.value.totalBlocks
   }
 })
 
@@ -67,18 +71,26 @@ const unsubscribeTransactions = subscribeChainEvent('transaction', (message) => 
   console.log('New ETH transaction received:', message.data)
   // 更新最新交易数据
   if (message.data && message.data.hash) {
+    const txData = message.data as unknown as WebSocketTransactionMessage
     const newTransaction: Transaction = {
-      hash: message.data.hash,
-      blockHeight: message.data.blockHeight || 0,
-      timestamp: message.data.timestamp || Math.floor(Date.now() / 1000),
-      from: message.data.from || '',
-      to: message.data.to || '',
-      amount: message.data.amount || 0,
-      gasUsed: message.data.gasUsed || 0,
-      gasPrice: message.data.gasPrice || 0,
-      status: message.data.status || 'success',
-      nonce: message.data.nonce || 0,
-      input: message.data.input || ''
+      hash: txData.hash,
+      blockHeight: txData.blockHeight || 0,
+      timestamp: txData.timestamp || Math.floor(Date.now() / 1000),
+      from: txData.from || '',
+      to: txData.to || '',
+      amount: txData.amount || 0,
+      gasUsed: txData.gasUsed || 0,
+      gas_price: (txData.gasPrice || 0).toString(),
+      gas_used: txData.gasUsed || 0,
+      nonce: txData.nonce || 0,
+      input: txData.input || '',
+      block_hash: '',
+      block_number: 0,
+      from_address: txData.from || '',
+      to_address: txData.to || '',
+      value: (txData.amount || 0).toString(),
+      chain: 'eth',
+      status: (txData.status === 'success' || txData.status === 'failed' || txData.status === 'pending') ? txData.status : 'success'
     }
     
     // 将新交易添加到列表开头
@@ -89,7 +101,7 @@ const unsubscribeTransactions = subscribeChainEvent('transaction', (message) => 
     }
     
     // 更新统计信息
-    stats.value.totalTransactions = message.data.totalTransactions || stats.value.totalTransactions
+    stats.value.totalTransactions = txData.totalTransactions || stats.value.totalTransactions
   }
 })
 
@@ -97,9 +109,10 @@ const unsubscribeStats = subscribeChainEvent('stats', (message) => {
   console.log('ETH stats update received:', message.data)
   // 更新统计信息
   if (message.data) {
+    const statsData = message.data as unknown as WebSocketStatsMessage
     stats.value = {
       ...stats.value,
-      ...message.data
+      ...statsData
     }
   }
 })
@@ -200,12 +213,12 @@ onUnmounted(() => {
                 <CubeIcon class="h-4 w-4 text-blue-600" />
               </div>
               <div>
-                <p class="text-sm font-medium text-gray-900">#{{ block.height.toLocaleString() }}</p>
-                <p class="text-sm text-gray-500">{{ formatTimestamp(block.timestamp) }}</p>
+                <p class="text-sm font-medium text-gray-900">#{{ (block.height || block.number || 0).toLocaleString() }}</p>
+                <p class="text-sm text-gray-500">{{ formatTimestamp(typeof block.timestamp === 'string' ? parseInt(block.timestamp) : block.timestamp) }}</p>
               </div>
             </div>
             <div class="text-right">
-              <p class="text-sm font-medium text-gray-900">{{ block.transactions }} 交易</p>
+              <p class="text-sm font-medium text-gray-900">{{ block.transactions_count || block.transactions || 0 }} 交易</p>
               <p class="text-sm text-gray-500">{{ formatBytes(block.size) }}</p>
             </div>
           </div>
@@ -232,12 +245,12 @@ onUnmounted(() => {
               </div>
               <div>
                 <p class="text-sm font-medium text-gray-900">{{ formatHash(tx.hash) }}</p>
-                <p class="text-sm text-gray-500">{{ formatTimestamp(tx.timestamp) }}</p>
+                <p class="text-sm text-gray-500">{{ formatTimestamp(typeof tx.timestamp === 'string' ? parseInt(tx.timestamp) : tx.timestamp) }}</p>
               </div>
             </div>
             <div class="text-right">
               <p class="text-sm font-medium text-gray-900">0.000000 ETH</p>
-              <p class="text-sm text-gray-500">{{ formatAmount(tx.amount) }} ETH</p>
+              <p class="text-sm text-gray-500">{{ formatAmount(tx.amount || 0) }} ETH</p>
             </div>
           </div>
         </div>

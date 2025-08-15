@@ -7,10 +7,10 @@ import (
 
 // CreateBlockRequest 创建区块请求DTO
 type CreateBlockRequest struct {
-	Hash             string    `json:"hash" validate:"required,len=64"`
+	Hash             string    `json:"hash" validate:"required,len=66"`
 	Height           uint64    `json:"height" validate:"required,gt=0"`
-	PreviousHash     string    `json:"previous_hash" validate:"omitempty,len=64"`
-	MerkleRoot       string    `json:"merkle_root" validate:"omitempty,len=64"`
+	PreviousHash     string    `json:"previous_hash" validate:"omitempty,len=66"`
+	MerkleRoot       string    `json:"merkle_root" validate:"omitempty,len=66"`
 	Timestamp        time.Time `json:"timestamp" validate:"required"`
 	Difficulty       float64   `json:"difficulty" validate:"gte=0"`
 	Nonce            uint64    `json:"nonce" validate:"gte=0"`

@@ -149,22 +149,11 @@
 import { ref, onMounted } from 'vue'
 
 // 响应式数据
-const searchQuery = ref('')
-const timeRange = ref('24h')
-const pageSize = ref(25)
-const currentPage = ref(1)
-const totalMetrics = ref(0)
 const lastUpdateTime = ref('')
 
-// 定义网络指标类型
-interface NetworkMetric {
-  name: string
-  currentValue: string
-  change24h: number
-  change7d: number
-}
+import type { NetworkMetricDisplay } from '@/types'
 
-const networkMetrics = ref<NetworkMetric[]>([])
+const networkMetrics = ref<NetworkMetricDisplay[]>([])
 
 // 统计数据
 const stats = ref({

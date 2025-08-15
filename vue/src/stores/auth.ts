@@ -6,7 +6,6 @@ import {
   authenticatedAPI 
 } from '@/api/auth'
 import type { 
-  AuthState, 
   UserProfile, 
   APIKey, 
   LoginRequest, 
@@ -220,7 +219,7 @@ export const useAuthStore = defineStore('auth', () => {
     }
     
     try {
-      const response = await authAPI.changePassword(loginToken.value, data.current_password, data.new_password)
+      const response = await authAPI.changePassword(loginToken.value, data)
       return response
     } catch (error) {
       console.error('Failed to change password:', error)
@@ -337,8 +336,7 @@ export const useAuthStore = defineStore('auth', () => {
   // 获取访问令牌
   const getAccessToken = async (apiKey: string, secretKey: string) => {
     try {
-      const data: GetAccessTokenRequest = { api_key: apiKey, secret_key: secretKey }
-      const response = await authAPI.getAccessToken(data)
+      const response = await authAPI.getAccessToken(apiKey, secretKey)
       
       if (response.success) {
         accessToken.value = response.data.access_token
@@ -413,9 +411,9 @@ export const useAuthStore = defineStore('auth', () => {
       if (hasValidTokens.value && accessToken.value) {
         try {
           return await authenticatedAPI.getBlocks(accessToken.value, chain, page, pageSize)
-        } catch (error: any) {
+        } catch (error: unknown) {
           // 如果是限流错误，提示用户登录解锁更多功能
-          if (error.message?.includes('请求过于频繁') || error.message?.includes('限流')) {
+          if (error instanceof Error && (error.message?.includes('请求过于频繁') || error.message?.includes('限流'))) {
             throw new Error('限流触发，请登录解锁更多功能！')
           }
           throw error
@@ -432,9 +430,9 @@ export const useAuthStore = defineStore('auth', () => {
       if (hasValidTokens.value && accessToken.value) {
         try {
           return await authenticatedAPI.getTransactions(accessToken.value, chain, page, pageSize)
-        } catch (error: any) {
+        } catch (error: unknown) {
           // 如果是限流错误，提示用户登录解锁更多功能
-          if (error.message?.includes('请求过于频繁') || error.message?.includes('限流')) {
+          if (error instanceof Error && (error.message?.includes('请求过于频繁') || error.message?.includes('限流'))) {
             throw new Error('限流触发，请登录解锁更多功能！')
           }
           throw error

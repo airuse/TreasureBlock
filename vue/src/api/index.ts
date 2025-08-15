@@ -120,8 +120,10 @@ export const mockData = {
     const blocks: Block[] = []
     for (let i = 0; i < count; i++) {
       blocks.push({
+        number: 18456789 - i,
         height: 18456789 - i,
         timestamp: Math.floor(Date.now() / 1000) - i * 12,
+        transactions_count: Math.floor(Math.random() * 200) + 50,
         transactions: Math.floor(Math.random() * 200) + 50,
         size: Math.floor(Math.random() * 1000000) + 500000,
         gasUsed: Math.floor(Math.random() * 15000000) + 5000000,
@@ -132,6 +134,7 @@ export const mockData = {
         parentHash: `0x${Math.random().toString(16).substring(2, 66)}`,
         nonce: Math.random().toString(16).substring(2, 18),
         difficulty: 2.5e12,
+        chain: 'eth'
       })
     }
     return blocks
@@ -142,17 +145,27 @@ export const mockData = {
     const transactions: Transaction[] = []
     for (let i = 0; i < count; i++) {
       const statuses: ('success' | 'failed' | 'pending')[] = ['success', 'failed', 'pending']
+      const blockHash = `0x${Math.random().toString(16).substring(2, 66)}`
+      const blockNumber = 18456789 - Math.floor(i / 200)
+      
       transactions.push({
         hash: `0x${Math.random().toString(16).substring(2, 66)}`,
-        blockHeight: 18456789 - Math.floor(i / 200),
-        timestamp: Math.floor(Date.now() / 1000) - i * 12,
-        from: `0x${Math.random().toString(16).substring(2, 42)}`,
-        to: `0x${Math.random().toString(16).substring(2, 42)}`,
-        amount: Math.random() * 10e18,
-        gasUsed: Math.floor(Math.random() * 21000) + 21000,
-        gasPrice: Math.floor(Math.random() * 20e9) + 20e9,
-        status: statuses[Math.floor(Math.random() * statuses.length)],
+        block_hash: blockHash,
+        block_number: blockNumber,
+        blockHeight: blockNumber, // 兼容BTC
+        from_address: `0x${Math.random().toString(16).substring(2, 42)}`,
+        to_address: `0x${Math.random().toString(16).substring(2, 42)}`,
+        from: `0x${Math.random().toString(16).substring(2, 42)}`, // 兼容BTC
+        to: `0x${Math.random().toString(16).substring(2, 42)}`, // 兼容BTC
+        value: (Math.random() * 10e18).toString(),
+        amount: Math.random() * 10e18, // 兼容BTC
+        gas_price: (Math.floor(Math.random() * 20e9) + 20e9).toString(),
+        gas_used: Math.floor(Math.random() * 21000) + 21000,
+        gasUsed: Math.floor(Math.random() * 21000) + 21000, // 兼容BTC
         nonce: i,
+        timestamp: Math.floor(Date.now() / 1000) - i * 12,
+        chain: 'eth',
+        status: statuses[Math.floor(Math.random() * statuses.length)],
         input: '0x',
       })
     }

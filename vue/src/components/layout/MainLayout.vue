@@ -178,6 +178,27 @@
               </svg>
               {{ item.name }}
             </router-link>
+
+            <!-- 个人中心菜单（仅登录用户可见） -->
+            <div v-if="authStore.isAuthenticated" class="pt-4 border-t border-gray-200">
+              <div class="px-3 py-2 text-xs font-semibold text-gray-500 uppercase tracking-wider">
+                个人中心
+              </div>
+              <router-link 
+                v-for="item in personalMenuItems" 
+                :key="item.name"
+                :to="item.path"
+                class="sidebar-item"
+                :class="{ active: $route.path.startsWith(item.path) }"
+              >
+                <svg style="width: 20px; height: 20px; margin-right: 12px;" viewBox="0 0 20 20" fill="currentColor">
+                  <path v-if="item.name === '扫块收益'" fill-rule="evenodd" d="M4 4a2 2 0 00-2 2v4a2 2 0 002 2V6h10a2 2 0 00-2-2H4zm2 6a2 2 0 012-2h8a2 2 0 012 2v4a2 2 0 01-2 2H8a2 2 0 01-2-2v-4zm6 4a2 2 0 100 4 2 2 0 000-4z" clip-rule="evenodd"/>
+                  <path v-else-if="item.name === '个人地址'" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z"/>
+                  <path v-else-if="item.name === '交易历史'" fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-12a1 1 0 10-2 0v4a1 1 0 00.293.707l2.828 2.829a1 1 0 101.415-1.415L11 9.586V6z" clip-rule="evenodd"/>
+                </svg>
+                {{ item.name }}
+              </router-link>
+            </div>
           </nav>
         </div>
       </aside>
@@ -260,6 +281,16 @@ const menuItems = computed(() => {
     { name: '交易', path: `${basePath}/transactions` },
     { name: '地址', path: `${basePath}/addresses` },
     { name: '统计', path: `${basePath}/statistics` },
+  ]
+})
+
+// 个人中心菜单项
+const personalMenuItems = computed(() => {
+  const basePath = currentChain.value === 'eth' ? '/eth' : '/btc'
+  return [
+    { name: '扫块收益', path: `${basePath}/personal/earnings` },
+    { name: '个人地址', path: `${basePath}/personal/addresses` },
+    { name: '交易历史', path: `${basePath}/personal/transactions` },
   ]
 })
 

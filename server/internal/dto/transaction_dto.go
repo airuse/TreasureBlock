@@ -5,28 +5,28 @@ import (
 	"time"
 )
 
-// CreateTransactionRequest 创建交易请求DTO
+// CreateTransactionRequest 创建交易请求DTO - 匹配现有Transaction表结构
 type CreateTransactionRequest struct {
-	TxID         string  `json:"tx_id" validate:"required,max=120"`
-	TxType       uint8   `json:"tx_type" validate:"lte=9"`
+	TxID         string  `json:"tx_id" validate:"required,len=66"`
+	TxType       uint8   `json:"tx_type" validate:"gte=0,lte=9"`
 	Confirm      uint    `json:"confirm" validate:"gte=0"`
-	Status       uint8   `json:"status" validate:"lte=3"`
+	Status       uint8   `json:"status" validate:"gte=0,lte=3"`
 	SendStatus   uint8   `json:"send_status" validate:"oneof=0 1"`
 	Balance      string  `json:"balance" validate:"required"`
 	Amount       string  `json:"amount" validate:"required"`
 	TransID      uint    `json:"trans_id" validate:"required"`
-	Symbol       string  `json:"symbol" validate:"required,max=20"`
-	AddressFrom  string  `json:"address_from" validate:"required,max=120"`
-	AddressTo    string  `json:"address_to" validate:"required,max=120"`
+	Symbol       string  `json:"symbol" validate:"required,oneof=eth btc"`
+	AddressFrom  string  `json:"address_from" validate:"required"`
+	AddressTo    string  `json:"address_to" validate:"required"`
 	GasLimit     uint    `json:"gas_limit" validate:"required"`
 	GasPrice     string  `json:"gas_price" validate:"required"`
 	GasUsed      uint    `json:"gas_used" validate:"gte=0"`
 	Fee          string  `json:"fee" validate:"required"`
 	UsedFee      *string `json:"used_fee,omitempty"`
-	Height       uint64  `json:"height" validate:"required"`
-	ContractAddr string  `json:"contract_addr" validate:"required,max=120"`
+	Height       uint64  `json:"height" validate:"required,gt=0"`
+	ContractAddr string  `json:"contract_addr" validate:"required"`
 	Hex          *string `json:"hex,omitempty"`
-	TxScene      string  `json:"tx_scene" validate:"required,max=20"`
+	TxScene      string  `json:"tx_scene" validate:"required"`
 	Remark       string  `json:"remark" validate:"max=256"`
 }
 
@@ -172,11 +172,34 @@ func (resp *TransactionResponse) FromModel(tx *models.Transaction) {
 	resp.Mtime = tx.Mtime
 }
 
-// NewTransactionResponse 创建TransactionResponse
+// NewTransactionResponse 创建交易响应
 func NewTransactionResponse(tx *models.Transaction) *TransactionResponse {
-	resp := &TransactionResponse{}
-	resp.FromModel(tx)
-	return resp
+	return &TransactionResponse{
+		ID:           tx.ID,
+		TxID:         tx.TxID,
+		TxType:       tx.TxType,
+		Confirm:      tx.Confirm,
+		Status:       tx.Status,
+		SendStatus:   tx.SendStatus,
+		Balance:      tx.Balance,
+		Amount:       tx.Amount,
+		TransID:      tx.TransID,
+		Symbol:       tx.Symbol,
+		AddressFrom:  tx.AddressFrom,
+		AddressTo:    tx.AddressTo,
+		GasLimit:     tx.GasLimit,
+		GasPrice:     tx.GasPrice,
+		GasUsed:      tx.GasUsed,
+		Fee:          tx.Fee,
+		UsedFee:      tx.UsedFee,
+		Height:       tx.Height,
+		ContractAddr: tx.ContractAddr,
+		Hex:          tx.Hex,
+		TxScene:      tx.TxScene,
+		Remark:       tx.Remark,
+		Ctime:        tx.Ctime,
+		Mtime:        tx.Mtime,
+	}
 }
 
 // NewTransactionSummaryResponse 创建TransactionSummaryResponse

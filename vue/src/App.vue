@@ -1,9 +1,11 @@
 <script setup lang="ts">
 import MainLayout from './components/layout/MainLayout.vue'
+import Toast from './components/ui/Toast.vue'
 </script>
 
 <template>
   <MainLayout />
+  <Toast />
 </template>
 
 <style scoped>

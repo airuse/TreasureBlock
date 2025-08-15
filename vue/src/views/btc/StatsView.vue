@@ -198,7 +198,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch, onMounted } from 'vue'
+import { ref, watch, onMounted } from 'vue'
 import { formatAmount, formatHashrate, formatDifficulty } from '@/utils/formatters'
 
 // 响应式数据

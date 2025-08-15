@@ -220,8 +220,8 @@ const saveProfile = async () => {
       close()
     }, 1500)
     
-  } catch (err: any) {
-    error.value = err.message || '保存失败'
+  } catch (err: unknown) {
+    error.value = (err instanceof Error ? err.message : '保存失败')
   } finally {
     isLoading.value = false
   }
