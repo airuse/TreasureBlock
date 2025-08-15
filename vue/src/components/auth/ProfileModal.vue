@@ -204,7 +204,7 @@ const saveProfile = async () => {
     // 调用真实API保存个人资料和密码
     if (passwordForm.newPassword) {
       // 修改密码
-      await authStore.changePassword({
+      await authStore.changeUserPassword({
         current_password: passwordForm.currentPassword,
         new_password: passwordForm.newPassword
       })

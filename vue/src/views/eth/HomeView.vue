@@ -1,126 +1,84 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
-import { 
-  CubeIcon, 
-  CurrencyDollarIcon, 
-  UserGroupIcon, 
-  ChartBarIcon 
-} from '@heroicons/vue/20/solid'
-import type { Block, Transaction, NetworkStats, WebSocketBlockMessage, WebSocketTransactionMessage, WebSocketStatsMessage } from '@/types'
-import { mockData } from '@/api'
+import { useWebSocket } from '@/composables/useWebSocket'
+import type { Block, Transaction, NetworkStats, WebSocketBlockMessage } from '@/types'
 import { 
   formatTimestamp, 
   formatHash, 
-  formatBytes, 
-  formatHashrate, 
-  formatAmount, 
+  formatNumber, 
   formatDifficulty 
 } from '@/utils/formatters'
-import { useChainWebSocket } from '@/composables/useWebSocket'
 
 // 响应式数据
-const stats = ref<NetworkStats>(mockData.getMockNetworkStats())
+const stats = ref<NetworkStats>({
+  totalTransactions: 0,
+  totalBlocks: 0,
+  activeAddresses: 0,
+  networkHashrate: 0,
+  dailyVolume: 0,
+  avgGasPrice: 0,
+  avgBlockTime: 0,
+  difficulty: 0
+})
 const latestBlocks = ref<Block[]>([])
 const latestTransactions = ref<Transaction[]>([])
 
 // WebSocket连接
-const { subscribeChainEvent } = useChainWebSocket('eth')
+const { subscribe } = useWebSocket()
 
 // 格式化数字
-const formatNumber = (num: number): string => {
-  return num.toLocaleString()
+const formatHashrate = (hashrate: number) => {
+  if (hashrate >= 1e12) return `${(hashrate / 1e12).toFixed(2)} TH/s`
+  if (hashrate >= 1e9) return `${(hashrate / 1e9).toFixed(2)} GH/s`
+  if (hashrate >= 1e6) return `${(hashrate / 1e6).toFixed(2)} MH/s`
+  if (hashrate >= 1e3) return `${(hashrate / 1e3).toFixed(2)} KH/s`
+  return `${hashrate.toFixed(2)} H/s`
+}
+
+// 格式化字节大小
+const formatBytes = (bytes: number) => {
+  if (bytes === 0) return '0 Bytes'
+  const k = 1024
+  const sizes = ['Bytes', 'KB', 'MB', 'GB']
+  const i = Math.floor(Math.log(bytes) / Math.log(k))
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+}
+
+// 格式化金额
+const formatAmount = (amount: number) => {
+  return amount.toFixed(6)
 }
 
 // WebSocket事件处理
-const unsubscribeBlocks = subscribeChainEvent('block', (message) => {
-  console.log('New ETH block received:', message.data)
-  // 更新最新区块数据
-  if (message.data && message.data.height) {
-    const blockData = message.data as unknown as WebSocketBlockMessage
-    const newBlock: Block = {
-      hash: blockData.hash || `0x${blockData.height.toString(16).padStart(64, '0')}`,
-      number: blockData.height,
-      height: blockData.height,
-      timestamp: blockData.timestamp || Math.floor(Date.now() / 1000),
-      transactions_count: blockData.transactions || 0,
-      transactions: blockData.transactions || 0,
-      size: blockData.size || 0,
-      chain: 'eth',
-      gasUsed: blockData.gasUsed || 0,
-      gasLimit: blockData.gasLimit || 0,
-      miner: blockData.miner || '',
-      reward: blockData.reward || 0,
-      parentHash: blockData.parentHash || '',
-      nonce: blockData.nonce || '',
-      difficulty: blockData.difficulty || 0
-    }
-    
-    // 将新区块添加到列表开头
-    latestBlocks.value.unshift(newBlock)
-    // 保持最多5个区块
-    if (latestBlocks.value.length > 5) {
-      latestBlocks.value = latestBlocks.value.slice(0, 5)
-    }
-    
-    // 更新统计信息
-    stats.value.totalBlocks = blockData.totalBlocks || stats.value.totalBlocks
-  }
-})
-
-const unsubscribeTransactions = subscribeChainEvent('transaction', (message) => {
-  console.log('New ETH transaction received:', message.data)
-  // 更新最新交易数据
-  if (message.data && message.data.hash) {
-    const txData = message.data as unknown as WebSocketTransactionMessage
-    const newTransaction: Transaction = {
-      hash: txData.hash,
-      blockHeight: txData.blockHeight || 0,
-      timestamp: txData.timestamp || Math.floor(Date.now() / 1000),
-      from: txData.from || '',
-      to: txData.to || '',
-      amount: txData.amount || 0,
-      gasUsed: txData.gasUsed || 0,
-      gas_price: (txData.gasPrice || 0).toString(),
-      gas_used: txData.gasUsed || 0,
-      nonce: txData.nonce || 0,
-      input: txData.input || '',
-      block_hash: '',
-      block_number: 0,
-      from_address: txData.from || '',
-      to_address: txData.to || '',
-      value: (txData.amount || 0).toString(),
-      chain: 'eth',
-      status: (txData.status === 'success' || txData.status === 'failed' || txData.status === 'pending') ? txData.status : 'success'
-    }
-    
-    // 将新交易添加到列表开头
-    latestTransactions.value.unshift(newTransaction)
-    // 保持最多5个交易
-    if (latestTransactions.value.length > 5) {
-      latestTransactions.value = latestTransactions.value.slice(0, 5)
-    }
-    
-    // 更新统计信息
-    stats.value.totalTransactions = txData.totalTransactions || stats.value.totalTransactions
-  }
-})
-
-const unsubscribeStats = subscribeChainEvent('stats', (message) => {
-  console.log('ETH stats update received:', message.data)
-  // 更新统计信息
+const unsubscribeBlocks = subscribe('block', (message: any) => {
   if (message.data) {
-    const statsData = message.data as unknown as WebSocketStatsMessage
-    stats.value = {
-      ...stats.value,
-      ...statsData
+    latestBlocks.value.unshift(message.data as Block)
+    if (latestBlocks.value.length > 10) {
+      latestBlocks.value = latestBlocks.value.slice(0, 10)
     }
+  }
+})
+
+const unsubscribeTransactions = subscribe('transaction', (message: any) => {
+  if (message.data) {
+    latestTransactions.value.unshift(message.data as Transaction)
+    if (latestTransactions.value.length > 10) {
+      latestTransactions.value = latestTransactions.value.slice(0, 10)
+    }
+  }
+})
+
+const unsubscribeStats = subscribe('stats', (message: any) => {
+  if (message.data) {
+    stats.value = message.data as NetworkStats
   }
 })
 
 // 初始化数据
 onMounted(() => {
-  latestBlocks.value = mockData.getMockBlocks(5)
-  latestTransactions.value = mockData.getMockTransactions(5)
+  // 初始化空数据，实际数据将通过WebSocket或API获取
+  latestBlocks.value = []
+  latestTransactions.value = []
 })
 
 onUnmounted(() => {

@@ -20,10 +20,10 @@
         <div class="flex items-end">
           <button 
             @click="searchAddress" 
-            :disabled="!addressInput.trim()"
+            :disabled="!addressInput.trim() || isLoading"
             class="px-6 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            查询
+            {{ isLoading ? '查询中...' : '查询' }}
           </button>
         </div>
       </div>
@@ -193,12 +193,14 @@
 <script setup lang="ts">
 import { ref } from 'vue'
 import { formatTimestamp, formatHash, formatAmount } from '@/utils/formatters'
+import { addresses as addressesApi } from '@/api'
 import type { AddressData } from '@/types'
 
 // 响应式数据
 const addressInput = ref('')
 const addressData = ref<AddressData | null>(null)
 const activeTab = ref('transactions')
+const isLoading = ref(false)
 
 // 格式化法币金额
 const formatFiat = (amount: number) => {
@@ -214,40 +216,60 @@ const getAddressType = (address: string) => {
 }
 
 // 搜索地址
-const searchAddress = () => {
+const searchAddress = async () => {
   if (!addressInput.value.trim()) return
 
-  // 模拟地址数据
-  const txCount = Math.floor(Math.random() * 1000) + 10
-  const utxoCount = Math.floor(Math.random() * 50) + 1
-  const balance = Math.random() * 10 + 0.001
-  
-  addressData.value = {
-    address: addressInput.value,
-    balance: balance,
-    txCount: txCount,
-    utxoCount: utxoCount,
-    type: getAddressType(addressInput.value),
-    firstSeen: Math.floor(Date.now() / 1000) - 86400 * 365,
-    lastSeen: Math.floor(Date.now() / 1000) - 3600,
-    transactions: Array.from({ length: Math.min(20, txCount) }, (_, i) => {
-      const isIncoming = Math.random() > 0.5
-      const amount = Math.random() * 2
-      return {
-        hash: Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join(''),
-        timestamp: Math.floor(Date.now() / 1000) - i * 3600 * 24,
-        type: isIncoming ? '转入' : '转出',
-        amount: isIncoming ? amount : -amount,
-        balance: balance + (isIncoming ? amount : -amount) * Math.random()
+  try {
+    isLoading.value = true
+    
+    const response = await addressesApi.getAddress({ 
+      hash: addressInput.value.trim()
+    })
+    
+    if (response && response.code === 200) {
+      // 将API返回的Address类型转换为页面需要的AddressData类型
+      const apiAddress = response.data
+      addressData.value = {
+        address: apiAddress.address,
+        balance: parseFloat(apiAddress.balance) || 0,
+        txCount: apiAddress.transaction_count || 0,
+        utxoCount: 0, // API中没有这个字段，设为0
+        type: getAddressType(apiAddress.address),
+        firstSeen: Math.floor(Date.now() / 1000) - 86400 * 365, // 默认值
+        lastSeen: Math.floor(Date.now() / 1000) - 3600, // 默认值
+        transactions: [], // API中没有这个字段，设为空数组
+        utxos: [] // API中没有这个字段，设为空数组
       }
-    }),
-    utxos: Array.from({ length: utxoCount }, (_, i) => ({
-      txHash: Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join(''),
-      vout: i,
-      amount: Math.random() * 1 + 0.001,
-      confirmations: Math.floor(Math.random() * 1000) + 1,
-      timestamp: Math.floor(Date.now() / 1000) - Math.random() * 86400 * 30
-    }))
+    } else {
+      // 如果API调用失败，使用默认数据
+      addressData.value = {
+        address: addressInput.value,
+        balance: 0,
+        txCount: 0,
+        utxoCount: 0,
+        type: getAddressType(addressInput.value),
+        firstSeen: Math.floor(Date.now() / 1000) - 86400 * 365,
+        lastSeen: Math.floor(Date.now() / 1000) - 3600,
+        transactions: [],
+        utxos: []
+      }
+    }
+  } catch (error) {
+    console.error('Failed to search address:', error)
+    // 如果API调用失败，使用默认数据
+    addressData.value = {
+      address: addressInput.value,
+      balance: 0,
+      txCount: 0,
+      utxoCount: 0,
+      type: getAddressType(addressInput.value),
+      firstSeen: Math.floor(Date.now() / 1000) - 86400 * 365,
+      lastSeen: Math.floor(Date.now() / 1000) - 3600,
+      transactions: [],
+      utxos: []
+    }
+  } finally {
+    isLoading.value = false
   }
 }
 </script> 

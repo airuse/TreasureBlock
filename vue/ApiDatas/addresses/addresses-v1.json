@@ -1,0 +1,87 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Addresses API",
+    "version": "v1"
+  },
+  "paths": {
+    "/addresses": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": 200,
+                  "message": "success",
+                  "data": [
+                    {
+                      "hash": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+                      "balance": "1000000000000000000",
+                      "transaction_count": 150,
+                      "type": "contract",
+                      "chain": "eth"
+                    }
+                  ],
+                  "pagination": {
+                    "page": 1,
+                    "page_size": 25,
+                    "total": 100
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/addresses/{hash}": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": 200,
+                  "message": "success",
+                  "data": {
+                    "hash": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+                    "balance": "1000000000000000000",
+                    "transaction_count": 150,
+                    "type": "contract",
+                    "chain": "eth"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/addresses/search": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": 200,
+                  "message": "success",
+                  "data": [
+                    {
+                      "hash": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+                      "balance": "1000000000000000000",
+                      "transaction_count": 150,
+                      "type": "contract",
+                      "chain": "eth"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

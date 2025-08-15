@@ -65,21 +65,21 @@
                 </router-link>
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
-                <router-link :to="`/btc/blocks/${tx.blockHeight}`" class="text-blue-600 hover:text-blue-700 font-medium">
-                  #{{ tx.blockHeight.toLocaleString() }}
+                <router-link :to="`/btc/blocks/${tx.blockHeight || tx.block_number}`" class="text-blue-600 hover:text-blue-700 font-medium">
+                  #{{ (tx.blockHeight || tx.block_number)?.toLocaleString() }}
                 </router-link>
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {{ formatTimestamp(tx.timestamp) }}
+                {{ formatTimestamp(typeof tx.timestamp === 'string' ? parseInt(tx.timestamp) : tx.timestamp) }}
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {{ formatAmount(tx.amount) }} BTC
+                {{ formatAmount(tx.amount || parseFloat(tx.value)) }} BTC
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {{ formatAmount(tx.fee) }} BTC
+                {{ formatAmount(tx.fee || 0) }} BTC
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {{ tx.inputs }}/{{ tx.outputs }}
+                {{ tx.input ? '1' : '0' }}/{{ tx.to_address ? '1' : '0' }}
               </td>
               <td class="px-6 py-4 whitespace-nowrap">
                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
@@ -163,17 +163,8 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { formatTimestamp, formatHash, formatAmount } from '@/utils/formatters'
-
-// 定义交易类型
-interface Transaction {
-  hash: string
-  blockHeight: number
-  timestamp: number
-  amount: number
-  fee: number
-  inputs: number
-  outputs: number
-}
+import { transactions as transactionsApi } from '@/api'
+import type { Transaction } from '@/types'
 
 // 响应式数据
 const searchQuery = ref('')
@@ -181,6 +172,7 @@ const pageSize = ref(25)
 const currentPage = ref(1)
 const totalTransactions = ref(0)
 const transactions = ref<Transaction[]>([])
+const isLoading = ref(false)
 
 // 计算属性
 const totalPages = computed(() => Math.ceil(totalTransactions.value / pageSize.value))
@@ -197,25 +189,55 @@ const visiblePages = computed(() => {
 })
 
 // 数据加载
-const loadData = () => {
-  // 模拟BTC交易数据
-  totalTransactions.value = 850000000
-  
-  transactions.value = []
-  
-  for (let i = 0; i < pageSize.value; i++) {
-    const txHash = Array.from({ length: 64 }, () => Math.floor(Math.random() * 16).toString(16)).join('')
-    const blockHeight = Math.floor(Math.random() * 850000) + 1
+const loadData = async () => {
+  try {
+    isLoading.value = true
     
-    transactions.value.push({
-      hash: txHash,
-      blockHeight: blockHeight,
-      timestamp: Math.floor(Date.now() / 1000) - Math.floor(Math.random() * 86400 * 7),
-      amount: Math.random() * 10 + 0.01,
-      fee: Math.random() * 0.001 + 0.00001,
-      inputs: Math.floor(Math.random() * 5) + 1,
-      outputs: Math.floor(Math.random() * 5) + 1
+    const response = await transactionsApi.getTransactions({ 
+      page: currentPage.value, 
+      page_size: pageSize.value, 
+      chain: 'btc' 
     })
+    
+    if (response && response.code === 200) {
+      transactions.value = response.data || []
+      totalTransactions.value = response.pagination?.total || 0
+    }
+  } catch (error) {
+    console.error('Failed to load transactions:', error)
+    // 如果API调用失败，使用默认数据
+    totalTransactions.value = 850000000
+    transactions.value = []
+  } finally {
+    isLoading.value = false
+  }
+}
+
+// 搜索交易
+const searchTransactions = async () => {
+  if (!searchQuery.value.trim()) {
+    await loadData()
+    return
+  }
+  
+  try {
+    isLoading.value = true
+    
+    const response = await transactionsApi.searchTransactions({ 
+      query: searchQuery.value.trim(),
+      page: 1,
+      page_size: pageSize.value
+    })
+    
+    if (response && response.code === 200) {
+      transactions.value = response.data || []
+      totalTransactions.value = response.pagination?.total || 0
+      currentPage.value = 1
+    }
+  } catch (error) {
+    console.error('Failed to search transactions:', error)
+  } finally {
+    isLoading.value = false
   }
 }
 
@@ -242,8 +264,12 @@ const goToPage = (page: number) => {
 // 监听搜索查询
 watch(searchQuery, (newQuery) => {
   if (newQuery) {
-    // 这里应该实现搜索逻辑
-    console.log('搜索:', newQuery)
+    // 延迟搜索，避免频繁API调用
+    const timeoutId = setTimeout(() => {
+      searchTransactions()
+    }, 500)
+    
+    return () => clearTimeout(timeoutId)
   }
 })
 

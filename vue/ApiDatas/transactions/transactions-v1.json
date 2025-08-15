@@ -1,0 +1,108 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Transactions API",
+    "version": "v1"
+  },
+  "paths": {
+    "/transactions": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": 200,
+                  "message": "success",
+                  "data": [
+                    {
+                      "hash": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+                      "block_hash": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+                      "block_number": 18456789,
+                      "from_address": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+                      "to_address": "0x1234567890abcdef1234567890abcdef1234567890abcdef",
+                      "value": "1000000000000000000",
+                      "gas_price": "20000000000",
+                      "gas_used": 21000,
+                      "nonce": 0,
+                      "timestamp": 1703123456,
+                      "chain": "eth",
+                      "status": "success"
+                    }
+                  ],
+                  "pagination": {
+                    "page": 1,
+                    "page_size": 25,
+                    "total": 100
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/transactions/{hash}": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": 200,
+                  "message": "success",
+                  "data": {
+                    "hash": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+                    "block_hash": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+                    "block_number": 18456789,
+                    "from_address": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+                    "to_address": "0x1234567890abcdef1234567890abcdef1234567890abcdef",
+                    "value": "1000000000000000000",
+                    "gas_price": "20000000000",
+                    "gas_used": 21000,
+                    "nonce": 0,
+                    "timestamp": 1703123456,
+                    "chain": "eth",
+                    "status": "success"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/transactions/search": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": 200,
+                  "message": "success",
+                  "data": [
+                    {
+                      "hash": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+                      "block_hash": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+                      "block_number": 18456789,
+                      "from_address": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+                      "to_address": "0x1234567890abcdef1234567890abcdef1234567890abcdef",
+                      "value": "1000000000000000000",
+                      "gas_price": "20000000000",
+                      "gas_used": 21000,
+                      "nonce": 0,
+                      "timestamp": 1703123456,
+                      "chain": "eth",
+                      "status": "success"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

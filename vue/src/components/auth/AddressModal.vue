@@ -237,8 +237,8 @@ const close = () => {
 // 加载地址列表
 const loadAddresses = async () => {
   try {
-    const response = await authStore.getUserAddresses()
-    if (response.success) {
+    const response = await authStore.fetchUserAddresses()
+    if (response && response.code === 200) {
       addresses.value = (response.data || []) as UserAddress[]
     }
   } catch (err: unknown) {
@@ -262,13 +262,13 @@ const addAddress = async () => {
     isLoading.value = true
     error.value = ''
     
-    const response = await authStore.createUserAddress({
+    const response = await authStore.createNewUserAddress({
       address: newAddressForm.address.trim(),
       label: newAddressForm.label.trim(),
       type: newAddressForm.type
     })
     
-    if (response.success) {
+    if (response && response.code === 200) {
       success.value = '地址添加成功！'
       
       // 清空表单
@@ -298,11 +298,11 @@ const editAddress = async (address: UserAddress) => {
   const newLabel = prompt('请输入新的标签:', address.label)
   if (newLabel !== null && newLabel !== address.label) {
     try {
-      const response = await authStore.updateUserAddress(address.id, {
+      const response = await authStore.updateExistingUserAddress(address.id, {
         label: newLabel
       })
       
-      if (response.success) {
+      if (response && response.code === 200) {
         success.value = '地址更新成功！'
         await loadAddresses()
         setTimeout(() => {
@@ -322,9 +322,9 @@ const removeAddress = async (address: UserAddress) => {
   }
   
   try {
-    const response = await authStore.deleteUserAddress(address.id)
+    const response = await authStore.deleteExistingUserAddress(address.id)
     
-    if (response.success) {
+    if (response && response.code === 200) {
       success.value = '地址已删除'
       await loadAddresses()
       

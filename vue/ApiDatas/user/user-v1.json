@@ -1,0 +1,199 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "User API",
+    "version": "v1"
+  },
+  "paths": {
+    "/api/user/api-keys": {
+      "post": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": 200,
+                  "message": "success",
+                  "data": {
+                    "id": 1,
+                    "name": "My API Key",
+                    "api_key": "ak_1234567890abcdef",
+                    "secret_key": "sk_1234567890abcdef",
+                    "rate_limit": 1000,
+                    "expires_at": "2024-12-31T23:59:59Z",
+                    "created_at": "2023-12-21T10:30:56Z"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/user/api-keys": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": 200,
+                  "message": "success",
+                  "data": [
+                    {
+                      "id": 1,
+                      "name": "My API Key",
+                      "api_key": "ak_1234567890abcdef",
+                      "permissions": ["read", "write"],
+                      "is_active": true,
+                      "usage_count": 150,
+                      "last_used_at": "2023-12-21T10:30:56Z",
+                      "expires_at": "2024-12-31T23:59:59Z",
+                      "created_at": "2023-12-21T10:30:56Z",
+                      "updated_at": "2023-12-21T10:30:56Z"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/user/api-keys/{keyId}": {
+      "put": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": 200,
+                  "message": "success",
+                  "data": {
+                    "id": 1,
+                    "name": "Updated API Key",
+                    "api_key": "ak_1234567890abcdef",
+                    "permissions": ["read", "write"],
+                    "is_active": true,
+                    "usage_count": 150,
+                    "last_used_at": "2023-12-21T10:30:56Z",
+                    "expires_at": "2024-12-31T23:59:59Z",
+                    "created_at": "2023-12-21T10:30:56Z",
+                    "updated_at": "2023-12-21T10:30:56Z"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/user/api-keys/{keyId}": {
+      "delete": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": 200,
+                  "message": "API key deleted successfully"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/user/addresses": {
+      "post": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": 200,
+                  "message": "success",
+                  "data": {
+                    "id": 1,
+                    "address": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+                    "label": "My Wallet",
+                    "type": "eth",
+                    "is_active": true,
+                    "created_at": "2023-12-21T10:30:56Z"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/user/addresses": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": 200,
+                  "message": "success",
+                  "data": [
+                    {
+                      "id": 1,
+                      "address": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+                      "label": "My Wallet",
+                      "type": "eth",
+                      "is_active": true,
+                      "created_at": "2023-12-21T10:30:56Z"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/user/addresses/{addressId}": {
+      "put": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": 200,
+                  "message": "success",
+                  "data": {
+                    "id": 1,
+                    "address": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+                    "label": "Updated Wallet",
+                    "type": "eth",
+                    "is_active": true,
+                    "created_at": "2023-12-21T10:30:56Z",
+                    "updated_at": "2023-12-21T10:30:56Z"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/user/addresses/{addressId}": {
+      "delete": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": 200,
+                  "message": "Address deleted successfully"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

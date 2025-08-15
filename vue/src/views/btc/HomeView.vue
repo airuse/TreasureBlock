@@ -159,6 +159,9 @@ import {
 } from '@heroicons/vue/20/solid'
 import { formatNumber, formatTimestamp, formatHash, formatBytes, formatAmount, formatFee, formatHashrate, formatDifficulty } from '@/utils/formatters'
 import { useChainWebSocket } from '@/composables/useWebSocket'
+import { stats as statsApi } from '@/api'
+import { blocks as blocksApi } from '@/api'
+import { transactions as transactionsApi } from '@/api'
 import type { Block, Transaction } from '@/types'
 
 // 响应式数据
@@ -183,45 +186,56 @@ const latestTransactions = ref<Transaction[]>([])
 const { subscribeChainEvent } = useChainWebSocket('btc')
 
 // 加载数据
-const loadData = () => {
-  // 模拟BTC数据
-  stats.value = {
-    totalBlocks: 850000,
-    totalTransactions: 850000000,
-    activeAddresses: 500000,
-    networkHashrate: 500e12, // 500 TH/s
-    avgFee: 0.00001, // 0.00001 BTC
-    avgBlockTime: 10, // 10分钟
-    difficulty: 50e12, // 50T
-    dailyVolume: 50000 // 50000 BTC
+const loadData = async () => {
+  try {
+    // 获取统计数据
+    const statsResponse = await statsApi.getNetworkStats({ chain: 'btc' })
+    if (statsResponse && statsResponse.code === 200) {
+      stats.value = {
+        totalBlocks: statsResponse.data?.totalBlocks || 0,
+        totalTransactions: statsResponse.data?.totalTransactions || 0,
+        activeAddresses: statsResponse.data?.activeAddresses || 0,
+        networkHashrate: statsResponse.data?.networkHashrate || 0,
+        avgFee: statsResponse.data?.avgFee || 0,
+        avgBlockTime: statsResponse.data?.avgBlockTime || 0,
+        difficulty: statsResponse.data?.difficulty || 0,
+        dailyVolume: statsResponse.data?.dailyVolume || 0
+      }
+    }
+
+    // 获取最新区块
+    const blocksResponse = await blocksApi.getBlocks({ 
+      page: 1, 
+      page_size: 5, 
+      chain: 'btc' 
+    })
+    if (blocksResponse && blocksResponse.code === 200) {
+      latestBlocks.value = blocksResponse.data || []
+    }
+
+    // 获取最新交易
+    const transactionsResponse = await transactionsApi.getTransactions({ 
+      page: 1, 
+      page_size: 5, 
+      chain: 'btc' 
+    })
+    if (transactionsResponse && transactionsResponse.code === 200) {
+      latestTransactions.value = transactionsResponse.data || []
+    }
+  } catch (error) {
+    console.error('Failed to load data:', error)
+    // 如果API调用失败，使用默认数据
+    stats.value = {
+      totalBlocks: 850000,
+      totalTransactions: 850000000,
+      activeAddresses: 500000,
+      networkHashrate: 500e12,
+      avgFee: 0.00001,
+      avgBlockTime: 10,
+      difficulty: 50e12,
+      dailyVolume: 50000
+    }
   }
-
-  // 模拟最新区块
-  latestBlocks.value = Array.from({ length: 5 }, (_, i) => ({
-    hash: `0000000000000000000000000000000000000000000000000000000000000000${(850000 - i).toString(16).padStart(8, '0')}`,
-    number: 850000 - i,
-    height: 850000 - i,
-    timestamp: Math.floor(Date.now() / 1000) - i * 600,
-    transactions_count: Math.floor(Math.random() * 2000) + 500,
-    transactions: Math.floor(Math.random() * 2000) + 500,
-    size: Math.floor(Math.random() * 1000000) + 500000,
-    chain: 'btc'
-  }))
-
-  // 模拟最新交易
-  latestTransactions.value = Array.from({ length: 5 }, (_, i) => ({
-    hash: `0x${Math.random().toString(16).substring(2, 34)}`,
-    block_hash: `0000000000000000000000000000000000000000000000000000000000000000${(850000 - i).toString(16).padStart(8, '0')}`,
-    block_number: 850000 - i,
-    from_address: `1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa`,
-    to_address: `1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2`,
-    value: (Math.random() * 10).toString(),
-    gas_price: (Math.random() * 0.001).toString(),
-    gas_used: Math.floor(Math.random() * 1000) + 100,
-    nonce: i,
-    timestamp: Math.floor(Date.now() / 1000) - i * 60,
-    chain: 'btc'
-  }))
 }
 
 // WebSocket事件处理

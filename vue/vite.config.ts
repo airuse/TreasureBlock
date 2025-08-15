@@ -16,6 +16,10 @@ export default defineConfig({
       '@': fileURLToPath(new URL('./src', import.meta.url))
     },
   },
+  // 定义全局常量
+  define: {
+    __USE_MOCK__: true, // 开发环境使用Mock数据
+  },
   server: {
     https: {
       key: fs.readFileSync(path.resolve(__dirname, '../server/certs/localhost.key')),

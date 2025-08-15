@@ -198,7 +198,7 @@ export function useAutoRefresh<T>(
   const data = ref<T | null>(null)
   const loading = ref(false)
   const error = ref<string | null>(null)
-  let refreshTimer: number | null = null
+  let refreshTimer: ReturnType<typeof setInterval> | null = null
 
   const loadData = async () => {
     try {

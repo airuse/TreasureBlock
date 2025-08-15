@@ -187,14 +187,14 @@ const handleSubmit = async () => {
         password: form.password
       }
       
-      const response = await authStore.login(loginData)
+      const response = await authStore.loginUser(loginData)
       
-      if (response.success) {
+      if (response && response.code === 200) {
         showSuccess('登录成功！')
         emit('success')
         close()
       } else {
-        showError(response.message || '登录失败，请检查用户名或密码')
+        showError(response?.message || '登录失败，请检查用户名或密码')
       }
     } else {
       // 注册
@@ -204,14 +204,14 @@ const handleSubmit = async () => {
         password: form.password
       }
       
-      const response = await authStore.register(registerData)
+      const response = await authStore.registerUser(registerData)
       
-      if (response.success) {
+      if (response && response.code === 200) {
         showSuccess('注册成功！请使用新账号登录。')
         // 注册成功后自动切换到登录模式
         isLogin.value = true
       } else {
-        showError(response.message || '注册失败，请重试')
+        showError(response?.message || '注册失败，请重试')
       }
     }
   } catch (err: unknown) {

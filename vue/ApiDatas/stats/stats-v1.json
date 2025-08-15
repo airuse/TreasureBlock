@@ -1,0 +1,90 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Stats API",
+    "version": "v1"
+  },
+  "paths": {
+    "/stats/network": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": 200,
+                  "message": "success",
+                  "data": {
+                    "totalBlocks": 18456789,
+                    "totalTransactions": 987654321,
+                    "activeAddresses": 1234567,
+                    "networkHashrate": 2.5e12,
+                    "dailyVolume": 150000e18,
+                    "avgGasPrice": 25e9,
+                    "avgBlockTime": 12.5,
+                    "difficulty": 2.5e12
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stats/latest-blocks": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": 200,
+                  "message": "success",
+                  "data": [
+                    {
+                      "number": 18456789,
+                      "height": 18456789,
+                      "timestamp": 1703123456,
+                      "transactions_count": 150,
+                      "size": 800000,
+                      "hash": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+                      "miner": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+                      "chain": "eth"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/stats/latest-transactions": {
+      "get": {
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "code": 200,
+                  "message": "success",
+                  "data": [
+                    {
+                      "hash": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+                      "block_number": 18456789,
+                      "from_address": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+                      "to_address": "0x1234567890abcdef1234567890abcdef1234567890abcdef",
+                      "value": "1000000000000000000",
+                      "timestamp": 1703123456,
+                      "chain": "eth"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

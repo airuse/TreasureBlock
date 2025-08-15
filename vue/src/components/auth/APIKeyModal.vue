@@ -432,13 +432,13 @@ const createAPIKey = async () => {
 
     isLoading.value = true
     
-    const response = await authStore.createAPIKey({
+    const response = await authStore.createNewAPIKey({
       name: newKeyForm.name.trim(),
       permissions: newKeyForm.permissions,
       expires_at: newKeyForm.expiresAt || undefined
     })
     
-    if (response.success) {
+    if (response && response.code === 200) {
       // 保存创建的密钥数据用于显示
       createdKeyData.api_key = response.data?.api_key || ''
       createdKeyData.secret_key = response.data?.secret_key || ''
@@ -470,11 +470,11 @@ const createAPIKey = async () => {
 const toggleKeyStatus = async (key: APIKey) => {
   try {
     // 调用真实API更新密钥状态
-    const response = await authStore.updateAPIKey(key.id, {
+    const response = await authStore.updateExistingAPIKey(key.id, {
       is_active: !key.is_active
     })
     
-    if (response.success) {
+    if (response && response.code === 200) {
       showSuccess(`密钥已${key.is_active ? '禁用' : '启用'}`)
       await loadAPIKeys()
     }
@@ -492,9 +492,9 @@ const deleteKey = async (key: APIKey) => {
   
   try {
     // 调用真实API删除密钥
-    const response = await authStore.deleteAPIKey(key.id)
+    const response = await authStore.deleteExistingAPIKey(key.id)
     
-    if (response.success) {
+    if (response && response.code === 200) {
       showSuccess('密钥已删除')
       await loadAPIKeys()
     }

@@ -75,7 +75,7 @@
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                 <span class="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
-                  {{ Math.floor(Math.random() * 100) + 1 }}
+                  {{ totalBlocks - block.number + 1 }}
                 </span>
               </td>
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
@@ -161,6 +161,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { formatTimestamp, formatAddress, formatBytes, formatAmount } from '@/utils/formatters'
+import { blocks as blocksApi } from '@/api'
 import type { Block } from '@/types'
 
 // 响应式数据
@@ -169,6 +170,7 @@ const pageSize = ref(25)
 const currentPage = ref(1)
 const totalBlocks = ref(0)
 const blocks = ref<Block[]>([])
+const isLoading = ref(false)
 
 // 计算属性
 const totalPages = computed(() => Math.ceil(totalBlocks.value / pageSize.value))
@@ -185,28 +187,55 @@ const visiblePages = computed(() => {
 })
 
 // 数据加载
-const loadData = () => {
-  // 模拟BTC数据
-  totalBlocks.value = 850000
-  
-  const startBlock = totalBlocks.value - (currentPage.value - 1) * pageSize.value
-  const endBlock = Math.max(1, startBlock - pageSize.value + 1)
-  
-  blocks.value = []
-  
-  for (let i = startBlock; i >= endBlock; i--) {
-    blocks.value.push({
-      hash: `0000000000000000000000000000000000000000000000000000000000000000${i.toString(16).padStart(8, '0')}`,
-      number: i,
-      height: i,
-      timestamp: Math.floor(Date.now() / 1000) - (totalBlocks.value - i) * 600,
-      transactions_count: Math.floor(Math.random() * 2000) + 500,
-      transactions: Math.floor(Math.random() * 2000) + 500,
-      size: Math.floor(Math.random() * 1000000) + 500000,
-      chain: 'btc',
-      miner: '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa',
-      reward: 6.25 + Math.random() * 0.1
+const loadData = async () => {
+  try {
+    isLoading.value = true
+    
+    const response = await blocksApi.getBlocks({ 
+      page: currentPage.value, 
+      page_size: pageSize.value, 
+      chain: 'btc' 
     })
+    
+    if (response && response.code === 200) {
+      blocks.value = response.data || []
+      totalBlocks.value = response.pagination?.total || 0
+    }
+  } catch (error) {
+    console.error('Failed to load blocks:', error)
+    // 如果API调用失败，使用默认数据
+    totalBlocks.value = 850000
+    blocks.value = []
+  } finally {
+    isLoading.value = false
+  }
+}
+
+// 搜索区块
+const searchBlocks = async () => {
+  if (!searchQuery.value.trim()) {
+    await loadData()
+    return
+  }
+  
+  try {
+    isLoading.value = true
+    
+    const response = await blocksApi.searchBlocks({ 
+      query: searchQuery.value.trim(),
+      page: 1,
+      page_size: pageSize.value
+    })
+    
+    if (response && response.code === 200) {
+      blocks.value = response.data || []
+      totalBlocks.value = response.pagination?.total || 0
+      currentPage.value = 1
+    }
+  } catch (error) {
+    console.error('Failed to search blocks:', error)
+  } finally {
+    isLoading.value = false
   }
 }
 
@@ -233,8 +262,12 @@ const goToPage = (page: number) => {
 // 监听搜索查询
 watch(searchQuery, (newQuery) => {
   if (newQuery) {
-    // 这里应该实现搜索逻辑
-    console.log('搜索:', newQuery)
+    // 延迟搜索，避免频繁API调用
+    const timeoutId = setTimeout(() => {
+      searchBlocks()
+    }, 500)
+    
+    return () => clearTimeout(timeoutId)
   }
 })
 
