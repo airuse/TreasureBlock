@@ -2,8 +2,8 @@ server:
   host: "localhost"
   port: 8443
   protocol: "https"
-  api_key: "ak_89122f261460d428b5d3610936fd9926"
-  secret_key: "sk_b091041355066b9aec69f0e4cc1bda5d9fbdae93d4646f450734da850ee6e4ff"
+  api_key: "ak_8d9cc55f2905a5b76b4c9a7cfe2c3cbb"
+  secret_key: "sk_7fcb76e4a8a9dd57d7d65290ece63a55554e08d81db560a15fd54b4878a55e50"
   # HTTPS相关配置
   tls:
     enabled: true
@@ -49,9 +49,14 @@ blockchain:
       explorer_api_urls:
         - "https://alpha-clean-yard.ethereum-sepolia.quiknode.pro/7979488c04b1a36bdc4230b23e3eaac3e9c1c1af"
         - "https://yolo-smart-tree.ethereum-sepolia.quiknode.pro/52836b8f979fca7325258c42925d6c245ca45079"
+        - "https://newest-ultra-friday.ethereum-sepolia.quiknode.pro/7091d98af3809c189285739c3f4141b94f368fff"
       api_key: ""  # 如果需要的话
       username: ""
-      password: ""    
+      password: ""
+      # 配置的币种地址列表（已知的合约地址）
+      token_addresses:
+        - "0xA0b86a33E6441b8c4C8C0C4b0c4b0c4b0c4b0c4b"  # 示例：USDT合约地址
+        - "0xB0b86a33E6441b8c4C8C0C4b0c4b0c4b0c4b0c4b"  # 示例：USDC合约地址    
       # ETH链特定的扫描配置
       scan:
         enabled: true
@@ -89,3 +94,5 @@ database:
   password: ""
   dbname: "scanner.db"
   enabled: false
+
+

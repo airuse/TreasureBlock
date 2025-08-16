@@ -10,6 +10,7 @@ import (
 type CoinConfigService interface {
 	CreateCoinConfig(ctx context.Context, coinConfig *models.CoinConfig) error
 	GetCoinConfigBySymbol(ctx context.Context, symbol string) (*models.CoinConfig, error)
+	GetAllCoinConfigs(ctx context.Context) ([]*models.CoinConfig, error)
 }
 
 type coinConfigService struct {
@@ -53,4 +54,17 @@ func (s *coinConfigService) GetCoinConfigBySymbol(ctx context.Context, symbol st
 		return nil, fmt.Errorf("failed to get coinConfig by symbol: %w", err)
 	}
 	return coinConfig, nil
+}
+
+/*
+获取所有币种配置
+@param ctx context.Context
+@return []*models.CoinConfig, error
+*/
+func (s *coinConfigService) GetAllCoinConfigs(ctx context.Context) ([]*models.CoinConfig, error) {
+	coinConfigs, err := s.coinConfigRepo.GetAll(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get all coin configs: %w", err)
+	}
+	return coinConfigs, nil
 }

@@ -113,7 +113,7 @@
           
           <div class="mt-4">
             <button
-              @click="createAPIKey"
+              @click="createNewAPIKey"
               :disabled="!newKeyForm.name || newKeyForm.permissions.length === 0 || isLoading"
               class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
             >
@@ -304,6 +304,13 @@
 <script setup lang="ts">
 import { ref, reactive, watch, onMounted, onUnmounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import { getPermissionTypes } from '@/api/auth'
+import { 
+  getAPIKeys,
+  createAPIKey as createAPIKeyAPI,
+  updateAPIKey,
+  deleteAPIKey
+} from '@/api/user'
 import type { APIKey, PermissionConfig } from '@/types/auth'
 import { showSuccess, showError } from '@/composables/useToast'
 
@@ -390,11 +397,9 @@ const handleClickOutside = (event: Event) => {
 // 加载API密钥列表
 const loadAPIKeys = async () => {
   try {
-    if (authStore.apiKeys.length > 0) {
-      apiKeys.value = authStore.apiKeys
-    } else {
-      await authStore.fetchAPIKeys()
-      apiKeys.value = authStore.apiKeys
+    const response = await getAPIKeys({ token: authStore.loginToken || '' })
+    if (response && response.success === true) {
+      apiKeys.value = Array.isArray(response.data) ? response.data : []
     }
   } catch (err: unknown) {
     showError('加载API密钥失败: ' + (err instanceof Error ? err.message : '未知错误'))
@@ -404,16 +409,39 @@ const loadAPIKeys = async () => {
 // 加载权限类型列表
 const loadPermissionTypes = async () => {
   try {
-    const response = await authStore.getPermissionTypes()
-    if (response.success) {
-      // 将PermissionConfig对象转换为前端需要的格式
-      permissionTypes.value = (response.data || []).map((config: any) => ({
-        value: config.config_value, // 使用config_value作为权限值
-        description: config.config_name // 使用config_name作为描述
+    // 优先使用stores中的本地数据
+    if (authStore.hasLocalPermissionTypes) {
+      permissionTypes.value = authStore.getLocalPermissionTypes().map(perm => ({
+        value: perm.config_value,
+        description: perm.config_name
+      }))
+      return // 有本地数据就直接返回，不调用API
+    }
+    
+    // 只有在stores中没有数据时，才调用API获取
+    const response = await getPermissionTypes()
+    
+    if (response && response.success === true) {
+      // 将API数据保存到stores中
+      try {
+        if (typeof authStore.setPermissionTypes === 'function') {
+          authStore.setPermissionTypes(response.data)
+        } else {
+          console.warn('⚠️ setPermissionTypes方法不存在，跳过持久化')
+        }
+      } catch (storeError) {
+        console.warn('⚠️ 保存权限数据到stores失败:', storeError)
+      }
+      
+      // 转换为组件需要的格式
+      permissionTypes.value = response.data.map((perm: any) => ({
+        value: perm.config_value,
+        description: perm.config_name
       }))
     }
   } catch (err: unknown) {
     console.error('Failed to load permission types:', err)
+    showError('加载权限类型失败')
   }
 }
 
@@ -423,7 +451,7 @@ const togglePermissionDropdown = () => {
 }
 
 // 创建API密钥
-const createAPIKey = async () => {
+const createNewAPIKey = async () => {
   try {
     if (!newKeyForm.name.trim()) {
       showError('请输入密钥名称')
@@ -432,13 +460,14 @@ const createAPIKey = async () => {
 
     isLoading.value = true
     
-    const response = await authStore.createNewAPIKey({
+    const response = await createAPIKeyAPI({
+      token: authStore.loginToken || '',
       name: newKeyForm.name.trim(),
       permissions: newKeyForm.permissions,
       expires_at: newKeyForm.expiresAt || undefined
     })
     
-    if (response && response.code === 200) {
+    if (response && response.success === true) {
       // 保存创建的密钥数据用于显示
       createdKeyData.api_key = response.data?.api_key || ''
       createdKeyData.secret_key = response.data?.secret_key || ''
@@ -470,11 +499,15 @@ const createAPIKey = async () => {
 const toggleKeyStatus = async (key: APIKey) => {
   try {
     // 调用真实API更新密钥状态
-    const response = await authStore.updateExistingAPIKey(key.id, {
-      is_active: !key.is_active
+    const response = await updateAPIKey({
+      token: authStore.loginToken || '',
+      keyId: key.id,
+      updateData: {
+        is_active: !key.is_active
+      }
     })
     
-    if (response && response.code === 200) {
+    if (response && response.success === true) {
       showSuccess(`密钥已${key.is_active ? '禁用' : '启用'}`)
       await loadAPIKeys()
     }
@@ -492,9 +525,12 @@ const deleteKey = async (key: APIKey) => {
   
   try {
     // 调用真实API删除密钥
-    const response = await authStore.deleteExistingAPIKey(key.id)
+    const response = await deleteAPIKey({
+      token: authStore.loginToken || '',
+      keyId: key.id
+    })
     
-    if (response && response.code === 200) {
+    if (response && response.success === true) {
       showSuccess('密钥已删除')
       await loadAPIKeys()
     }

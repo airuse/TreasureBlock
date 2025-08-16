@@ -239,3 +239,170 @@ func (h *TransactionHandler) CreateTransaction(c *gin.Context) {
 		"message": "交易创建成功",
 	})
 }
+
+// GetTransactionsByBlockHeight 根据区块高度获取交易列表（支持分页）
+func (h *TransactionHandler) GetTransactionsByBlockHeight(c *gin.Context) {
+	blockHeightStr := c.Param("blockHeight")
+	if blockHeightStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "block height is required",
+		})
+		return
+	}
+
+	// 解析区块高度
+	blockHeight, err := strconv.ParseUint(blockHeightStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "invalid block height format",
+		})
+		return
+	}
+
+	// 解析分页参数
+	pageStr := c.DefaultQuery("page", "1")
+	pageSizeStr := c.DefaultQuery("page_size", "20")
+	chain := c.Query("chain")
+
+	page, err := strconv.Atoi(pageStr)
+	if err != nil || page < 1 {
+		page = 1
+	}
+
+	pageSize, err := strconv.Atoi(pageSizeStr)
+	if err != nil || pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+
+	// 调用服务获取交易
+	txs, total, err := h.txService.GetTransactionsByBlockHeight(c.Request.Context(), blockHeight, page, pageSize, chain)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "获取区块交易失败",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	// 构建响应
+	txResponses := make([]*dto.TransactionResponse, len(txs))
+	for i, tx := range txs {
+		txResponses[i] = dto.NewTransactionResponse(tx)
+	}
+
+	// 计算分页信息
+	totalPages := (total + int64(pageSize) - 1) / int64(pageSize)
+
+	response := gin.H{
+		"transactions": txResponses,
+		"pagination": gin.H{
+			"current_page": page,
+			"page_size":    pageSize,
+			"total_pages":  totalPages,
+			"total_count":  total,
+		},
+		"block_height": blockHeight,
+		"chain":        chain,
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    response,
+		"message": "获取区块交易成功",
+	})
+}
+
+// GetTransactionsByBlockHeightPublic 根据区块高度获取交易列表（公开接口，有限制）
+func (h *TransactionHandler) GetTransactionsByBlockHeightPublic(c *gin.Context) {
+	blockHeightStr := c.Param("blockHeight")
+	if blockHeightStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "block height is required",
+		})
+		return
+	}
+
+	// 解析区块高度
+	blockHeight, err := strconv.ParseUint(blockHeightStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "invalid block height format",
+		})
+		return
+	}
+
+	// 解析分页参数（公开接口限制更严格）
+	pageStr := c.DefaultQuery("page", "1")
+	pageSizeStr := c.DefaultQuery("page_size", "50")
+	chain := c.Query("chain")
+
+	page, err := strconv.Atoi(pageStr)
+	if err != nil || page < 1 {
+		page = 1
+	}
+
+	pageSize, err := strconv.Atoi(pageSizeStr)
+	if err != nil || pageSize < 1 {
+		pageSize = 50
+	}
+
+	// 限制每页最大数量
+	const maxPageSize = 100
+	if pageSize > maxPageSize {
+		pageSize = maxPageSize
+	}
+
+	// 限制最大页码（防止深度翻页）
+	const maxPage = 10
+	if page > maxPage {
+		page = maxPage
+	}
+
+	// 调用服务获取交易
+	txs, total, err := h.txService.GetTransactionsByBlockHeight(c.Request.Context(), blockHeight, page, pageSize, chain)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "获取区块交易失败",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	// 构建响应
+	txResponses := make([]*dto.TransactionResponse, len(txs))
+	for i, tx := range txs {
+		txResponses[i] = dto.NewTransactionResponse(tx)
+	}
+
+	// 计算分页信息
+	totalPages := (total + int64(pageSize) - 1) / int64(pageSize)
+
+	response := gin.H{
+		"transactions": txResponses,
+		"pagination": gin.H{
+			"current_page": page,
+			"page_size":    pageSize,
+			"total_pages":  totalPages,
+			"total_count":  total,
+		},
+		"block_height": blockHeight,
+		"chain":        chain,
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    response,
+		"message": "获取区块交易成功（公开接口）",
+		"limits": gin.H{
+			"max_page_size": maxPageSize,
+			"max_page":      maxPage,
+			"note":          "如需更多数据，请登录后使用完整API",
+		},
+	})
+}

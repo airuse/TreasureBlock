@@ -71,6 +71,7 @@ func autoMigrate() error {
 		&models.RequestLog{},
 		&models.UserAddress{},
 		&models.BaseConfig{},
+		&models.CoinConfig{},
 	)
 }
 

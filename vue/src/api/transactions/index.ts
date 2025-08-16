@@ -26,7 +26,7 @@ interface SearchTransactionsRequest extends SearchRequest {
 // ==================== API函数实现 ====================
 
 /**
- * 获取交易列表
+ * 获取交易列表（需要认证）
  */
 export function getTransactions(data: GetTransactionsRequest): Promise<PaginatedResponse<Transaction>> {
   if (__USE_MOCK__) {
@@ -34,9 +34,26 @@ export function getTransactions(data: GetTransactionsRequest): Promise<Paginated
     return handleMockGetTransactions(data)
   }
   
-  console.log('🌐 使用真实API - getTransactions')
+  console.log('🌐 使用真实API - getTransactions (认证接口)')
   return request({
-    url: '/transactions',
+    url: '/api/v1/transactions',
+    method: 'GET',
+    params: data
+  })
+}
+
+/**
+ * 获取交易列表（公开接口，有限制）
+ */
+export function getTransactionsPublic(data: GetTransactionsRequest): Promise<PaginatedResponse<Transaction>> {
+  if (__USE_MOCK__) {
+    console.log('🔧 使用Mock数据 - getTransactionsPublic')
+    return handleMockGetTransactions(data)
+  }
+  
+  console.log('🌐 使用真实API - getTransactionsPublic (公开接口)')
+  return request({
+    url: '/api/no-auth/transactions',
     method: 'GET',
     params: data
   })
@@ -53,7 +70,7 @@ export function getTransaction(data: GetTransactionRequest): Promise<ApiResponse
   
   console.log('🌐 使用真实API - getTransaction')
   return request({
-    url: `/transactions/${data.hash}`,
+    url: `/api/v1/transactions/${data.hash}`,
     method: 'GET'
   })
 }
@@ -69,7 +86,7 @@ export function searchTransactions(data: SearchTransactionsRequest): Promise<Pag
   
   console.log('🌐 使用真实API - searchTransactions')
   return request({
-    url: '/transactions/search',
+    url: '/api/v1/transactions/search',
     method: 'GET',
     params: data
   })

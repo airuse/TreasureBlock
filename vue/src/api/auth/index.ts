@@ -14,13 +14,34 @@ import type {
   GetAccessTokenRequest,
   GetAccessTokenResponse
 } from '@/types/auth'
+import type { ApiResponse } from '../types'
 
-// 响应类型
-interface ApiResponse<T> {
-  code: number
-  message: string
-  data: T
-  timestamp: number
+/**
+ * 获取权限类型列表
+ * @returns 返回结果
+ */
+export function getPermissionTypes(): Promise<ApiResponse<any[]>> {
+  if (__USE_MOCK__) {
+    console.log('🔧 使用Mock数据 - getPermissionTypes')
+    return Promise.resolve({
+      success: true,
+      data: [
+        { config_value: 'blocks:read', config_name: '区块读取权限' },
+        { config_value: 'blocks:write', config_name: '区块写入权限' },
+        { config_value: 'transactions:read', config_name: '交易读取权限' },
+        { config_value: 'transactions:write', config_name: '交易写入权限' },
+        { config_value: 'addresses:read', config_name: '地址读取权限' },
+        { config_value: 'addresses:write', config_name: '地址写入权限' }
+      ],
+      message: 'Success'
+    })
+  }
+  
+  console.log('🌐 使用真实API - getPermissionTypes')
+  return request({
+    url: '/api/permissions',
+    method: 'GET'
+  })
 }
 
 /**

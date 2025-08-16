@@ -199,7 +199,7 @@ const loadData = async () => {
       chain: 'btc' 
     })
     
-    if (response && response.code === 200) {
+    if (response && response.success === true) {
       transactions.value = response.data || []
       totalTransactions.value = response.pagination?.total || 0
     }
@@ -229,7 +229,7 @@ const searchTransactions = async () => {
       page_size: pageSize.value
     })
     
-    if (response && response.code === 200) {
+    if (response && response.success === true) {
       transactions.value = response.data || []
       totalTransactions.value = response.pagination?.total || 0
       currentPage.value = 1

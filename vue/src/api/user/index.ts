@@ -14,14 +14,7 @@ import type {
   CreateAPIKeyRequest
 } from '@/types/auth'
 import type { UserAddress } from '@/types/address'
-
-// 响应类型
-interface ApiResponse<T> {
-  code: number
-  message: string
-  data: T
-  timestamp: number
-}
+import type { ApiResponse } from '../types'
 
 /**
  * 创建API密钥

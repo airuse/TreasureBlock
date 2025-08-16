@@ -13,6 +13,7 @@ type TransactionService interface {
 	GetTransactionByHash(ctx context.Context, hash string) (*models.Transaction, error)
 	GetTransactionsByAddress(ctx context.Context, address string, page, pageSize int) ([]*models.Transaction, int64, error)
 	GetTransactionsByBlockHash(ctx context.Context, blockHash string) ([]*models.Transaction, error)
+	GetTransactionsByBlockHeight(ctx context.Context, blockHeight uint64, page, pageSize int, chain string) ([]*models.Transaction, int64, error)
 	ListTransactions(ctx context.Context, page, pageSize int, chain string) ([]*models.Transaction, int64, error)
 	CreateTransaction(ctx context.Context, tx *models.Transaction) error
 	UpdateTransaction(ctx context.Context, tx *models.Transaction) error
@@ -79,6 +80,24 @@ func (s *transactionService) GetTransactionsByBlockHash(ctx context.Context, blo
 	}
 
 	return txs, nil
+}
+
+// GetTransactionsByBlockHeight 根据区块高度获取交易列表
+func (s *transactionService) GetTransactionsByBlockHeight(ctx context.Context, blockHeight uint64, page, pageSize int, chain string) ([]*models.Transaction, int64, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+
+	offset := (page - 1) * pageSize
+	txs, total, err := s.txRepo.GetByBlockHeight(ctx, blockHeight, offset, pageSize, chain)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to get transactions by block height: %w", err)
+	}
+
+	return txs, total, nil
 }
 
 // ListTransactions 分页查询交易列表

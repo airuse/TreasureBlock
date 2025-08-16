@@ -226,7 +226,7 @@ const searchAddress = async () => {
       hash: addressInput.value.trim()
     })
     
-    if (response && response.code === 200) {
+    if (response && response.success === true) {
       // 将API返回的Address类型转换为页面需要的AddressData类型
       const apiAddress = response.data
       addressData.value = {

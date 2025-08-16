@@ -208,13 +208,116 @@ func (api *ScannerAPI) getConfigValue(configType uint8, configGroup, configKey s
 	return config.ConfigValue, nil
 }
 
-// ================== 新增接口示例 ==================
-// 新增一个接口只需要在这里加一个方法！
+// ================== 币种配置相关 ==================
+
+// GetAllCoinConfigs 获取所有币种配置
+func (api *ScannerAPI) GetAllCoinConfigs() ([]CoinConfigData, error) {
+	var result struct {
+		Success bool             `json:"success"`
+		Data    []CoinConfigData `json:"data"`
+		Message string           `json:"message"`
+		Error   string           `json:"error,omitempty"`
+	}
+
+	if err := api.client.GET("/api/v1/coin-configs/all", &result); err != nil {
+		return nil, fmt.Errorf("get all coin configs failed: %w", err)
+	}
+
+	if !result.Success {
+		return nil, fmt.Errorf("API returned error: %s", result.Error)
+	}
+
+	return result.Data, nil
+}
+
+// GetAllContracts 获取所有合约
+func (api *ScannerAPI) GetAllContracts() ([]ContractInfo, error) {
+	var result struct {
+		Success bool           `json:"success"`
+		Data    []ContractInfo `json:"data"`
+		Message string         `json:"message"`
+		Error   string         `json:"error,omitempty"`
+	}
+
+	if err := api.client.GET("/api/v1/contracts", &result); err != nil {
+		return nil, fmt.Errorf("get all contracts failed: %w", err)
+	}
+
+	if !result.Success {
+		return nil, fmt.Errorf("API returned error: %s", result.Error)
+	}
+
+	return result.Data, nil
+}
 
 // UploadTransaction 上传交易
 func (api *ScannerAPI) UploadTransaction(tx map[string]interface{}) error {
 	if err := api.client.POST("/api/v1/transactions/create", tx, nil); err != nil {
 		return fmt.Errorf("upload transaction failed: %w", err)
 	}
+	return nil
+}
+
+// CreateCoinConfig 创建币种配置
+func (api *ScannerAPI) CreateCoinConfig(symbol string, config *CreateCoinConfigRequest) error {
+	endpoint := fmt.Sprintf("/api/v1/coin-configs/%s", symbol)
+	if err := api.client.POST(endpoint, config, nil); err != nil {
+		return fmt.Errorf("create coin config failed: %w", err)
+	}
+	return nil
+}
+
+// UploadContractInfoToContractAPI 上传合约信息到合约API（新的合约表）
+func (api *ScannerAPI) UploadContractInfoToContractAPI(contractInfo *ContractInfo) error {
+	if contractInfo == nil {
+		return fmt.Errorf("contract info cannot be nil")
+	}
+
+	// 构造合约信息请求
+	contractReq := &ContractInfoRequest{
+		Address:      contractInfo.Address,
+		Name:         contractInfo.Name,
+		Symbol:       contractInfo.Symbol,
+		Decimals:     contractInfo.Decimals,
+		TotalSupply:  contractInfo.TotalSupply,
+		ChainName:    contractInfo.ChainName,
+		IsERC20:      contractInfo.IsERC20,
+		ContractType: contractInfo.ContractType,
+		Interfaces:   contractInfo.Interfaces,
+		Methods:      contractInfo.Methods,
+		Events:       contractInfo.Events,
+		Metadata:     contractInfo.Metadata,
+	}
+
+	// 上传到合约API
+	if err := api.client.POST("/api/v1/contracts", contractReq, nil); err != nil {
+		return fmt.Errorf("failed to upload contract info: %w", err)
+	}
+
+	api.logger.Infof("Successfully uploaded contract info to contract API: %s (%s)",
+		contractInfo.Symbol, contractInfo.Address)
+
+	return nil
+}
+
+// BatchUploadContractsToContractAPI 批量上传合约信息到合约API
+func (api *ScannerAPI) BatchUploadContractsToContractAPI(contractInfos []*ContractInfo) error {
+	var successCount, failureCount int
+
+	for _, contractInfo := range contractInfos {
+		if err := api.UploadContractInfoToContractAPI(contractInfo); err != nil {
+			fmt.Printf("[API] Warning: Failed to upload contract %s to contract API: %v\n", contractInfo.Address, err)
+			failureCount++
+			continue
+		}
+		successCount++
+	}
+
+	fmt.Printf("[API] Batch upload to contract API completed: %d success, %d failure\n", successCount, failureCount)
+
+	if failureCount > 0 {
+		return fmt.Errorf("some contracts failed to upload to contract API: %d failures", failureCount)
+	}
+
 	return nil
 }

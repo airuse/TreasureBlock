@@ -19,6 +19,7 @@ func SetupRoutes(
 	addressHandler *handlers.AddressHandler,
 	assetHandler *handlers.AssetHandler,
 	coinConfigHandler *handlers.CoinConfigHandler,
+	contractHandler *handlers.ContractHandler,
 	scannerHandler *handlers.ScannerHandler,
 	authHandler *handlers.AuthHandler,
 	userAddressHandler *handlers.UserAddressHandler,
@@ -100,8 +101,9 @@ func SetupRoutes(
 	noAuthAPI := api.Group("/no-auth")
 	noAuthAPI.Use(publicRateLimiter.PublicRateLimitMiddleware()) // 添加限流中间件
 	{
-		noAuthAPI.GET("/blocks", blockHandler.ListBlocksPublic)          // 限制最多20个区块
-		noAuthAPI.GET("/transactions", txHandler.ListTransactionsPublic) // 限制最多1000条交易
+		noAuthAPI.GET("/blocks", blockHandler.ListBlocksPublic)                                                // 限制最多20个区块
+		noAuthAPI.GET("/transactions", txHandler.ListTransactionsPublic)                                       // 限制最多1000条交易
+		noAuthAPI.GET("/transactions/block-height/:blockHeight", txHandler.GetTransactionsByBlockHeightPublic) // 根据区块高度获取交易（公开接口）
 	}
 
 	// 需要AccessToken认证的API路由（区块链数据API）
@@ -123,11 +125,12 @@ func SetupRoutes(
 		// 交易相关路由
 		transactions := v1.Group("/transactions")
 		{
-			transactions.GET("", txHandler.ListTransactions)                            // 获取交易列表
-			transactions.GET("/hash/:hash", txHandler.GetTransactionByHash)             // 根据哈希获取交易
-			transactions.GET("/address/:address", txHandler.GetTransactionsByAddress)   // 根据地址获取交易
-			transactions.GET("/block/:blockHash", txHandler.GetTransactionsByBlockHash) // 根据区块哈希获取交易
-			transactions.POST("/create", txHandler.CreateTransaction)                   // 创建交易记录
+			transactions.GET("", txHandler.ListTransactions)                                       // 获取交易列表
+			transactions.GET("/hash/:hash", txHandler.GetTransactionByHash)                        // 根据哈希获取交易
+			transactions.GET("/address/:address", txHandler.GetTransactionsByAddress)              // 根据地址获取交易
+			transactions.GET("/block-hash/:blockHash", txHandler.GetTransactionsByBlockHash)       // 根据区块哈希获取交易
+			transactions.GET("/block-height/:blockHeight", txHandler.GetTransactionsByBlockHeight) // 根据区块高度获取交易
+			transactions.POST("/create", txHandler.CreateTransaction)                              // 创建交易记录
 		}
 
 		// 地址相关路由
@@ -147,6 +150,20 @@ func SetupRoutes(
 		{
 			coinConfigs.POST("/:symbol", coinConfigHandler.CreateCoinConfig)
 			coinConfigs.GET("/:symbol", coinConfigHandler.GetCoinConfigBySymbol)
+		}
+
+		// 合约相关路由
+		contracts := v1.Group("/contracts")
+		{
+			contracts.POST("", contractHandler.CreateOrUpdateContract)                      // 创建或更新合约
+			contracts.GET("/address/:address", contractHandler.GetContractByAddress)        // 根据地址获取合约
+			contracts.GET("/chain/:chainName", contractHandler.GetContractsByChain)         // 根据链名称获取合约列表
+			contracts.GET("/type/:type", contractHandler.GetContractsByType)                // 根据合约类型获取合约列表
+			contracts.GET("/erc20", contractHandler.GetERC20Tokens)                         // 获取所有ERC-20代币合约
+			contracts.GET("", contractHandler.GetAllContracts)                              // 获取所有合约
+			contracts.PUT("/:address/status/:status", contractHandler.UpdateContractStatus) // 更新合约状态
+			contracts.PUT("/:address/verify", contractHandler.VerifyContract)               // 验证合约
+			contracts.DELETE("/:address", contractHandler.DeleteContract)                   // 删除合约
 		}
 
 		// 扫描器相关路由

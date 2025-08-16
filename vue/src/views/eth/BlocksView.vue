@@ -7,6 +7,9 @@
         <div class="text-sm text-gray-500">
           共 {{ totalBlocks.toLocaleString() }} 个区块
         </div>
+        <div v-if="!authStore.isAuthenticated" class="text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded">
+          游客模式：仅显示20个区块
+        </div>
       </div>
     </div>
 
@@ -60,31 +63,33 @@
             </tr>
           </thead>
           <transition-group tag="tbody" name="block-fade" class="bg-white divide-y divide-gray-200">
-            <tr v-for="block in blocks" :key="block.height" class="hover:bg-gray-50">
-              <td class="px-6 py-4 whitespace-nowrap">
-                <router-link :to="`/blocks/${block.height}`" class="text-blue-600 hover:text-blue-700 font-medium">
-                  #{{ block.height.toLocaleString() }}
-                </router-link>
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {{ formatTimestamp(block.timestamp) }}
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {{ block.transactions }}
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {{ formatBytes(block.size) }}
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {{ formatGas(block.gasUsed, block.gasLimit) }}
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                <span class="font-mono">{{ formatAddress(block.miner) }}</span>
-              </td>
-              <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                {{ formatAmount(block.reward) }} ETH
-              </td>
-            </tr>
+            <template v-for="block in blocks" :key="block.height">
+              <tr class="hover:bg-gray-50">
+                <td class="px-6 py-4 whitespace-nowrap">
+                  <router-link :to="`/eth/blocks/${block.height}`" class="text-blue-600 hover:text-blue-700 font-medium">
+                    #{{ block.height.toLocaleString() }}
+                  </router-link>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {{ formatTimestamp(block.timestamp) }}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {{ block.transactions }}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {{ formatBytes(block.size) }}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {{ formatGas(block.gasUsed, block.gasLimit) }}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <span class="font-mono">{{ formatAddress(block.miner) }}</span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {{ formatAmount(block.reward) }} ETH
+                </td>
+              </tr>
+            </template>
           </transition-group>
         </table>
       </div>
@@ -102,7 +107,7 @@
           <button 
             @click="nextPage" 
             :disabled="currentPage >= totalPages"
-            class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            class="ml-3 relative inline-flex items-center px-4 py-2 border border-gray-300 text-sm font-medium rounded-md text-gray-700 bg-white hover:bg-gray-50 disabled:cursor-not-allowed"
           >
             下一页
           </button>
@@ -161,15 +166,21 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useChainWebSocket } from '@/composables/useWebSocket'
+import { useAuthStore } from '@/stores/auth'
+import { blocks as blocksApi } from '@/api'
+
+// 认证store
+const authStore = useAuthStore()
 
 // 响应式数据
 const searchQuery = ref('')
 const pageSize = ref(25)
 const currentPage = ref(1)
 const totalBlocks = ref(0)
+const isLoading = ref(false)
 
 // 定义区块类型
-interface Block {
+interface BlockData {
   height: number
   timestamp: number
   transactions: number
@@ -180,7 +191,7 @@ interface Block {
   reward: number
 }
 
-const blocks = ref<Block[]>([])
+const blocks = ref<BlockData[]>([])
 
 // 计算属性
 const totalPages = computed(() => Math.ceil(totalBlocks.value / pageSize.value))
@@ -223,26 +234,135 @@ const formatAmount = (amount: number) => {
 }
 
 // 数据加载
-const loadData = () => {
-  // 模拟数据
-  totalBlocks.value = 18456789
-  
-  const startBlock = totalBlocks.value - (currentPage.value - 1) * pageSize.value
-  const endBlock = Math.max(1, startBlock - pageSize.value + 1)
-  
-  blocks.value = []
-  
-  for (let i = startBlock; i >= endBlock; i--) {
-    blocks.value.push({
-      height: i,
-      timestamp: Math.floor(Date.now() / 1000) - (totalBlocks.value - i) * 12,
-      transactions: Math.floor(Math.random() * 200) + 50,
-      size: Math.floor(Math.random() * 1000000) + 500000,
-      gasUsed: Math.floor(Math.random() * 15000000) + 5000000,
-      gasLimit: 30000000,
-      miner: '0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6',
-      reward: 2e18 + Math.random() * 1e18
-    })
+const loadData = async () => {
+  try {
+    isLoading.value = true
+    
+    // 根据登录状态调用不同的API
+    if (authStore.isAuthenticated) {
+      // 已登录用户：调用 /v1/ 下的API
+      console.log('🔐 已登录用户，调用 /v1/ API 获取区块列表')
+      const response = await blocksApi.getBlocks({ 
+        page: currentPage.value, 
+        page_size: pageSize.value, 
+        chain: 'eth' 
+      })
+      
+      if (response && response.success === true) {
+        console.log('📊 后端返回数据:', response.data)
+        
+        // 正确处理分页响应结构
+        const responseData = response.data as any
+        let blocksData: any[] = []
+        let totalCount = 0
+        
+        // 检查不同的数据结构
+        if (Array.isArray(responseData)) {
+          // 如果直接返回数组
+          blocksData = responseData
+          totalCount = responseData.length
+        } else if (responseData?.blocks && Array.isArray(responseData.blocks)) {
+          // 如果返回 { blocks: [...], total: ... }
+          blocksData = responseData.blocks
+          totalCount = responseData.total || responseData.blocks.length
+        } else if (responseData?.data && Array.isArray(responseData.data)) {
+          // 如果返回 { data: [...], pagination: {...} }
+          blocksData = responseData.data
+          totalCount = responseData.pagination?.total || responseData.data.length
+        } else {
+          console.warn('未知的响应数据结构:', responseData)
+          blocksData = []
+          totalCount = 0
+        }
+        
+        // 转换API返回的Block类型为组件需要的BlockData类型
+        blocks.value = blocksData.map((block: any) => ({
+          height: block.height || block.number,
+          timestamp: typeof block.timestamp === 'string' ? new Date(block.timestamp).getTime() / 1000 : block.timestamp,
+          transactions: block.transaction_count || block.transactions || 0,
+          size: block.size,
+          gasUsed: block.gas_used || block.gasUsed || 0,
+          gasLimit: block.gas_limit || block.gasLimit || 0,
+          miner: block.miner || '',
+          reward: block.total_amount || block.reward || 0
+        }))
+        
+        totalBlocks.value = totalCount
+        console.log('✅ 成功加载区块数据:', blocks.value.length, '个区块')
+      } else {
+        console.error('Failed to load blocks:', response?.message)
+        // 如果API调用失败，使用默认数据
+        totalBlocks.value = 18456789
+        blocks.value = []
+      }
+    } else {
+      // 未登录用户：调用 /no-auth/ 下的API（有限制）
+      console.log('👤 未登录用户，调用 /no-auth/ API 获取区块列表（有限制）')
+      const response = await blocksApi.getBlocksPublic({ 
+        page: 1, 
+        page_size: 20, // 限制为20个区块
+        chain: 'eth' 
+      })
+      
+      if (response && response.success === true) {
+        console.log('📊 后端返回数据:', response.data)
+        
+        // 正确处理分页响应结构
+        const responseData = response.data as any
+        let blocksData: any[] = []
+        let totalCount = 0
+        
+        // 检查不同的数据结构
+        if (Array.isArray(responseData)) {
+          // 如果直接返回数组
+          blocksData = responseData
+          totalCount = responseData.length
+        } else if (responseData?.blocks && Array.isArray(responseData.blocks)) {
+          // 如果返回 { blocks: [...], total: ... }
+          blocksData = responseData.blocks
+          totalCount = responseData.total || responseData.blocks.length
+        } else if (responseData?.data && Array.isArray(responseData.data)) {
+          // 如果返回 { data: [...], pagination: {...} }
+          blocksData = responseData.data
+          totalCount = responseData.pagination?.total || responseData.data.length
+        } else {
+          console.warn('未知的响应数据结构:', responseData)
+          blocksData = []
+          totalCount = 0
+        }
+        
+        // 转换API返回的Block类型为组件需要的BlockData类型
+        blocks.value = blocksData.map((block: any) => ({
+          height: block.height || block.number,
+          timestamp: typeof block.timestamp === 'string' ? new Date(block.timestamp).getTime() / 1000 : block.timestamp,
+          transactions: block.transaction_count || block.transactions || 0,
+          size: block.size,
+          gasUsed: block.gas_used || block.gasUsed || 0,
+          gasLimit: block.gas_limit || block.gasLimit || 0,
+          miner: block.miner || '',
+          reward: block.total_amount || block.reward || 0
+        }))
+        
+        totalBlocks.value = totalCount
+        console.log('✅ 成功加载区块数据:', blocks.value.length, '个区块')
+      } else {
+        console.error('Failed to load blocks:', response?.message)
+        // 如果API调用失败，使用默认数据
+        totalBlocks.value = 20
+        blocks.value = []
+      }
+    }
+  } catch (error) {
+    console.error('Failed to load blocks:', error)
+    // 如果API调用失败，使用默认数据
+    if (authStore.isAuthenticated) {
+      totalBlocks.value = 18456789
+    } else {
+      totalBlocks.value = 20
+    }
+    blocks.value = []
+  } finally {
+    isLoading.value = false
   }
 }
 
@@ -278,7 +398,7 @@ function handleBlockCountUpdate(message: any) {
 function handleNewBlock(message: any) {
   // 只在第一页才动画插入
   if (currentPage.value === 1 && message.data) {
-    const newBlock: Block = {
+    const newBlock: BlockData = {
       height: message.data.height,
       timestamp: message.data.timestamp,
       transactions: message.data.transactions,

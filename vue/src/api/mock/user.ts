@@ -49,12 +49,12 @@ interface DeleteUserAddressRequest {
   addressId: number
 }
 
-// 响应类型 - 使用any避免复杂的类型匹配问题
+// 响应类型 - 使用新的格式
 interface ApiResponse<T> {
-  code: number
-  message: string
+  success: boolean
+  message?: string
   data: T
-  timestamp: number
+  error?: string
 }
 
 /**

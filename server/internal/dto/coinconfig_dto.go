@@ -74,6 +74,14 @@ type CoinConfigSummaryResponse struct {
 	Status   int8   `json:"status"`
 }
 
+// GetAllCoinConfigsResponse 获取所有币种配置的响应DTO
+type GetAllCoinConfigsResponse struct {
+	Symbol       string `json:"symbol"`
+	ChainName    string `json:"chain_name"`
+	ContractAddr string `json:"contract_addr"`
+	Status       int8   `json:"status"`
+}
+
 // ToModel 将CreateCoinConfigRequest转换为CoinConfig模型
 func (req *CreateCoinConfigRequest) ToModel(symbol string) *models.CoinConfig {
 	return &models.CoinConfig{
@@ -95,6 +103,16 @@ func (req *CreateCoinConfigRequest) ToModel(symbol string) *models.CoinConfig {
 		Status:           req.Status,
 		CTime:            time.Now(),
 		MTime:            time.Now(),
+	}
+}
+
+// NewGetAllCoinConfigsResponse 从CoinConfig模型创建GetAllCoinConfigsResponse
+func NewGetAllCoinConfigsResponse(config *models.CoinConfig) *GetAllCoinConfigsResponse {
+	return &GetAllCoinConfigsResponse{
+		Symbol:       config.Symbol,
+		ChainName:    config.ChainName,
+		ContractAddr: config.ContractAddr,
+		Status:       config.Status,
 	}
 }
 

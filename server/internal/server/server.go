@@ -39,6 +39,7 @@ func New() *Server {
 	assetRepo := repository.NewAssetRepository()
 	baseConfigRepo := repository.NewBaseConfigRepository()
 	coinConfigRepo := repository.NewCoinConfigRepository()
+	contractRepo := repository.NewContractRepository(database.GetDB())
 	userRepo := repository.NewUserRepository(database.GetDB())
 	apiKeyRepo := repository.NewAPIKeyRepository(database.GetDB())
 	requestLogRepo := repository.NewRequestLogRepository(database.GetDB())
@@ -51,6 +52,7 @@ func New() *Server {
 	assetService := services.NewAssetService(assetRepo)
 	baseConfigService := services.NewBaseConfigService(baseConfigRepo)
 	coinConfigService := services.NewCoinConfigService(coinConfigRepo)
+	contractService := services.NewContractService(contractRepo)
 	authService := services.NewAuthService(
 		userRepo,
 		apiKeyRepo,
@@ -67,6 +69,7 @@ func New() *Server {
 	addressHandler := handlers.NewAddressHandler(addressService)
 	assetHandler := handlers.NewAssetHandler(assetService)
 	coinConfigHandler := handlers.NewCoinConfigHandler(coinConfigService)
+	contractHandler := handlers.NewContractHandler(contractService)
 	scannerHandler := handlers.NewScannerHandler(baseConfigService)
 	authHandler := handlers.NewAuthHandler(authService)
 	userAddressHandler := handlers.NewUserAddressHandler(userAddressService)
@@ -83,6 +86,7 @@ func New() *Server {
 		addressHandler,
 		assetHandler,
 		coinConfigHandler,
+		contractHandler,
 		scannerHandler,
 		authHandler,
 		userAddressHandler,

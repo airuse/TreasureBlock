@@ -17,12 +17,12 @@ interface GetLatestTransactionsRequest {
   chain?: string
 }
 
-// 响应类型
+// 响应类型 - 使用新的格式
 interface ApiResponse<T> {
-  code: number
-  message: string
+  success: boolean
+  message?: string
   data: T
-  timestamp: number
+  error?: string
 }
 
 /**
@@ -37,8 +37,9 @@ export const handleMockGetNetworkStats = (data: GetNetworkStatsRequest): Promise
       const response = apiData.paths['/stats/network'].get.responses['200'].content['application/json'].example
       
       resolve({
-        ...response,
-        timestamp: Date.now()
+        success: true,
+        data: response,
+        message: 'Success'
       })
     }, 300) // 模拟网络延迟
   })
@@ -56,8 +57,9 @@ export const handleMockGetLatestBlocks = (data: GetLatestBlocksRequest): Promise
       const response = apiData.paths['/stats/latest-blocks'].get.responses['200'].content['application/json'].example
       
       resolve({
-        ...response,
-        timestamp: Date.now()
+        success: true,
+        data: response.data || response,
+        message: 'Success'
       })
     }, 200) // 模拟网络延迟
   })
@@ -75,8 +77,9 @@ export const handleMockGetLatestTransactions = (data: GetLatestTransactionsReque
       const response = apiData.paths['/stats/latest-transactions'].get.responses['200'].content['application/json'].example
       
       resolve({
-        ...response,
-        timestamp: Date.now()
+        success: true,
+        data: response.data || response,
+        message: 'Success'
       })
     }, 250) // 模拟网络延迟
   })

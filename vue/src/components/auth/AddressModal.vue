@@ -177,8 +177,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch } from 'vue'
+import { ref, reactive, watch, onMounted } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import { 
+  getUserAddresses,
+  createUserAddress,
+  updateUserAddress,
+  deleteUserAddress
+} from '@/api/user'
+import type { UserAddress } from '@/types/address'
+import { showSuccess, showError } from '@/composables/useToast'
 
 const props = defineProps<{
   isVisible: boolean
@@ -194,17 +202,6 @@ const authStore = useAuthStore()
 const isLoading = ref(false)
 const error = ref('')
 const success = ref('')
-
-// 地址类型定义
-interface UserAddress {
-  id: number
-  address: string
-  label: string
-  type: 'wallet' | 'contract' | 'exchange' | 'other'
-  balance: number
-  transaction_count: number
-  is_active: boolean
-}
 
 const addresses = ref<UserAddress[]>([])
 
@@ -237,56 +234,55 @@ const close = () => {
 // 加载地址列表
 const loadAddresses = async () => {
   try {
-    const response = await authStore.fetchUserAddresses()
-    if (response && response.code === 200) {
-      addresses.value = (response.data || []) as UserAddress[]
+    isLoading.value = true
+    const response = await getUserAddresses({ token: authStore.loginToken || '' })
+    
+    if (response && response.success === true) {
+      addresses.value = Array.isArray(response.data) ? response.data : []
+    } else {
+      showError('加载地址列表失败')
     }
-  } catch (err: unknown) {
-    error.value = '加载地址失败: ' + (err instanceof Error ? err.message : '未知错误')
+  } catch (error: any) {
+    console.error('Failed to load user addresses:', error)
+    showError('加载地址列表失败: ' + (error?.message || '未知错误'))
+  } finally {
+    isLoading.value = false
   }
 }
 
 // 添加地址
 const addAddress = async () => {
+  if (!newAddressForm.address.trim() || !newAddressForm.label.trim()) {
+    showError('请填写完整的地址信息')
+    return
+  }
+
   try {
-    if (!newAddressForm.address.trim()) {
-      error.value = '请输入地址'
-      return
-    }
-
-    if (!newAddressForm.address.startsWith('0x') || newAddressForm.address.length !== 42) {
-      error.value = '请输入有效的以太坊地址'
-      return
-    }
-
     isLoading.value = true
-    error.value = ''
     
-    const response = await authStore.createNewUserAddress({
+    const response = await createUserAddress({
+      token: authStore.loginToken || '',
       address: newAddressForm.address.trim(),
       label: newAddressForm.label.trim(),
-      type: newAddressForm.type
+      type: newAddressForm.type || 'wallet'
     })
     
-    if (response && response.code === 200) {
-      success.value = '地址添加成功！'
-      
+    if (response && response.success === true) {
+      showSuccess('地址创建成功！')
+      // 重新加载地址列表
+      await loadAddresses()
       // 清空表单
       newAddressForm.address = ''
       newAddressForm.label = ''
       newAddressForm.type = 'wallet'
-      
-      // 重新加载地址列表
-      await loadAddresses()
-      
-      // 延迟清空成功提示
-      setTimeout(() => {
-        success.value = ''
-      }, 3000)
+      // 关闭创建表单
+      // showCreateForm.value = false // This line was removed from the new_code, so it's removed here.
+    } else {
+      showError(response?.message || '创建失败')
     }
-    
-  } catch (err: unknown) {
-    error.value = '添加失败: ' + (err instanceof Error ? err.message : '未知错误')
+  } catch (error: any) {
+    console.error('Failed to create address:', error)
+    showError('创建失败: ' + (error?.message || '未知错误'))
   } finally {
     isLoading.value = false
   }
@@ -298,12 +294,16 @@ const editAddress = async (address: UserAddress) => {
   const newLabel = prompt('请输入新的标签:', address.label)
   if (newLabel !== null && newLabel !== address.label) {
     try {
-      const response = await authStore.updateExistingUserAddress(address.id, {
-        label: newLabel
+      const response = await updateUserAddress({
+        token: authStore.loginToken || '',
+        addressId: address.id,
+        updateData: {
+          label: newLabel
+        }
       })
       
-      if (response && response.code === 200) {
-        success.value = '地址更新成功！'
+      if (response && response.success === true) {
+        showSuccess('地址更新成功！')
         await loadAddresses()
         setTimeout(() => {
           success.value = ''
@@ -322,10 +322,15 @@ const removeAddress = async (address: UserAddress) => {
   }
   
   try {
-    const response = await authStore.deleteExistingUserAddress(address.id)
+    isLoading.value = true
     
-    if (response && response.code === 200) {
-      success.value = '地址已删除'
+    const response = await deleteUserAddress({
+      token: authStore.loginToken || '',
+      addressId: address.id
+    })
+    
+    if (response && response.success === true) {
+      showSuccess('地址已删除')
       await loadAddresses()
       
       setTimeout(() => {
@@ -335,6 +340,8 @@ const removeAddress = async (address: UserAddress) => {
     
   } catch (err: unknown) {
     error.value = '删除失败: ' + (err instanceof Error ? err.message : '未知错误')
+  } finally {
+    isLoading.value = false
   }
 }
 
@@ -342,7 +349,7 @@ const removeAddress = async (address: UserAddress) => {
 const copyAddress = async (address: string) => {
   try {
     await navigator.clipboard.writeText(address)
-    success.value = '地址已复制到剪贴板'
+    showSuccess('地址已复制到剪贴板')
     setTimeout(() => {
       success.value = ''
     }, 2000)

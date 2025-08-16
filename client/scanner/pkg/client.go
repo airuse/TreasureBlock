@@ -271,3 +271,13 @@ func (c *Client) GET(endpoint string, result interface{}) error {
 func (c *Client) POST(endpoint string, payload interface{}, result interface{}) error {
 	return c.request("POST", endpoint, payload, result)
 }
+
+// PUT 执行PUT请求
+func (c *Client) PUT(endpoint string, payload interface{}, result interface{}) error {
+	return c.request("PUT", endpoint, payload, result)
+}
+
+// DELETE 执行DELETE请求
+func (c *Client) DELETE(endpoint string, result interface{}) error {
+	return c.request("DELETE", endpoint, nil, result)
+}

@@ -10,10 +10,7 @@ type CreateBlockRequest struct {
 	Hash             string    `json:"hash" validate:"required,len=66"`
 	Height           uint64    `json:"height" validate:"required,gt=0"`
 	PreviousHash     string    `json:"previous_hash" validate:"omitempty,len=66"`
-	MerkleRoot       string    `json:"merkle_root" validate:"omitempty,len=66"`
 	Timestamp        time.Time `json:"timestamp" validate:"required"`
-	Difficulty       float64   `json:"difficulty" validate:"gte=0"`
-	Nonce            uint64    `json:"nonce" validate:"gte=0"`
 	Size             uint64    `json:"size" validate:"gte=0"`
 	TransactionCount int       `json:"transaction_count" validate:"gte=0"`
 	TotalAmount      float64   `json:"total_amount" validate:"gte=0"`
@@ -21,18 +18,44 @@ type CreateBlockRequest struct {
 	Confirmations    uint64    `json:"confirmations" validate:"gte=0"`
 	IsOrphan         bool      `json:"is_orphan"`
 	Chain            string    `json:"chain" validate:"required,oneof=btc eth"`
+
+	// BTC特有字段
+	MerkleRoot string `json:"merkle_root,omitempty" validate:"omitempty,len=66"`
+	Bits       string `json:"bits,omitempty" validate:"omitempty,max=20"`
+	Version    uint32 `json:"version,omitempty"`
+	Weight     uint64 `json:"weight,omitempty"`
+
+	// ETH特有字段
+	GasLimit   uint64 `json:"gas_limit,omitempty"`
+	GasUsed    uint64 `json:"gas_used,omitempty"`
+	Miner      string `json:"miner,omitempty" validate:"omitempty,max=120"`
+	ParentHash string `json:"parent_hash,omitempty" validate:"omitempty,len=66"`
+	Nonce      string `json:"nonce,omitempty" validate:"omitempty,max=20"`
+	Difficulty string `json:"difficulty,omitempty" validate:"omitempty,max=50"`
 }
 
 // UpdateBlockRequest 更新区块请求DTO
 type UpdateBlockRequest struct {
-	Difficulty       *float64 `json:"difficulty,omitempty" validate:"omitempty,gte=0"`
-	Nonce            *uint64  `json:"nonce,omitempty" validate:"omitempty,gte=0"`
 	Size             *uint64  `json:"size,omitempty" validate:"omitempty,gte=0"`
 	TransactionCount *int     `json:"transaction_count,omitempty" validate:"omitempty,gte=0"`
 	TotalAmount      *float64 `json:"total_amount,omitempty" validate:"omitempty,gte=0"`
 	Fee              *float64 `json:"fee,omitempty" validate:"omitempty,gte=0"`
 	Confirmations    *uint64  `json:"confirmations,omitempty" validate:"omitempty,gte=0"`
 	IsOrphan         *bool    `json:"is_orphan,omitempty"`
+
+	// BTC特有字段
+	MerkleRoot *string `json:"merkle_root,omitempty" validate:"omitempty,len=66"`
+	Bits       *string `json:"bits,omitempty" validate:"omitempty,max=20"`
+	Version    *uint32 `json:"version,omitempty"`
+	Weight     *uint64 `json:"weight,omitempty"`
+
+	// ETH特有字段
+	GasLimit   *uint64 `json:"gas_limit,omitempty"`
+	GasUsed    *uint64 `json:"gas_used,omitempty"`
+	Miner      *string `json:"miner,omitempty" validate:"omitempty,max=120"`
+	ParentHash *string `json:"parent_hash,omitempty" validate:"omitempty,len=66"`
+	Nonce      *string `json:"nonce,omitempty" validate:"omitempty,max=20"`
+	Difficulty *string `json:"difficulty,omitempty" validate:"omitempty,max=50"`
 }
 
 // BlockResponse 区块响应DTO
@@ -41,10 +64,7 @@ type BlockResponse struct {
 	Hash             string    `json:"hash"`
 	Height           uint64    `json:"height"`
 	PreviousHash     string    `json:"previous_hash"`
-	MerkleRoot       string    `json:"merkle_root"`
 	Timestamp        time.Time `json:"timestamp"`
-	Difficulty       float64   `json:"difficulty"`
-	Nonce            uint64    `json:"nonce"`
 	Size             uint64    `json:"size"`
 	TransactionCount int       `json:"transaction_count"`
 	TotalAmount      float64   `json:"total_amount"`
@@ -52,8 +72,24 @@ type BlockResponse struct {
 	Confirmations    uint64    `json:"confirmations"`
 	IsOrphan         bool      `json:"is_orphan"`
 	Chain            string    `json:"chain"`
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
+
+	// BTC特有字段
+	MerkleRoot string `json:"merkle_root,omitempty"`
+	Bits       string `json:"bits,omitempty"`
+	Version    uint32 `json:"version,omitempty"`
+	Weight     uint64 `json:"weight,omitempty"`
+
+	// ETH特有字段
+	GasLimit   uint64 `json:"gas_limit,omitempty"`
+	GasUsed    uint64 `json:"gas_used,omitempty"`
+	Miner      string `json:"miner,omitempty"`
+	ParentHash string `json:"parent_hash,omitempty"`
+	Nonce      string `json:"nonce,omitempty"`
+	Difficulty string `json:"difficulty,omitempty"`
+
+	// 时间字段
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
 }
 
 // BlockListResponse 区块列表响应DTO
@@ -71,10 +107,7 @@ func (req *CreateBlockRequest) ToModel() *models.Block {
 		Hash:             req.Hash,
 		Height:           req.Height,
 		PreviousHash:     req.PreviousHash,
-		MerkleRoot:       req.MerkleRoot,
 		Timestamp:        req.Timestamp,
-		Difficulty:       req.Difficulty,
-		Nonce:            req.Nonce,
 		Size:             req.Size,
 		TransactionCount: req.TransactionCount,
 		TotalAmount:      req.TotalAmount,
@@ -82,17 +115,25 @@ func (req *CreateBlockRequest) ToModel() *models.Block {
 		Confirmations:    req.Confirmations,
 		IsOrphan:         req.IsOrphan,
 		Chain:            req.Chain,
+
+		// BTC特有字段
+		MerkleRoot: req.MerkleRoot,
+		Bits:       req.Bits,
+		Version:    req.Version,
+		Weight:     req.Weight,
+
+		// ETH特有字段
+		GasLimit:   req.GasLimit,
+		GasUsed:    req.GasUsed,
+		Miner:      req.Miner,
+		ParentHash: req.ParentHash,
+		Nonce:      req.Nonce,
+		Difficulty: req.Difficulty,
 	}
 }
 
 // ApplyToModel 将UpdateBlockRequest应用到Block模型
 func (req *UpdateBlockRequest) ApplyToModel(block *models.Block) {
-	if req.Difficulty != nil {
-		block.Difficulty = *req.Difficulty
-	}
-	if req.Nonce != nil {
-		block.Nonce = *req.Nonce
-	}
 	if req.Size != nil {
 		block.Size = *req.Size
 	}
@@ -111,47 +152,87 @@ func (req *UpdateBlockRequest) ApplyToModel(block *models.Block) {
 	if req.IsOrphan != nil {
 		block.IsOrphan = *req.IsOrphan
 	}
-}
 
-// FromModel 将Block模型转换为BlockResponse
-func (resp *BlockResponse) FromModel(block *models.Block) {
-	resp.ID = block.ID
-	resp.Hash = block.Hash
-	resp.Height = block.Height
-	resp.PreviousHash = block.PreviousHash
-	resp.MerkleRoot = block.MerkleRoot
-	resp.Timestamp = block.Timestamp
-	resp.Difficulty = block.Difficulty
-	resp.Nonce = block.Nonce
-	resp.Size = block.Size
-	resp.TransactionCount = block.TransactionCount
-	resp.TotalAmount = block.TotalAmount
-	resp.Fee = block.Fee
-	resp.Confirmations = block.Confirmations
-	resp.IsOrphan = block.IsOrphan
-	resp.Chain = block.Chain
-	resp.CreatedAt = block.CreatedAt
-	resp.UpdatedAt = block.UpdatedAt
+	// BTC特有字段
+	if req.MerkleRoot != nil {
+		block.MerkleRoot = *req.MerkleRoot
+	}
+	if req.Bits != nil {
+		block.Bits = *req.Bits
+	}
+	if req.Version != nil {
+		block.Version = *req.Version
+	}
+	if req.Weight != nil {
+		block.Weight = *req.Weight
+	}
+
+	// ETH特有字段
+	if req.GasLimit != nil {
+		block.GasLimit = *req.GasLimit
+	}
+	if req.GasUsed != nil {
+		block.GasUsed = *req.GasUsed
+	}
+	if req.Miner != nil {
+		block.Miner = *req.Miner
+	}
+	if req.ParentHash != nil {
+		block.ParentHash = *req.ParentHash
+	}
+	if req.Nonce != nil {
+		block.Nonce = *req.Nonce
+	}
+	if req.Difficulty != nil {
+		block.Difficulty = *req.Difficulty
+	}
 }
 
 // NewBlockResponse 创建BlockResponse
 func NewBlockResponse(block *models.Block) *BlockResponse {
-	resp := &BlockResponse{}
-	resp.FromModel(block)
-	return resp
+	if block == nil {
+		return nil
+	}
+	return &BlockResponse{
+		ID:               block.ID,
+		Hash:             block.Hash,
+		Height:           block.Height,
+		PreviousHash:     block.PreviousHash,
+		Timestamp:        block.Timestamp,
+		Size:             block.Size,
+		TransactionCount: block.TransactionCount,
+		TotalAmount:      block.TotalAmount,
+		Fee:              block.Fee,
+		Confirmations:    block.Confirmations,
+		IsOrphan:         block.IsOrphan,
+		Chain:            block.Chain,
+		// BTC特有
+		MerkleRoot: block.MerkleRoot,
+		Bits:       block.Bits,
+		Version:    block.Version,
+		Weight:     block.Weight,
+		// ETH特有
+		GasLimit:   block.GasLimit,
+		GasUsed:    block.GasUsed,
+		Miner:      block.Miner,
+		ParentHash: block.ParentHash,
+		Nonce:      block.Nonce,
+		Difficulty: block.Difficulty,
+		// 时间
+		CreatedAt: block.CreatedAt,
+		UpdatedAt: block.UpdatedAt,
+	}
 }
 
 // NewBlockListResponse 创建BlockListResponse
 func NewBlockListResponse(blocks []*models.Block, total int64, page, pageSize int) *BlockListResponse {
-	blockResponses := make([]*BlockResponse, len(blocks))
-	for i, block := range blocks {
-		blockResponses[i] = NewBlockResponse(block)
+	respBlocks := make([]*BlockResponse, 0, len(blocks))
+	for _, b := range blocks {
+		respBlocks = append(respBlocks, NewBlockResponse(b))
 	}
-
 	totalPages := int((total + int64(pageSize) - 1) / int64(pageSize))
-
 	return &BlockListResponse{
-		Blocks:     blockResponses,
+		Blocks:     respBlocks,
 		Total:      total,
 		Page:       page,
 		PageSize:   pageSize,

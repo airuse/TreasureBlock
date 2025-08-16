@@ -7,9 +7,18 @@ import (
 
 // CreateAddressRequest 创建地址请求DTO
 type CreateAddressRequest struct {
+	Chain string `json:"chain" validate:"required,oneof=btc eth"`
 	Type  uint16 `json:"type" validate:"gte=0"`
 	Nonce string `json:"nonce" validate:"required,min=1"`
 	Hash  string `json:"hash" validate:"required,min=1,max=1024"`
+
+	// BTC特有字段
+	UTXOCount uint64 `json:"utxo_count,omitempty"`
+	Balance   string `json:"balance,omitempty"`
+
+	// ETH特有字段
+	TransactionCount uint64 `json:"transaction_count,omitempty"`
+	ContractCount    uint64 `json:"contract_count,omitempty"`
 }
 
 // UpdateAddressRequest 更新地址请求DTO
@@ -17,15 +26,34 @@ type UpdateAddressRequest struct {
 	Type  *uint16 `json:"type,omitempty" validate:"omitempty,gte=0"`
 	Nonce *string `json:"nonce,omitempty" validate:"omitempty,min=1"`
 	Hash  *string `json:"hash,omitempty" validate:"omitempty,min=1,max=1024"`
+
+	// BTC特有字段
+	UTXOCount *uint64 `json:"utxo_count,omitempty"`
+	Balance   *string `json:"balance,omitempty"`
+
+	// ETH特有字段
+	TransactionCount *uint64 `json:"transaction_count,omitempty"`
+	ContractCount    *uint64 `json:"contract_count,omitempty"`
 }
 
 // AddressResponse 地址响应DTO
 type AddressResponse struct {
-	ID        uint      `json:"id"`
-	Address   string    `json:"address"`
-	Type      uint16    `json:"type"`
-	Nonce     string    `json:"nonce"`
-	Hash      string    `json:"hash"`
+	ID      uint   `json:"id"`
+	Address string `json:"address"`
+	Chain   string `json:"chain"`
+	Type    uint16 `json:"type"`
+	Nonce   string `json:"nonce"`
+	Hash    string `json:"hash"`
+
+	// BTC特有字段
+	UTXOCount uint64 `json:"utxo_count,omitempty"`
+	Balance   string `json:"balance,omitempty"`
+
+	// ETH特有字段
+	TransactionCount uint64 `json:"transaction_count,omitempty"`
+	ContractCount    uint64 `json:"contract_count,omitempty"`
+
+	// 时间字段
 	Mtime     time.Time `json:"mtime"`
 	CreatedAt time.Time `json:"created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
@@ -35,10 +63,20 @@ type AddressResponse struct {
 func (req *CreateAddressRequest) ToModel(address string) *models.Address {
 	return &models.Address{
 		Address: address,
+		Chain:   req.Chain,
 		Type:    req.Type,
 		Nonce:   req.Nonce,
 		Hash:    req.Hash,
-		Mtime:   time.Now(),
+
+		// BTC特有字段
+		UTXOCount: req.UTXOCount,
+		Balance:   req.Balance,
+
+		// ETH特有字段
+		TransactionCount: req.TransactionCount,
+		ContractCount:    req.ContractCount,
+
+		Mtime: time.Now(),
 	}
 }
 
@@ -53,6 +91,23 @@ func (req *UpdateAddressRequest) ApplyToModel(addr *models.Address) {
 	if req.Hash != nil {
 		addr.Hash = *req.Hash
 	}
+
+	// BTC特有字段
+	if req.UTXOCount != nil {
+		addr.UTXOCount = *req.UTXOCount
+	}
+	if req.Balance != nil {
+		addr.Balance = *req.Balance
+	}
+
+	// ETH特有字段
+	if req.TransactionCount != nil {
+		addr.TransactionCount = *req.TransactionCount
+	}
+	if req.ContractCount != nil {
+		addr.ContractCount = *req.ContractCount
+	}
+
 	addr.Mtime = time.Now()
 }
 

@@ -3,7 +3,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 // ETH页面
 import ETHHomeView from '../views/eth/HomeView.vue'
 import ETHBlocksView from '../views/eth/BlocksView.vue'
-import ETHTransactionsView from '../views/eth/TransactionsView.vue'
+import ETHBlockDetailView from '../views/eth/detail/BlockDetailView.vue'
 import ETHAddressesView from '../views/eth/AddressesView.vue'
 import ETHStatisticsView from '../views/eth/StatisticsView.vue'
 import ETHSettingsView from '../views/eth/SettingsView.vue'
@@ -11,9 +11,9 @@ import ETHSettingsView from '../views/eth/SettingsView.vue'
 // BTC页面
 import BTCHomeView from '../views/btc/HomeView.vue'
 import BTCBlocksView from '../views/btc/BlocksView.vue'
-import BTCTransactionsView from '../views/btc/TransactionsView.vue'
 import BTCAddressView from '../views/btc/AddressView.vue'
 import BTCStatsView from '../views/btc/StatsView.vue'
+import BTCBlockDetailView from '../views/btc/detail/BlockDetailView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -35,9 +35,9 @@ const router = createRouter({
       component: ETHBlocksView
     },
     {
-      path: '/eth/transactions',
-      name: 'eth-transactions',
-      component: ETHTransactionsView
+      path: '/eth/blocks/:height',
+      name: 'eth-block-detail',
+      component: ETHBlockDetailView
     },
     {
       path: '/eth/addresses',
@@ -87,9 +87,9 @@ const router = createRouter({
       component: BTCBlocksView
     },
     {
-      path: '/btc/transactions',
-      name: 'btc-transactions',
-      component: BTCTransactionsView
+      path: '/btc/blocks/:height',
+      name: 'btc-block-detail',
+      component: BTCBlockDetailView
     },
     {
       path: '/btc/addresses',

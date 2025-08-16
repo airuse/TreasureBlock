@@ -13,10 +13,21 @@ const request: AxiosInstance = axios.create({
 // 请求拦截器
 request.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
-    // 添加认证token
-    const token = localStorage.getItem('access_token')
+    // 添加认证token - 优先使用loginToken，如果没有则使用access_token
+    const loginToken = localStorage.getItem('loginToken')
+    const accessToken = localStorage.getItem('access_token')
+    const token = loginToken || accessToken
+    
     if (token && config.headers) {
-      config.headers.Authorization = `Bearer ${token}`
+      // 根据后端要求设置token格式
+      if (loginToken) {
+        // 如果使用loginToken，可能需要特殊格式
+        config.headers.Authorization = `Bearer ${token}`
+        // 或者根据后端要求设置其他header
+        // config.headers['X-Auth-Token'] = token
+      } else {
+        config.headers.Authorization = `Bearer ${token}`
+      }
     }
     
     console.log(`🌐 API请求: ${config.method?.toUpperCase()} ${config.url}`)
@@ -43,6 +54,9 @@ request.interceptors.response.use(
     } else if (error.response?.status === 401) {
       console.warn('⚠️ 认证失败，请重新登录')
       // 可以在这里处理token过期逻辑
+      // 比如清除localStorage中的token，跳转到登录页
+      localStorage.removeItem('loginToken')
+      localStorage.removeItem('access_token')
     }
     
     return Promise.reject(error)

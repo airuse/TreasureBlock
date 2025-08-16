@@ -22,12 +22,12 @@ interface SearchAddressesRequest {
   page_size?: number  // 改为page_size以匹配API
 }
 
-// 响应类型 - 适配API实际返回的数据结构
+// 响应类型 - 使用新的格式
 interface ApiResponse<T> {
-  code: number
-  message: string
+  success: boolean
+  message?: string
   data: T
-  timestamp: number
+  error?: string
 }
 
 interface PaginatedResponse<T> extends ApiResponse<T[]> {
@@ -50,8 +50,14 @@ export const handleMockGetAddresses = (data: GetAddressesRequest): Promise<Pagin
       const response = apiData.paths['/addresses'].get.responses['200'].content['application/json'].example
       
       resolve({
-        ...response,
-        timestamp: Date.now()
+        success: true,
+        data: response.data || [],
+        message: 'Success',
+        pagination: {
+          page: data.page,
+          page_size: data.page_size,
+          total: response.pagination?.total || 0
+        }
       })
     }, 300) // 模拟网络延迟
   })
@@ -69,8 +75,9 @@ export const handleMockGetAddress = (data: GetAddressRequest): Promise<ApiRespon
       const response = apiData.paths['/addresses/{hash}'].get.responses['200'].content['application/json'].example
       
       resolve({
-        ...response,
-        timestamp: Date.now()
+        success: true,
+        data: response.data || response,
+        message: 'Success'
       })
     }, 200) // 模拟网络延迟
   })
@@ -88,8 +95,9 @@ export const handleMockSearchAddresses = (data: SearchAddressesRequest): Promise
       const response = apiData.paths['/addresses/search'].get.responses['200'].content['application/json'].example
       
       resolve({
-        ...response,
-        timestamp: Date.now()
+        success: true,
+        data: response.data || response,
+        message: 'Success'
       })
     }, 400) // 模拟网络延迟
   })

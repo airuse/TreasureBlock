@@ -6,29 +6,57 @@ import (
 	"gorm.io/gorm"
 )
 
-// Block 区块模型 - 纯数据模型，不包含验证逻辑
+// Block 区块模型 - 支持BTC和ETH的通用模型
 type Block struct {
-	ID               uint           `json:"id" gorm:"primaryKey"`
-	Hash             string         `json:"hash" gorm:"type:char(66);uniqueIndex;not null"`
-	Height           uint64         `json:"height" gorm:"uniqueIndex;not null"`
-	PreviousHash     string         `json:"previous_hash" gorm:"type:char(66);index"`
-	MerkleRoot       string         `json:"merkle_root" gorm:"type:char(66)"`
-	Timestamp        time.Time      `json:"timestamp"`
-	Difficulty       float64        `json:"difficulty"`
-	Nonce            uint64         `json:"nonce"`
-	Size             uint64         `json:"size"`
-	TransactionCount int            `json:"transaction_count"`
-	TotalAmount      float64        `json:"total_amount"`
-	Fee              float64        `json:"fee"`
-	Confirmations    uint64         `json:"confirmations"`
-	IsOrphan         bool           `json:"is_orphan" gorm:"default:false"`
-	Chain            string         `json:"chain" gorm:"type:varchar(20);index"` // btc, eth, etc.
-	CreatedAt        time.Time      `json:"created_at"`
-	UpdatedAt        time.Time      `json:"updated_at"`
-	DeletedAt        gorm.DeletedAt `json:"deleted_at,omitempty" gorm:"index"`
+	ID               uint      `json:"id" gorm:"primaryKey"`
+	Hash             string    `json:"hash" gorm:"type:char(66);uniqueIndex;not null"`
+	Height           uint64    `json:"height" gorm:"uniqueIndex;not null"`
+	PreviousHash     string    `json:"previous_hash" gorm:"type:char(66);index"`
+	Timestamp        time.Time `json:"timestamp"`
+	Size             uint64    `json:"size"`
+	TransactionCount int       `json:"transaction_count"`
+	TotalAmount      float64   `json:"total_amount"`
+	Fee              float64   `json:"fee"`
+	Confirmations    uint64    `json:"confirmations"`
+	IsOrphan         bool      `json:"is_orphan" gorm:"default:false"`
+	Chain            string    `json:"chain" gorm:"type:varchar(20);index;not null"` // btc, eth
+
+	// BTC特有字段
+	MerkleRoot string `json:"merkle_root,omitempty" gorm:"type:char(66)"`
+	Bits       string `json:"bits,omitempty" gorm:"type:varchar(20)"`
+	Version    uint32 `json:"version,omitempty"`
+	Weight     uint64 `json:"weight,omitempty"`
+
+	// ETH特有字段
+	GasLimit   uint64 `json:"gas_limit,omitempty"`
+	GasUsed    uint64 `json:"gas_used,omitempty"`
+	Miner      string `json:"miner,omitempty" gorm:"type:varchar(120)"`
+	ParentHash string `json:"parent_hash,omitempty" gorm:"type:char(66)"`
+	Nonce      string `json:"nonce,omitempty" gorm:"type:varchar(20)"`
+	Difficulty string `json:"difficulty,omitempty" gorm:"type:varchar(50)"`
+
+	// 通用时间字段
+	CreatedAt time.Time      `json:"created_at"`
+	UpdatedAt time.Time      `json:"updated_at"`
+	DeletedAt gorm.DeletedAt `json:"deleted_at,omitempty" gorm:"index"`
 }
 
 // TableName 指定表名
 func (Block) TableName() string {
 	return "blocks"
+}
+
+// IsBTC 检查是否为BTC区块
+func (b *Block) IsBTC() bool {
+	return b.Chain == "btc"
+}
+
+// IsETH 检查是否为ETH区块
+func (b *Block) IsETH() bool {
+	return b.Chain == "eth"
+}
+
+// GetChainType 获取链类型
+func (b *Block) GetChainType() string {
+	return b.Chain
 }

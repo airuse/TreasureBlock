@@ -4,6 +4,10 @@ import {
   handleMockGetLatestBlocks,
   handleMockGetLatestTransactions
 } from '../mock/stats'
+import type { NetworkStats } from '@/types'
+
+// 使用统一的ApiResponse类型
+import type { ApiResponse } from '../types'
 
 // 请求参数类型
 interface GetNetworkStatsRequest {
@@ -19,14 +23,6 @@ interface GetLatestBlocksRequest {
 interface GetLatestTransactionsRequest {
   limit?: number
   chain?: string
-}
-
-// 响应类型
-interface ApiResponse<T> {
-  code: number
-  message: string
-  data: T
-  timestamp: number
 }
 
 /**

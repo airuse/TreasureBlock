@@ -2,10 +2,10 @@
 
 // 基础响应类型
 export interface ApiResponse<T> {
-  code: number
-  message: string
+  success: boolean
+  message?: string
   data: T
-  timestamp: number
+  error?: string
 }
 
 // 分页响应类型

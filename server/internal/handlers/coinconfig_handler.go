@@ -97,3 +97,32 @@ func (h *CoinConfigHandler) GetCoinConfigBySymbol(c *gin.Context) {
 		"data":    response,
 	})
 }
+
+/*
+获取所有币种配置
+@param c *gin.Context
+@return
+*/
+func (h *CoinConfigHandler) GetAllCoinConfigs(c *gin.Context) {
+	coinConfigs, err := h.coinConfigService.GetAllCoinConfigs(c.Request.Context())
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	// 转换为响应DTO
+	var responses []dto.GetAllCoinConfigsResponse
+	for _, config := range coinConfigs {
+		response := dto.NewGetAllCoinConfigsResponse(config)
+		responses = append(responses, *response)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    responses,
+		"message": "coin configs retrieved successfully",
+	})
+}

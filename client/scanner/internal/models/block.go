@@ -24,6 +24,7 @@ type Block struct {
 	Bits             string    `json:"bits"`
 	Weight           uint64    `json:"weight"`
 	StrippedSize     uint64    `json:"stripped_size"`
+	Miner            string    `json:"miner,omitempty"` // 矿工地址
 }
 
 // BlockResponse 区块响应

@@ -14,6 +14,7 @@ type TransactionRepository interface {
 	GetByHash(ctx context.Context, hash string) (*models.Transaction, error)
 	GetByAddress(ctx context.Context, address string, offset, limit int) ([]*models.Transaction, int64, error)
 	GetByBlockHash(ctx context.Context, blockHash string) ([]*models.Transaction, error)
+	GetByBlockHeight(ctx context.Context, blockHeight uint64, offset, limit int, chain string) ([]*models.Transaction, int64, error)
 	List(ctx context.Context, offset, limit int, chain string) ([]*models.Transaction, int64, error)
 	Update(ctx context.Context, tx *models.Transaction) error
 	Delete(ctx context.Context, hash string) error
@@ -59,7 +60,7 @@ func (r *transactionRepository) GetByAddress(ctx context.Context, address string
 	}
 
 	// 获取分页数据
-	err := query.Order("timestamp DESC").
+	err := query.Order("block_index DESC").
 		Offset(offset).
 		Limit(limit).
 		Find(&txs).Error
@@ -72,9 +73,33 @@ func (r *transactionRepository) GetByBlockHash(ctx context.Context, blockHash st
 	var txs []*models.Transaction
 	err := r.db.WithContext(ctx).
 		Where("block_hash = ?", blockHash).
-		Order("timestamp ASC").
+		Order("block_index ASC").
 		Find(&txs).Error
 	return txs, err
+}
+
+// GetByBlockHeight 根据区块高度获取交易列表
+func (r *transactionRepository) GetByBlockHeight(ctx context.Context, blockHeight uint64, offset, limit int, chain string) ([]*models.Transaction, int64, error) {
+	var txs []*models.Transaction
+	var total int64
+
+	query := r.db.WithContext(ctx).Where("height = ?", blockHeight)
+	if chain != "" {
+		query = query.Where("chain = ?", chain)
+	}
+
+	// 获取总数
+	if err := query.Model(&models.Transaction{}).Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// 获取分页数据
+	err := query.Order("block_index ASC").
+		Offset(offset).
+		Limit(limit).
+		Find(&txs).Error
+
+	return txs, total, err
 }
 
 // List 分页查询交易列表
@@ -93,7 +118,7 @@ func (r *transactionRepository) List(ctx context.Context, offset, limit int, cha
 	}
 
 	// 获取分页数据
-	err := query.Order("timestamp DESC").
+	err := query.Order("block_index DESC").
 		Offset(offset).
 		Limit(limit).
 		Find(&txs).Error

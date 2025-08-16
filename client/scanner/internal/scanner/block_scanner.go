@@ -274,17 +274,24 @@ func (bs *BlockScanner) submitBlockToServer(block *models.Block) error {
 		Hash:             block.Hash,
 		Height:           block.Height,
 		PreviousHash:     block.PreviousHash,
-		MerkleRoot:       block.MerkleRoot,
 		Timestamp:        block.Timestamp,
-		Difficulty:       block.Difficulty,
-		Nonce:            block.Nonce,
 		Size:             block.Size,
 		TransactionCount: block.TransactionCount,
 		TotalAmount:      block.TotalAmount,
 		Fee:              block.Fee,
 		Confirmations:    block.Confirmations,
 		IsOrphan:         block.IsOrphan,
-		Chain:            block.Chain,
+		Chain:            block.Chain, // BTC特有
+		MerkleRoot:       block.MerkleRoot,
+		Bits:             block.Bits,
+		Version:          uint32(block.Version),
+		Weight:           block.Weight,       // ETH特有
+		GasLimit:         block.Weight,       // 以太坊解析中Weight映射自GasLimit
+		GasUsed:          block.StrippedSize, // 以太坊解析中StrippedSize映射自GasUsed
+		Miner:            block.Miner,
+		ParentHash:       block.PreviousHash, // 近似映射
+		Nonce:            fmt.Sprintf("%d", block.Nonce),
+		Difficulty:       fmt.Sprintf("%f", block.Difficulty),
 	}
 
 	// 使用API上传区块
@@ -306,6 +313,47 @@ func (bs *BlockScanner) submitTransactionsToServer(chainName string, block *mode
 
 	// 批量上传交易
 	for _, tx := range transactions {
+		// 提取/推导地址
+		fromAddress := ""
+		toAddress := ""
+		if v, ok := tx["from"].(string); ok {
+			fromAddress = v
+		}
+		if v, ok := tx["to"].(string); ok {
+			toAddress = v
+		}
+		// 针对BTC从vin/vout推导
+		if chainName == "btc" {
+			if fromAddress == "" {
+				if vin, ok := tx["vin"].([]interface{}); ok && len(vin) > 0 {
+					if in0, ok := vin[0].(map[string]interface{}); ok {
+						if prevout, ok := in0["prevout"].(map[string]interface{}); ok {
+							if spk, ok := prevout["scriptPubKey"].(map[string]interface{}); ok {
+								if addrs, ok := spk["addresses"].([]interface{}); ok && len(addrs) > 0 {
+									if a0, ok := addrs[0].(string); ok {
+										fromAddress = a0
+									}
+								}
+							}
+						}
+					}
+				}
+			}
+			if toAddress == "" {
+				if vout, ok := tx["vout"].([]interface{}); ok && len(vout) > 0 {
+					if out0, ok := vout[0].(map[string]interface{}); ok {
+						if spk, ok := out0["scriptPubKey"].(map[string]interface{}); ok {
+							if addrs, ok := spk["addresses"].([]interface{}); ok && len(addrs) > 0 {
+								if a0, ok := addrs[0].(string); ok {
+									toAddress = a0
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+
 		// 构建交易请求数据
 		txRequest := map[string]interface{}{
 			"tx_id":         tx["hash"],
@@ -316,9 +364,10 @@ func (bs *BlockScanner) submitTransactionsToServer(chainName string, block *mode
 			"balance":       "0", // 暂时设为0
 			"amount":        tx["value"],
 			"trans_id":      0, // 暂时设为0
+			"chain":         chainName,
 			"symbol":        chainName,
-			"address_from":  tx["from"],
-			"address_to":    tx["to"],
+			"address_from":  fromAddress,
+			"address_to":    toAddress,
 			"gas_limit":     tx["gasLimit"],
 			"gas_price":     tx["gasPrice"],
 			"gas_used":      tx["gasUsed"],
@@ -329,6 +378,7 @@ func (bs *BlockScanner) submitTransactionsToServer(chainName string, block *mode
 			"hex":           nil,
 			"tx_scene":      "blockchain_scan",
 			"remark":        "Scanned from blockchain",
+			"block_index":   tx["block_index"],
 		}
 
 		// 上传交易

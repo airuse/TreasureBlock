@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 	"time"
 
 	"blockChainBrowser/client/scanner/pkg"
@@ -55,6 +56,7 @@ type ChainConfig struct {
 	APIKey          string   `yaml:"api_key"`
 	Username        string   `yaml:"username"`
 	Password        string   `yaml:"password"`
+	TokenAddresses  []string `yaml:"token_addresses"` // 本地配置的币种合约地址列表（备用）
 	// 每个链的独立扫描配置
 	Scan ChainScanConfig `yaml:"scan"`
 }
@@ -330,6 +332,15 @@ func loadServerConfig() error {
 			logrus.Infof("Updated RPC config for chain %s", chainKey)
 		}
 
+		// 获取币种配置（如果是以太坊链）
+		if chainKey == "eth" {
+			if err := loadCoinConfigsFromAPI(api, &chainConfig); err != nil {
+				logrus.Warnf("Failed to load coin configs for chain %s: %v", chainKey, err)
+			} else {
+				logrus.Infof("Successfully loaded coin configs for chain %s", chainKey)
+			}
+		}
+
 		// 更新链配置到全局配置中
 		AppConfig.Blockchain.Chains[chainKey] = chainConfig
 
@@ -377,6 +388,52 @@ func setDefaultChainScanConfigs() {
 		// 更新配置
 		AppConfig.Blockchain.Chains[chainKey] = chainConfig
 	}
+}
+
+// loadCoinConfigsFromAPI 从后端API加载币种配置
+func loadCoinConfigsFromAPI(api *pkg.ScannerAPI, chainConfig *ChainConfig) error {
+	// 获取所有币种配置
+	coinConfigs, err := api.GetAllCoinConfigs()
+	if err != nil {
+		return fmt.Errorf("failed to get coin configs from API: %w", err)
+	}
+
+	// 提取以太坊链的合约地址
+	var contractAddresses []string
+	for _, config := range coinConfigs {
+		if config.ChainName == "eth" && config.Status == 1 && config.ContractAddr != "" {
+			contractAddresses = append(contractAddresses, config.ContractAddr)
+		}
+	}
+
+	// 获取所有合约配置
+	constants, err := api.GetAllContracts()
+	if err != nil {
+		return fmt.Errorf("failed to get all contracts from API: %w", err)
+	}
+	for _, constant := range constants {
+		if constant.ChainName == "eth" && constant.Status == 1 && constant.Address != "" {
+			contractAddresses = append(contractAddresses, constant.Address)
+		}
+	}
+
+	// 将API获取的地址添加到本地配置中（去重）
+	existingAddresses := make(map[string]bool)
+	for _, addr := range chainConfig.TokenAddresses {
+		existingAddresses[strings.ToLower(addr)] = true
+	}
+
+	for _, addr := range contractAddresses {
+		if !existingAddresses[strings.ToLower(addr)] {
+			chainConfig.TokenAddresses = append(chainConfig.TokenAddresses, addr)
+			existingAddresses[strings.ToLower(addr)] = true
+		}
+	}
+
+	logrus.Infof("Loaded %d coin configs from API, total token addresses: %d",
+		len(coinConfigs), len(chainConfig.TokenAddresses))
+
+	return nil
 }
 
 // GetScannerAPI 获取扫块器API实例

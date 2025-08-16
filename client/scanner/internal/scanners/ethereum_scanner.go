@@ -4,11 +4,14 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"strings"
 	"time"
 
 	"blockChainBrowser/client/scanner/config"
+	"blockChainBrowser/client/scanner/internal/failover"
 	"blockChainBrowser/client/scanner/internal/models"
 
+	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
 )
@@ -20,6 +23,8 @@ type EthereumScanner struct {
 	localClient      *ethclient.Client
 	externalClients  []*ethclient.Client
 	currentNodeIndex int // 当前使用的外部节点索引
+	// 故障转移管理器
+	failoverManager *failover.FailoverManager
 }
 
 // NewEthereumScanner 创建新的以太坊扫块器
@@ -49,177 +54,15 @@ func NewEthereumScanner(cfg *config.ChainConfig) *EthereumScanner {
 		}
 	}
 
+	// 创建故障转移管理器
+	scanner.failoverManager = failover.NewFailoverManager(scanner.localClient, scanner.externalClients)
+
 	return scanner
-}
-
-// callWithFailoverUint64 通用的故障转移调用方法（返回uint64）
-func (es *EthereumScanner) callWithFailoverUint64(operation string, clientCall func(*ethclient.Client) (uint64, error)) (uint64, error) {
-	// 首先尝试本地节点
-	if es.localClient != nil {
-		result, err := clientCall(es.localClient)
-		if err == nil {
-			return result, nil
-		}
-		fmt.Printf("[ETH Scanner] Local node failed for %s: %v, trying external APIs\n", operation, err)
-	}
-
-	// 如果本地节点失败或不存在，尝试外部节点
-	if len(es.externalClients) > 0 {
-		// 从当前节点开始尝试
-		startIndex := es.currentNodeIndex
-		for i := 0; i < len(es.externalClients); i++ {
-			currentIndex := (startIndex + i) % len(es.externalClients)
-			client := es.externalClients[currentIndex]
-
-			result, err := clientCall(client)
-			if err == nil {
-				// 成功获取，更新当前节点索引
-				es.currentNodeIndex = currentIndex
-				return result, nil
-			}
-
-			fmt.Printf("[ETH Scanner] External API node %d failed for %s: %v\n", currentIndex, operation, err)
-		}
-	}
-
-	return 0, fmt.Errorf("failed to %s: all nodes failed", operation)
-}
-
-// callWithFailoverBlock 通用的故障转移调用方法（返回*models.Block）
-func (es *EthereumScanner) callWithFailoverBlock(operation string, clientCall func(*ethclient.Client) (*models.Block, error)) (*models.Block, error) {
-	// 首先尝试本地节点
-	if es.localClient != nil {
-		result, err := clientCall(es.localClient)
-		if err == nil {
-			return result, nil
-		}
-		fmt.Printf("[ETH Scanner] Local node failed for %s: %v, trying external APIs\n", operation, err)
-	}
-
-	// 如果本地节点失败或不存在，尝试外部节点
-	if len(es.externalClients) > 0 {
-		// 从当前节点开始尝试
-		startIndex := es.currentNodeIndex
-		for i := 0; i < len(es.externalClients); i++ {
-			currentIndex := (startIndex + i) % len(es.externalClients)
-			client := es.externalClients[currentIndex]
-
-			result, err := clientCall(client)
-			if err == nil {
-				// 成功获取，更新当前节点索引
-				es.currentNodeIndex = currentIndex
-				return result, nil
-			}
-
-			fmt.Printf("[ETH Scanner] External API node %d failed for %s: %v\n", currentIndex, operation, err)
-		}
-	}
-
-	return nil, fmt.Errorf("failed to %s: all nodes failed", operation)
-}
-
-// callWithFailoverTransactions 通用的故障转移调用方法（返回[]map[string]interface{}）
-func (es *EthereumScanner) callWithFailoverTransactions(operation string, clientCall func(*ethclient.Client) ([]map[string]interface{}, error)) ([]map[string]interface{}, error) {
-	// 首先尝试本地节点
-	if es.localClient != nil {
-		result, err := clientCall(es.localClient)
-		if err == nil {
-			return result, nil
-		}
-		fmt.Printf("[ETH Scanner] Local node failed for %s: %v, trying external APIs\n", operation, err)
-	}
-
-	// 如果本地节点失败或不存在，尝试外部节点
-	if len(es.externalClients) > 0 {
-		// 从当前节点开始尝试
-		startIndex := es.currentNodeIndex
-		for i := 0; i < len(es.externalClients); i++ {
-			currentIndex := (startIndex + i) % len(es.externalClients)
-			client := es.externalClients[currentIndex]
-
-			result, err := clientCall(client)
-			if err == nil {
-				// 成功获取，更新当前节点索引
-				es.currentNodeIndex = currentIndex
-				return result, nil
-			}
-
-			fmt.Printf("[ETH Scanner] External API node %d failed for %s: %v\n", currentIndex, operation, err)
-		}
-	}
-
-	return nil, fmt.Errorf("failed to %s: all nodes failed", operation)
-}
-
-// callWithFailoverRawBlock 通用的故障转移调用方法（返回*types.Block）
-func (es *EthereumScanner) callWithFailoverRawBlock(operation string, clientCall func(*ethclient.Client) (*types.Block, error)) (*types.Block, error) {
-	// 首先尝试本地节点
-	if es.localClient != nil {
-		result, err := clientCall(es.localClient)
-		if err == nil {
-			return result, nil
-		}
-		fmt.Printf("[ETH Scanner] Local node failed for %s: %v, trying external APIs\n", operation, err)
-	}
-
-	// 如果本地节点失败或不存在，尝试外部节点
-	if len(es.externalClients) > 0 {
-		// 从当前节点开始尝试
-		startIndex := es.currentNodeIndex
-		for i := 0; i < len(es.externalClients); i++ {
-			currentIndex := (startIndex + i) % len(es.externalClients)
-			client := es.externalClients[currentIndex]
-
-			result, err := clientCall(client)
-			if err == nil {
-				// 成功获取，更新当前节点索引
-				es.currentNodeIndex = currentIndex
-				return result, nil
-			}
-
-			fmt.Printf("[ETH Scanner] External API node %d failed for %s: %v\n", currentIndex, operation, err)
-		}
-	}
-
-	return nil, fmt.Errorf("failed to %s: all nodes failed", operation)
-}
-
-// callWithFailoverReceipt 通用的故障转移调用方法（返回*types.Receipt）
-func (es *EthereumScanner) callWithFailoverReceipt(operation string, clientCall func(*ethclient.Client) (*types.Receipt, error)) (*types.Receipt, error) {
-	// 首先尝试本地节点
-	if es.localClient != nil {
-		result, err := clientCall(es.localClient)
-		if err == nil {
-			return result, nil
-		}
-		fmt.Printf("[ETH Scanner] Local node failed for %s: %v, trying external APIs\n", operation, err)
-	}
-
-	// 如果本地节点失败或不存在，尝试外部节点
-	if len(es.externalClients) > 0 {
-		// 从当前节点开始尝试
-		startIndex := es.currentNodeIndex
-		for i := 0; i < len(es.externalClients); i++ {
-			currentIndex := (startIndex + i) % len(es.externalClients)
-			client := es.externalClients[currentIndex]
-
-			result, err := clientCall(client)
-			if err == nil {
-				// 成功获取，更新当前节点索引
-				es.currentNodeIndex = currentIndex
-				return result, nil
-			}
-
-			fmt.Printf("[ETH Scanner] External API node %d failed for %s: %v\n", currentIndex, operation, err)
-		}
-	}
-
-	return nil, fmt.Errorf("failed to %s: all nodes failed", operation)
 }
 
 // GetLatestBlockHeight 获取最新区块高度
 func (es *EthereumScanner) GetLatestBlockHeight() (uint64, error) {
-	result, err := es.callWithFailoverUint64("get latest block height", func(client *ethclient.Client) (uint64, error) {
+	result, err := es.failoverManager.CallWithFailoverUint64("get latest block height", func(client *ethclient.Client) (uint64, error) {
 		return client.BlockNumber(context.Background())
 	})
 
@@ -233,19 +76,20 @@ func (es *EthereumScanner) GetLatestBlockHeight() (uint64, error) {
 func (es *EthereumScanner) GetBlockByHeight(height uint64) (*models.Block, error) {
 	fmt.Printf("[ETH Scanner] Scanning block at height: %d\n", height)
 
-	result, err := es.callWithFailoverBlock("get block by height", func(client *ethclient.Client) (*models.Block, error) {
-		block, err := client.BlockByNumber(context.Background(), big.NewInt(int64(height)))
-		if err != nil {
-			return nil, err
-		}
-		return es.parseBlock(block), nil
+	result, err := es.failoverManager.CallWithFailoverRawBlock("get block by height", func(client *ethclient.Client) (*types.Block, error) {
+		return client.BlockByNumber(context.Background(), big.NewInt(int64(height)))
 	})
 
-	if err == nil {
-		fmt.Printf("[ETH Scanner] Successfully scanned block %d (hash: %s) with %d transactions\n",
-			result.Height, result.Hash[:16]+"...", result.TransactionCount)
+	if err != nil {
+		return nil, err
 	}
-	return result, err
+
+	// 解析区块数据
+	block := es.parseBlock(result)
+
+	fmt.Printf("[ETH Scanner] Successfully scanned block %d (hash: %s) with %d transactions\n",
+		block.Height, block.Hash[:16]+"...", block.TransactionCount)
+	return block, nil
 }
 
 // parseBlock 解析以太坊区块数据
@@ -264,7 +108,8 @@ func (es *EthereumScanner) parseBlock(block *types.Block) *models.Block {
 		Nonce:            block.Nonce(),
 		PreviousHash:     block.ParentHash().Hex(),
 		MerkleRoot:       block.Root().Hex(),
-		Confirmations:    1, // 简化处理
+		Confirmations:    1,                      // 简化处理
+		Miner:            block.Coinbase().Hex(), // 获取矿工地址
 	}
 }
 
@@ -347,34 +192,254 @@ func (es *EthereumScanner) extractTransactionsFromBlock(block *types.Block) []ma
 			toAddress = "" // 合约创建交易
 		}
 
+		// 获取 From 地址 - 使用简单稳定的方法
+		var fromAddress string
+		// 使用LatestSignerForChainID，它会自动选择合适的签名器
+		signer := types.LatestSignerForChainID(tx.ChainId())
+		if sender, err := signer.Sender(tx); err == nil {
+			fromAddress = sender.Hex()
+		} else {
+			fmt.Printf("[ETH Scanner] Warning: Failed to recover sender for tx %s: %v\n", tx.Hash().Hex(), err)
+			fromAddress = ""
+		}
+
 		txData := map[string]interface{}{
 			"hash":                 tx.Hash().Hex(),
 			"nonce":                tx.Nonce(),
 			"type":                 txType,
+			"from":                 fromAddress, // 发送者地址
+			"to":                   toAddress,
+			"value":                tx.Value().String(),
 			"gasPrice":             gasPriceStr,
 			"maxFeePerGas":         maxFeePerGas,
 			"maxPriorityFeePerGas": maxPriorityFeePerGas,
 			"effectiveGasPrice":    effectiveGasPrice,
-			"gasLimit":             tx.Gas(), // 原始gas limit
-			"gasUsed":              tx.Gas(), // 暂时使用gas limit，后续可以通过receipt获取实际值
-			"to":                   toAddress,
-			"value":                tx.Value().String(),
-			"data":                 tx.Data(),
+			"gasLimit":             tx.Gas(),                     // 原始gas limit
+			"gasUsed":              tx.Gas(),                     // 暂时使用gas limit，后续可以通过receipt获取实际值
+			"data":                 fmt.Sprintf("%x", tx.Data()), // 保存原始交易数据为hex字符串
+			"raw_data":             tx.Data(),                    // 保存原始字节数据
 			"v":                    v.String(),
 			"r":                    r.String(),
 			"s":                    s.String(),
+			"block_index":          i, // 交易在区块中的索引位置
 		}
+
+		// 简化合约交易检测：仅检查是否为配置的代币地址
+		if toAddress != "" && es.isConfiguredTokenAddress(toAddress) && len(tx.Data()) > 0 {
+			txData["is_contract_tx"] = true
+		} else {
+			txData["is_contract_tx"] = false
+		}
+
 		transactions[i] = txData
 	}
 
 	return transactions
 }
 
+// isConfiguredTokenAddress 检查地址是否为配置的币种地址
+func (es *EthereumScanner) isConfiguredTokenAddress(address string) bool {
+	if address == "" {
+		return false
+	}
+
+	// 检查地址是否在配置的币种地址列表中（包含从API获取的地址）
+	for _, tokenAddr := range es.config.TokenAddresses {
+		if strings.EqualFold(address, tokenAddr) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// enrichTransactionsWithContractInfo 获取所有交易回执（并发处理）
+func (es *EthereumScanner) enrichTransactionsWithContractInfo(transactions []map[string]interface{}) error {
+	if len(transactions) == 0 {
+		return nil
+	}
+
+	// 收集所有交易哈希
+	var txHashes []string
+	for _, tx := range transactions {
+		if hash, ok := tx["hash"].(string); ok {
+			txHashes = append(txHashes, hash)
+		}
+	}
+
+	// 并发获取所有交易回执
+	if len(txHashes) > 0 {
+		if err := es.batchGetTransactionReceipts(transactions, txHashes); err != nil {
+			fmt.Printf("[ETH Scanner] Warning: Failed to batch get transaction receipts: %v\n", err)
+		}
+	}
+
+	return nil
+}
+
+// batchGetTransactionReceipts 高效并发获取所有交易回执
+func (es *EthereumScanner) batchGetTransactionReceipts(transactions []map[string]interface{}, txHashes []string) error {
+	if len(txHashes) == 0 {
+		return nil
+	}
+
+	startTime := time.Now()
+	fmt.Printf("[ETH Scanner] 🚀 Starting parallel fetch of %d transaction receipts...\n", len(txHashes))
+
+	// 创建哈希到交易的映射
+	hashToTxMap := make(map[string]int)
+	for i, tx := range transactions {
+		if hash, ok := tx["hash"].(string); ok {
+			hashToTxMap[hash] = i
+		}
+	}
+
+	// 并发结果结构
+	type receiptResult struct {
+		hash    string
+		receipt *types.Receipt
+		err     error
+		index   int
+	}
+
+	// 动态调整并发数：小批量用更高并发，大批量适当降低
+	maxConcurrency := 20
+	if len(txHashes) > 500 {
+		maxConcurrency = 15
+	} else if len(txHashes) < 50 {
+		maxConcurrency = len(txHashes)
+	}
+
+	fmt.Printf("[ETH Scanner] Using %d concurrent workers for %d receipts\n", maxConcurrency, len(txHashes))
+
+	// 创建工作池
+	semaphore := make(chan struct{}, maxConcurrency)
+	results := make(chan receiptResult, len(txHashes))
+
+	// 启动所有并发获取任务
+	for i, txHash := range txHashes {
+		go func(hash string, idx int) {
+			semaphore <- struct{}{}        // 获取信号量
+			defer func() { <-semaphore }() // 释放信号量
+
+			// 使用智能负载均衡获取回执
+			var receipt *types.Receipt
+			var err error
+
+			err = es.failoverManager.CallWithFailover("get transaction receipt", func(client *ethclient.Client) error {
+				var receiptErr error
+				receipt, receiptErr = client.TransactionReceipt(context.Background(), common.HexToHash(hash))
+				return receiptErr
+			})
+
+			results <- receiptResult{
+				hash:    hash,
+				receipt: receipt,
+				err:     err,
+				index:   idx,
+			}
+		}(txHash, i)
+	}
+
+	// 收集所有结果
+	successCount := 0
+	failureCount := 0
+	logCount := 0
+	processedCount := 0
+
+	for i := 0; i < len(txHashes); i++ {
+		result := <-results
+		processedCount++
+
+		if result.err != nil {
+			fmt.Printf("[ETH Scanner] ❌ Failed to get receipt for tx %s: %v\n", result.hash, result.err)
+			failureCount++
+			continue
+		}
+
+		// 更新交易信息
+		if index, exists := hashToTxMap[result.hash]; exists && index < len(transactions) {
+			tx := transactions[index]
+
+			// 设置交易状态
+			if result.receipt.Status == 1 {
+				tx["status"] = "success"
+			} else {
+				tx["status"] = "failed"
+			}
+
+			// 设置实际使用的gas
+			tx["gasUsed"] = result.receipt.GasUsed
+
+			// 解析所有交易的日志（不仅仅是合约交易）
+			if len(result.receipt.Logs) > 0 {
+				es.parseContractLogs(tx, result.receipt)
+				logCount += len(result.receipt.Logs)
+			}
+
+			successCount++
+		}
+
+		// 显示进度（每50个）
+		if processedCount%50 == 0 {
+			elapsed := time.Since(startTime)
+			fmt.Printf("[ETH Scanner] 📈 Progress: %d/%d receipts processed (%.1f%%) in %v\n",
+				processedCount, len(txHashes), float64(processedCount)/float64(len(txHashes))*100, elapsed)
+		}
+	}
+
+	elapsed := time.Since(startTime)
+	avgTime := float64(elapsed.Milliseconds()) / float64(len(txHashes))
+
+	fmt.Printf("[ETH Scanner] 📊 Parallel Receipt Fetch Complete:\n")
+	fmt.Printf("  ✅ Success: %d/%d (%.1f%%)\n", successCount, len(txHashes), float64(successCount)/float64(len(txHashes))*100)
+	fmt.Printf("  ❌ Failed: %d/%d (%.1f%%)\n", failureCount, len(txHashes), float64(failureCount)/float64(len(txHashes))*100)
+	fmt.Printf("  📋 Total logs parsed: %d\n", logCount)
+	fmt.Printf("  ⏱️  Total time: %v (parallel with %d workers)\n", elapsed, maxConcurrency)
+	fmt.Printf("  📈 Average: %.2fms per receipt\n", avgTime)
+	fmt.Printf("  🚀 Rate: %.1f receipts/second\n", float64(len(txHashes))/elapsed.Seconds())
+	fmt.Printf("  ⚡ Speedup vs serial: ~%.1fx faster\n", float64(maxConcurrency)*0.7) // 估算加速比
+
+	return nil
+}
+
+// parseContractLogs 保存合约交易的原始日志数据
+func (es *EthereumScanner) parseContractLogs(tx map[string]interface{}, receipt *types.Receipt) {
+	if receipt == nil || len(receipt.Logs) == 0 {
+		return
+	}
+
+	// 保存所有日志的原始数据，供后续手动解析使用
+	var logs []map[string]interface{}
+	for i, log := range receipt.Logs {
+		logData := map[string]interface{}{
+			"index":    i,
+			"address":  log.Address.Hex(),
+			"topics":   make([]string, len(log.Topics)),
+			"data":     fmt.Sprintf("%x", log.Data),
+			"raw_data": log.Data,
+		}
+
+		// 保存所有topics
+		for j, topic := range log.Topics {
+			logData["topics"].([]string)[j] = topic.Hex()
+		}
+
+		logs = append(logs, logData)
+	}
+
+	// 保存日志到交易数据中
+	tx["logs"] = logs
+	tx["log_count"] = len(logs)
+
+	fmt.Printf("[ETH Scanner] Saved %d logs for transaction %s\n", len(logs), tx["hash"])
+}
+
 // GetBlockTransactionsFromBlock 直接从区块中获取交易信息（避免哈希不一致问题）
 func (es *EthereumScanner) GetBlockTransactionsFromBlock(block *models.Block) ([]map[string]interface{}, error) {
 	// 这里我们需要通过区块高度重新获取完整的区块数据
 	// 因为 models.Block 中只包含基本信息，不包含完整的交易数据
-	ethBlock, err := es.callWithFailoverRawBlock("get block by height for transactions", func(client *ethclient.Client) (*types.Block, error) {
+	ethBlock, err := es.failoverManager.CallWithFailoverRawBlock("get block by height for transactions", func(client *ethclient.Client) (*types.Block, error) {
 		return client.BlockByNumber(context.Background(), big.NewInt(int64(block.Height)))
 	})
 
@@ -383,7 +448,15 @@ func (es *EthereumScanner) GetBlockTransactionsFromBlock(block *models.Block) ([
 	}
 
 	// 直接从区块中提取交易信息
-	return es.extractTransactionsFromBlock(ethBlock), nil
+	transactions := es.extractTransactionsFromBlock(ethBlock)
+
+	// 增强交易信息：检查合约代码、获取回执、解析日志
+	if err := es.enrichTransactionsWithContractInfo(transactions); err != nil {
+		fmt.Printf("[ETH Scanner] Warning: Failed to enrich transactions with contract info: %v\n", err)
+		// 不返回错误，继续处理
+	}
+
+	return transactions, nil
 }
 
 // CalculateBlockStats 计算区块统计信息

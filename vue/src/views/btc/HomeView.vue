@@ -190,7 +190,7 @@ const loadData = async () => {
   try {
     // 获取统计数据
     const statsResponse = await statsApi.getNetworkStats({ chain: 'btc' })
-    if (statsResponse && statsResponse.code === 200) {
+    if (statsResponse && statsResponse.success === true) {
       stats.value = {
         totalBlocks: statsResponse.data?.totalBlocks || 0,
         totalTransactions: statsResponse.data?.totalTransactions || 0,
@@ -209,7 +209,7 @@ const loadData = async () => {
       page_size: 5, 
       chain: 'btc' 
     })
-    if (blocksResponse && blocksResponse.code === 200) {
+    if (blocksResponse && blocksResponse.success === true) {
       latestBlocks.value = blocksResponse.data || []
     }
 
@@ -219,7 +219,7 @@ const loadData = async () => {
       page_size: 5, 
       chain: 'btc' 
     })
-    if (transactionsResponse && transactionsResponse.code === 200) {
+    if (transactionsResponse && transactionsResponse.success === true) {
       latestTransactions.value = transactionsResponse.data || []
     }
   } catch (error) {

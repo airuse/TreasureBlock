@@ -40,8 +40,8 @@ type PromiseReject = (reason?: unknown) => void
 
 class WebSocketManager {
   private ws: WebSocket | null = null
-  private reconnectTimer: number | null = null
-  private heartbeatTimer: number | null = null
+  private reconnectTimer: ReturnType<typeof setTimeout> | null = null
+  private heartbeatTimer: ReturnType<typeof setInterval> | null = null
   private reconnectAttempts = 0
   private eventListeners: Map<string, Set<WebSocketCallback>> = new Map()
   private options: WebSocketOptions

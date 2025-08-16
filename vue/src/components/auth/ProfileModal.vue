@@ -128,8 +128,11 @@
 </template>
 
 <script setup lang="ts">
-import { ref, reactive, watch } from 'vue'
+import { ref, reactive, watch, computed } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import { changePassword } from '@/api/auth'
+import type { UserProfile } from '@/types/auth'
+import { showSuccess, showError } from '@/composables/useToast'
 
 const props = defineProps<{
   isVisible: boolean
@@ -204,10 +207,16 @@ const saveProfile = async () => {
     // 调用真实API保存个人资料和密码
     if (passwordForm.newPassword) {
       // 修改密码
-      await authStore.changeUserPassword({
+      const response = await changePassword({
+        token: authStore.loginToken || '',
         current_password: passwordForm.currentPassword,
         new_password: passwordForm.newPassword
       })
+      
+      if (!response || !response.success) {
+        error.value = response?.message || '密码修改失败'
+        return
+      }
     }
 
     // 更新用户资料（如果需要的话，这里可以添加更新用户资料的API）
@@ -222,6 +231,51 @@ const saveProfile = async () => {
     
   } catch (err: unknown) {
     error.value = (err instanceof Error ? err.message : '保存失败')
+  } finally {
+    isLoading.value = false
+  }
+}
+
+// 修改密码
+const handleChangePassword = async () => {
+  if (!passwordForm.currentPassword || !passwordForm.newPassword || !passwordForm.confirmPassword) {
+    showError('请填写完整的密码信息')
+    return
+  }
+
+  if (passwordForm.newPassword !== passwordForm.confirmPassword) {
+    showError('两次输入的新密码不一致')
+    return
+  }
+
+  if (passwordForm.newPassword.length < 6) {
+    showError('新密码长度不能少于6位')
+    return
+  }
+
+  try {
+    isLoading.value = true
+    
+    const response = await changePassword({
+      token: authStore.loginToken || '',
+      current_password: passwordForm.currentPassword,
+      new_password: passwordForm.newPassword
+    })
+    
+    if (response && response.success === true) {
+      showSuccess('密码修改成功！')
+      // 清空表单
+      passwordForm.currentPassword = ''
+      passwordForm.newPassword = ''
+      passwordForm.confirmPassword = ''
+      // 关闭修改密码表单
+      // showPasswordForm.value = false // This line was not in the new_code, so it's removed.
+    } else {
+      showError(response?.message || '密码修改失败')
+    }
+  } catch (error: any) {
+    console.error('Change password error:', error)
+    showError(error?.message || '密码修改失败，请重试')
   } finally {
     isLoading.value = false
   }

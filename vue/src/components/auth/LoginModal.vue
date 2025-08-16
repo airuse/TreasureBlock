@@ -114,6 +114,7 @@
 <script setup lang="ts">
 import { ref, reactive, watch } from 'vue'
 import { useAuthStore } from '@/stores/auth'
+import { login, register } from '@/api/auth'
 import type { LoginRequest, RegisterRequest } from '@/types/auth'
 import { showSuccess, showError } from '@/composables/useToast'
 
@@ -187,9 +188,22 @@ const handleSubmit = async () => {
         password: form.password
       }
       
-      const response = await authStore.loginUser(loginData)
+      const response = await login(loginData)
       
-      if (response && response.code === 200) {
+      if (response && response.success === true && response.data) {
+        // 设置认证状态到stores
+        const userData = (response.data as any).user || {
+          id: (response.data as any).user_id,
+          username: (response.data as any).username,
+          email: (response.data as any).email,
+          is_active: true,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        }
+        const token = (response.data as any).access_token || (response.data as any).token
+        
+        authStore.setAuthState(userData, token)
+        
         showSuccess('登录成功！')
         emit('success')
         close()
@@ -204,9 +218,9 @@ const handleSubmit = async () => {
         password: form.password
       }
       
-      const response = await authStore.registerUser(registerData)
+      const response = await register(registerData)
       
-      if (response && response.code === 200) {
+      if (response && response.success === true) {
         showSuccess('注册成功！请使用新账号登录。')
         // 注册成功后自动切换到登录模式
         isLogin.value = true

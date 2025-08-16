@@ -15,19 +15,30 @@ type CreateTransactionRequest struct {
 	Balance      string  `json:"balance" validate:"required"`
 	Amount       string  `json:"amount" validate:"required"`
 	TransID      uint    `json:"trans_id" validate:"required"`
-	Symbol       string  `json:"symbol" validate:"required,oneof=eth btc"`
-	AddressFrom  string  `json:"address_from" validate:"required"`
-	AddressTo    string  `json:"address_to" validate:"required"`
-	GasLimit     uint    `json:"gas_limit" validate:"required"`
-	GasPrice     string  `json:"gas_price" validate:"required"`
-	GasUsed      uint    `json:"gas_used" validate:"gte=0"`
-	Fee          string  `json:"fee" validate:"required"`
-	UsedFee      *string `json:"used_fee,omitempty"`
 	Height       uint64  `json:"height" validate:"required,gt=0"`
 	ContractAddr string  `json:"contract_addr" validate:"required"`
 	Hex          *string `json:"hex,omitempty"`
 	TxScene      string  `json:"tx_scene" validate:"required"`
 	Remark       string  `json:"remark" validate:"max=256"`
+
+	// 链相关字段
+	Chain  string `json:"chain" validate:"required,oneof=btc eth"`
+	Symbol string `json:"symbol" validate:"required,oneof=eth btc"`
+
+	// 地址字段
+	AddressFrom string `json:"address_from" validate:"required"`
+	AddressTo   string `json:"address_to" validate:"required"`
+
+	// Gas相关字段（ETH特有，BTC可为空）
+	GasLimit uint   `json:"gas_limit" validate:"required"`
+	GasPrice string `json:"gas_price" validate:"required"`
+	GasUsed  uint   `json:"gas_used" validate:"gte=0"`
+
+	// 手续费字段
+	Fee        string  `json:"fee" validate:"required"`
+	UsedFee    *string `json:"used_fee,omitempty"`
+	BlockIndex uint    `json:"block_index" validate:"required"`
+	Nonce      uint64  `json:"nonce" validate:"required"`
 }
 
 // UpdateTransactionRequest 更新交易请求DTO
@@ -100,6 +111,12 @@ func (req *CreateTransactionRequest) ToModel() *models.Transaction {
 		Balance:      req.Balance,
 		Amount:       req.Amount,
 		TransID:      req.TransID,
+		Height:       req.Height,
+		ContractAddr: req.ContractAddr,
+		Hex:          req.Hex,
+		TxScene:      req.TxScene,
+		Remark:       req.Remark,
+		Chain:        req.Chain,
 		Symbol:       req.Symbol,
 		AddressFrom:  req.AddressFrom,
 		AddressTo:    req.AddressTo,
@@ -108,11 +125,8 @@ func (req *CreateTransactionRequest) ToModel() *models.Transaction {
 		GasUsed:      req.GasUsed,
 		Fee:          req.Fee,
 		UsedFee:      req.UsedFee,
-		Height:       req.Height,
-		ContractAddr: req.ContractAddr,
-		Hex:          req.Hex,
-		TxScene:      req.TxScene,
-		Remark:       req.Remark,
+		BlockIndex:   req.BlockIndex,
+		Nonce:        req.Nonce,
 		Ctime:        time.Now(),
 		Mtime:        time.Now(),
 	}

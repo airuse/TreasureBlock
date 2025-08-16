@@ -18,7 +18,7 @@ export default defineConfig({
   },
   // 定义全局常量
   define: {
-    __USE_MOCK__: true, // 开发环境使用Mock数据
+    __USE_MOCK__: false, // 开发环境使用Mock数据
   },
   server: {
     https: {
