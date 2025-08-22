@@ -26,12 +26,15 @@ type CreateBlockRequest struct {
 	Weight     uint64 `json:"weight,omitempty"`
 
 	// ETH特有字段
-	GasLimit   uint64 `json:"gas_limit,omitempty"`
-	GasUsed    uint64 `json:"gas_used,omitempty"`
-	Miner      string `json:"miner,omitempty" validate:"omitempty,max=120"`
-	ParentHash string `json:"parent_hash,omitempty" validate:"omitempty,len=66"`
-	Nonce      string `json:"nonce,omitempty" validate:"omitempty,max=20"`
-	Difficulty string `json:"difficulty,omitempty" validate:"omitempty,max=50"`
+	GasLimit    uint64 `json:"gas_limit,omitempty"`
+	GasUsed     uint64 `json:"gas_used,omitempty"`
+	Miner       string `json:"miner,omitempty" validate:"omitempty,max=120"`
+	ParentHash  string `json:"parent_hash,omitempty" validate:"omitempty,len=66"`
+	Nonce       string `json:"nonce,omitempty" validate:"omitempty,max=20"`
+	Difficulty  string `json:"difficulty,omitempty" validate:"omitempty,max=50"`
+	BaseFee     string `json:"base_fee,omitempty" validate:"omitempty,max=100"`
+	BurnedEth   string `json:"burned_eth,omitempty" validate:"omitempty,max=100"`
+	MinerTipEth string `json:"miner_tip_eth,omitempty" validate:"omitempty,max=100"`
 }
 
 // UpdateBlockRequest 更新区块请求DTO
@@ -50,12 +53,15 @@ type UpdateBlockRequest struct {
 	Weight     *uint64 `json:"weight,omitempty"`
 
 	// ETH特有字段
-	GasLimit   *uint64 `json:"gas_limit,omitempty"`
-	GasUsed    *uint64 `json:"gas_used,omitempty"`
-	Miner      *string `json:"miner,omitempty" validate:"omitempty,max=120"`
-	ParentHash *string `json:"parent_hash,omitempty" validate:"omitempty,len=66"`
-	Nonce      *string `json:"nonce,omitempty" validate:"omitempty,max=20"`
-	Difficulty *string `json:"difficulty,omitempty" validate:"omitempty,max=50"`
+	GasLimit    *uint64 `json:"gas_limit,omitempty"`
+	GasUsed     *uint64 `json:"gas_used,omitempty"`
+	Miner       *string `json:"miner,omitempty" validate:"omitempty,max=120"`
+	ParentHash  *string `json:"parent_hash,omitempty" validate:"omitempty,len=66"`
+	Nonce       *string `json:"nonce,omitempty" validate:"omitempty,max=20"`
+	Difficulty  *string `json:"difficulty,omitempty" validate:"omitempty,max=50"`
+	BaseFee     *string `json:"base_fee,omitempty" validate:"omitempty,max=100"`
+	BurnedEth   *string `json:"burned_eth,omitempty" validate:"omitempty,max=100"`
+	MinerTipEth *string `json:"miner_tip_eth,omitempty" validate:"omitempty,max=100"`
 }
 
 // BlockResponse 区块响应DTO
@@ -80,12 +86,15 @@ type BlockResponse struct {
 	Weight     uint64 `json:"weight,omitempty"`
 
 	// ETH特有字段
-	GasLimit   uint64 `json:"gas_limit,omitempty"`
-	GasUsed    uint64 `json:"gas_used,omitempty"`
-	Miner      string `json:"miner,omitempty"`
-	ParentHash string `json:"parent_hash,omitempty"`
-	Nonce      string `json:"nonce,omitempty"`
-	Difficulty string `json:"difficulty,omitempty"`
+	GasLimit    uint64 `json:"gas_limit,omitempty"`
+	GasUsed     uint64 `json:"gas_used,omitempty"`
+	Miner       string `json:"miner,omitempty"`
+	ParentHash  string `json:"parent_hash,omitempty"`
+	Nonce       string `json:"nonce,omitempty"`
+	Difficulty  string `json:"difficulty,omitempty"`
+	BaseFee     string `json:"base_fee,omitempty"`
+	BurnedEth   string `json:"burned_eth,omitempty"`
+	MinerTipEth string `json:"miner_tip_eth,omitempty"`
 
 	// 时间字段
 	CreatedAt time.Time `json:"created_at"`
@@ -123,12 +132,15 @@ func (req *CreateBlockRequest) ToModel() *models.Block {
 		Weight:     req.Weight,
 
 		// ETH特有字段
-		GasLimit:   req.GasLimit,
-		GasUsed:    req.GasUsed,
-		Miner:      req.Miner,
-		ParentHash: req.ParentHash,
-		Nonce:      req.Nonce,
-		Difficulty: req.Difficulty,
+		GasLimit:    req.GasLimit,
+		GasUsed:     req.GasUsed,
+		Miner:       req.Miner,
+		ParentHash:  req.ParentHash,
+		Nonce:       req.Nonce,
+		Difficulty:  req.Difficulty,
+		BaseFee:     req.BaseFee,
+		BurnedEth:   req.BurnedEth,
+		MinerTipEth: req.MinerTipEth,
 	}
 }
 
@@ -186,6 +198,15 @@ func (req *UpdateBlockRequest) ApplyToModel(block *models.Block) {
 	if req.Difficulty != nil {
 		block.Difficulty = *req.Difficulty
 	}
+	if req.BaseFee != nil {
+		block.BaseFee = *req.BaseFee
+	}
+	if req.BurnedEth != nil {
+		block.BurnedEth = *req.BurnedEth
+	}
+	if req.MinerTipEth != nil {
+		block.MinerTipEth = *req.MinerTipEth
+	}
 }
 
 // NewBlockResponse 创建BlockResponse
@@ -212,12 +233,15 @@ func NewBlockResponse(block *models.Block) *BlockResponse {
 		Version:    block.Version,
 		Weight:     block.Weight,
 		// ETH特有
-		GasLimit:   block.GasLimit,
-		GasUsed:    block.GasUsed,
-		Miner:      block.Miner,
-		ParentHash: block.ParentHash,
-		Nonce:      block.Nonce,
-		Difficulty: block.Difficulty,
+		GasLimit:    block.GasLimit,
+		GasUsed:     block.GasUsed,
+		Miner:       block.Miner,
+		ParentHash:  block.ParentHash,
+		Nonce:       block.Nonce,
+		Difficulty:  block.Difficulty,
+		BaseFee:     block.BaseFee,
+		BurnedEth:   block.BurnedEth,
+		MinerTipEth: block.MinerTipEth,
 		// 时间
 		CreatedAt: block.CreatedAt,
 		UpdatedAt: block.UpdatedAt,

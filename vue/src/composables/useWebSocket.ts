@@ -22,7 +22,7 @@ export function useWebSocket(options?: Partial<WebSocketOptions>) {
 
   // 默认配置
   const defaultOptions: WebSocketOptions = {
-    url: 'wss://localhost:8443/ws', // 使用WSS协议连接HTTPS后端
+    url: import.meta.env.VITE_WS_BASE_URL || 'wss://treasureblock.top/ws', // 使用WSS协议连接HTTPS后端
     autoReconnect: true,
     reconnectInterval: 3000,
     maxReconnectAttempts: 5,
@@ -138,7 +138,7 @@ export function useWebSocket(options?: Partial<WebSocketOptions>) {
 // 特定链的WebSocket组合式函数
 export function useChainWebSocket(chain: 'eth' | 'btc') {
   const { subscribe, send, ...rest } = useWebSocket({
-    url: `ws://localhost:8080/ws/${chain}`
+    url: `${import.meta.env.VITE_WS_BASE_URL || 'wss://treasureblock.top/ws'}/${chain}`
   })
 
   // 订阅特定链的事件
@@ -146,6 +146,12 @@ export function useChainWebSocket(chain: 'eth' | 'btc') {
     category: 'transaction' | 'block' | 'address' | 'stats' | 'network',
     callback: (message: WebSocketMessage) => void
   ) => {
+    // 先发送订阅消息到服务器
+    if (rest.manager?.value) {
+      rest.manager.value.sendSubscribe(category, chain)
+    }
+    
+    // 然后订阅本地事件
     return subscribe(`event:${category}`, (message) => {
       // 只处理当前链的消息
       if (message.chain === chain || !message.chain) {
@@ -159,6 +165,12 @@ export function useChainWebSocket(chain: 'eth' | 'btc') {
     category: 'transaction' | 'block' | 'address' | 'stats' | 'network',
     callback: (message: WebSocketMessage) => void
   ) => {
+    // 先发送订阅消息到服务器
+    if (rest.manager?.value) {
+      rest.manager.value.sendSubscribe(category, chain)
+    }
+    
+    // 然后订阅本地事件
     return subscribe(`notification:${category}`, (message) => {
       // 只处理当前链的消息
       if (message.chain === chain || !message.chain) {
@@ -182,11 +194,22 @@ export function useChainWebSocket(chain: 'eth' | 'btc') {
     })
   }
 
+  // 取消订阅特定链的事件
+  const unsubscribeChainEvent = (
+    category: 'transaction' | 'block' | 'address' | 'stats' | 'network'
+  ) => {
+    // 发送取消订阅消息到服务器
+    if (rest.manager?.value) {
+      rest.manager.value.sendUnsubscribe(category, chain)
+    }
+  }
+
   return {
     ...rest,
     subscribeChainEvent,
     subscribeChainNotification,
-    sendChainMessage
+    sendChainMessage,
+    unsubscribeChainEvent
   }
 }
 

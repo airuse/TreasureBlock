@@ -1,30 +1,34 @@
 package models
 
 import (
+	"math/big"
 	"time"
 )
 
 // Block 区块模型
 type Block struct {
-	Hash             string    `json:"hash"`
-	Height           uint64    `json:"height"`
-	PreviousHash     string    `json:"previous_hash"`
-	MerkleRoot       string    `json:"merkle_root"`
-	Timestamp        time.Time `json:"timestamp"`
-	Difficulty       float64   `json:"difficulty"`
-	Nonce            uint64    `json:"nonce"`
-	Size             uint64    `json:"size"`
-	TransactionCount int       `json:"transaction_count"`
-	TotalAmount      float64   `json:"total_amount"`
-	Fee              float64   `json:"fee"`
-	Confirmations    uint64    `json:"confirmations"`
-	IsOrphan         bool      `json:"is_orphan"`
-	Chain            string    `json:"chain"`
-	Version          int       `json:"version"`
-	Bits             string    `json:"bits"`
-	Weight           uint64    `json:"weight"`
-	StrippedSize     uint64    `json:"stripped_size"`
-	Miner            string    `json:"miner,omitempty"` // 矿工地址
+	Hash             string     `json:"hash"`
+	Height           uint64     `json:"height"`
+	PreviousHash     string     `json:"previous_hash"`
+	MerkleRoot       string     `json:"merkle_root"`
+	Timestamp        time.Time  `json:"timestamp"`
+	Difficulty       float64    `json:"difficulty"`
+	Nonce            uint64     `json:"nonce"`
+	Size             uint64     `json:"size"`
+	TransactionCount int        `json:"transaction_count"`
+	TotalAmount      float64    `json:"total_amount"`
+	Fee              float64    `json:"fee"`
+	Confirmations    uint64     `json:"confirmations"`
+	IsOrphan         bool       `json:"is_orphan"`
+	Chain            string     `json:"chain"`
+	Version          int        `json:"version"`
+	Bits             string     `json:"bits"`
+	Weight           uint64     `json:"weight"`
+	StrippedSize     uint64     `json:"stripped_size"`
+	Miner            string     `json:"miner,omitempty"` // 矿工地址
+	BaseFee          *big.Int   `json:"base_fee,omitempty"`
+	BurnedEth        *big.Float `json:"burned_eth,omitempty"`
+	MinerTipEth      *big.Float `json:"miner_tip_eth,omitempty"`
 }
 
 // BlockResponse 区块响应

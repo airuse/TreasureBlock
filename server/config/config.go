@@ -2,12 +2,17 @@ package config
 
 import (
 	"fmt"
+	"io"
+	"log"
 	"os"
+	"path/filepath"
 	"strconv"
 	"time"
 
+	"github.com/gin-gonic/gin"
 	"github.com/joho/godotenv"
 	"github.com/sirupsen/logrus"
+	lumberjack "gopkg.in/natefinch/lumberjack.v2"
 	"gopkg.in/yaml.v3"
 )
 
@@ -156,6 +161,56 @@ func Load() error {
 		level = logrus.InfoLevel
 	}
 	logrus.SetLevel(level)
+
+	// 设置日志格式
+	switch AppConfig.Log.Format {
+	case "json":
+		logrus.SetFormatter(&logrus.JSONFormatter{})
+	default:
+		logrus.SetFormatter(&logrus.TextFormatter{FullTimestamp: true})
+	}
+
+	// 配置日志输出（控制台与文件可同时启用）
+	var writers []io.Writer
+	if AppConfig.Log.Output == "stdout" || AppConfig.Log.Output == "" {
+		writers = append(writers, os.Stdout)
+	} else if AppConfig.Log.Output == "stderr" {
+		writers = append(writers, os.Stderr)
+	}
+	if AppConfig.Log.File.Enabled {
+		logDir := AppConfig.Log.File.Path
+		if logDir == "" {
+			logDir = "."
+		}
+		if err := os.MkdirAll(logDir, 0755); err != nil {
+			return fmt.Errorf("failed to create log directory: %w", err)
+		}
+		logFile := filepath.Join(logDir, "server.log")
+		writers = append(writers, &lumberjack.Logger{
+			Filename:   logFile,
+			MaxSize:    AppConfig.Log.File.MaxSize,
+			MaxBackups: AppConfig.Log.File.MaxBackups,
+			MaxAge:     AppConfig.Log.File.MaxAge,
+			Compress:   true,
+		})
+	}
+	if len(writers) > 0 {
+		logrus.SetOutput(io.MultiWriter(writers...))
+	} else {
+		logrus.SetOutput(os.Stdout)
+	}
+
+	// 同步 Gin 的输出到相同的 writer
+	gin.DisableConsoleColor()
+	if len(writers) > 0 {
+		mw := io.MultiWriter(writers...)
+		gin.DefaultWriter = mw
+		gin.DefaultErrorWriter = mw
+	}
+
+	// 将标准库 log 的输出重定向到 logrus，使其也写入相同的目标
+	log.SetOutput(logrus.StandardLogger().Writer())
+	log.SetFlags(0)
 
 	return nil
 }

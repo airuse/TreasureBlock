@@ -1,9 +1,30 @@
 package dto
 
 import (
-	"blockChainBrowser/server/internal/models"
+	"encoding/json"
 	"time"
+
+	"blockChainBrowser/server/internal/models"
 )
+
+// TransactionReceiptData 交易凭证数据（对齐go-ethereum Receipt的JSON字段）
+type TransactionReceiptData struct {
+	Type              interface{}              `json:"type,omitempty"`
+	Root              *string                  `json:"root,omitempty"`
+	Status            interface{}              `json:"status,omitempty"`
+	CumulativeGasUsed interface{}              `json:"cumulativeGasUsed,omitempty"`
+	LogsBloom         *string                  `json:"logsBloom,omitempty"`
+	Logs              []map[string]interface{} `json:"logs,omitempty"`
+	TransactionHash   *string                  `json:"transactionHash,omitempty"`
+	ContractAddress   *string                  `json:"contractAddress,omitempty"`
+	GasUsed           interface{}              `json:"gasUsed,omitempty"`
+	EffectiveGasPrice interface{}              `json:"effectiveGasPrice,omitempty"`
+	BlobGasUsed       interface{}              `json:"blobGasUsed,omitempty"`
+	BlobGasPrice      interface{}              `json:"blobGasPrice,omitempty"`
+	BlockHash         *string                  `json:"blockHash,omitempty"`
+	BlockNumber       interface{}              `json:"blockNumber,omitempty"`
+	TransactionIndex  interface{}              `json:"transactionIndex,omitempty"`
+}
 
 // CreateTransactionRequest 创建交易请求DTO - 匹配现有Transaction表结构
 type CreateTransactionRequest struct {
@@ -39,6 +60,10 @@ type CreateTransactionRequest struct {
 	UsedFee    *string `json:"used_fee,omitempty"`
 	BlockIndex uint    `json:"block_index" validate:"required"`
 	Nonce      uint64  `json:"nonce" validate:"required"`
+
+	// 新增字段
+	Logs    []map[string]interface{} `json:"logs,omitempty"`    // 日志数据（存储在交易表）
+	Receipt *TransactionReceiptData  `json:"receipt,omitempty"` // 凭证数据（存储在凭证表）
 }
 
 // UpdateTransactionRequest 更新交易请求DTO
@@ -102,6 +127,14 @@ type TransactionListResponse struct {
 
 // ToModel 将CreateTransactionRequest转换为Transaction模型
 func (req *CreateTransactionRequest) ToModel() *models.Transaction {
+	// 处理日志数据
+	var logsJSON string
+	if req.Logs != nil {
+		if logsBytes, err := json.Marshal(req.Logs); err == nil {
+			logsJSON = string(logsBytes)
+		}
+	}
+
 	return &models.Transaction{
 		TxID:         req.TxID,
 		TxType:       req.TxType,
@@ -127,6 +160,7 @@ func (req *CreateTransactionRequest) ToModel() *models.Transaction {
 		UsedFee:      req.UsedFee,
 		BlockIndex:   req.BlockIndex,
 		Nonce:        req.Nonce,
+		Logs:         logsJSON,
 		Ctime:        time.Now(),
 		Mtime:        time.Now(),
 	}

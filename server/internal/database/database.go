@@ -3,10 +3,12 @@ package database
 import (
 	"fmt"
 	"log"
+	"time"
 
 	"blockChainBrowser/server/config"
 	"blockChainBrowser/server/internal/models"
 
+	"github.com/sirupsen/logrus"
 	"gorm.io/driver/mysql"
 	"gorm.io/gorm"
 	"gorm.io/gorm/logger"
@@ -28,8 +30,21 @@ func Init() error {
 			config.AppConfig.Database.DBName,
 		)
 
+		// 使用自定义 GORM 日志器，输出到与 logrus 相同的 writer
+		stdLogger := log.New(logrus.StandardLogger().Writer(), "", 0)
+		gormLogger := logger.New(
+			stdLogger,
+			logger.Config{
+				SlowThreshold:             200 * time.Millisecond,
+				LogLevel:                  logger.Info,
+				IgnoreRecordNotFoundError: true,
+				ParameterizedQueries:      true,
+				Colorful:                  false,
+			},
+		)
+
 		DB, err = gorm.Open(mysql.Open(dsn), &gorm.Config{
-			Logger: logger.Default.LogMode(logger.Info),
+			Logger: gormLogger,
 		})
 
 		if err != nil {
@@ -72,6 +87,7 @@ func autoMigrate() error {
 		&models.UserAddress{},
 		&models.BaseConfig{},
 		&models.CoinConfig{},
+		&models.TransactionReceipt{},
 	)
 }
 

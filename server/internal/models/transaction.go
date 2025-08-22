@@ -44,6 +44,9 @@ type Transaction struct {
 	Nonce      uint64 `json:"nonce" gorm:"type:bigint(20) unsigned;not null;default:0;column:nonce;comment:交易序号（ETH）或输入索引（BTC）"`
 	BlockIndex uint   `json:"block_index" gorm:"type:int(11) unsigned;not null;default:0;column:block_index;comment:交易在区块中的索引位置"`
 
+	// 日志数据字段
+	Logs string `json:"logs" gorm:"type:longtext;column:logs;comment:交易日志数据(JSON格式)"`
+
 	// 时间字段
 	Ctime     time.Time      `json:"ctime" gorm:"type:timestamp;not null;default:CURRENT_TIMESTAMP;column:ctime;comment:入库时间"`
 	Mtime     time.Time      `json:"mtime" gorm:"type:timestamp;not null;default:CURRENT_TIMESTAMP;column:mtime;comment:更改时间"`

@@ -25,12 +25,13 @@ type Config struct {
 
 // ServerConfig 服务器配置
 type ServerConfig struct {
-	Host      string    `yaml:"host"`
-	Port      int       `yaml:"port"`
-	Protocol  string    `yaml:"protocol"`
-	APIKey    string    `yaml:"api_key"`
-	SecretKey string    `yaml:"secret_key"`
-	TLS       TLSConfig `yaml:"tls"`
+	Host        string    `yaml:"host"`
+	Port        int       `yaml:"port"`
+	Protocol    string    `yaml:"protocol"`
+	Environment string    `yaml:"environment"` // 环境标识：development, production
+	APIKey      string    `yaml:"api_key"`
+	SecretKey   string    `yaml:"secret_key"`
+	TLS         TLSConfig `yaml:"tls"`
 }
 
 // TLSConfig TLS配置
@@ -286,7 +287,7 @@ func loadServerConfig() error {
 		AppConfig.Server.Port)
 
 	// 创建API实例
-	api := pkg.NewScannerAPI(serverURL, AppConfig.Server.APIKey, AppConfig.Server.SecretKey, logrus.StandardLogger())
+	api := pkg.NewScannerAPI(serverURL, AppConfig.Server.APIKey, AppConfig.Server.SecretKey, AppConfig.Server.Environment, logrus.StandardLogger())
 	ScannerAPIInstance = api // 保存全局API实例
 
 	logrus.Infof("Initializing scanner API with server: %s", serverURL)

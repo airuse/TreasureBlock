@@ -4,11 +4,24 @@
     <div class="flex justify-between items-center">
       <h1 class="text-2xl font-bold text-gray-900">区块列表</h1>
       <div class="flex items-center space-x-4">
+        <!-- WebSocket连接状态 -->
+        <div class="flex items-center space-x-2">
+          <div 
+            :class="[
+              'w-2 h-2 rounded-full',
+              isConnected ? 'bg-green-400' : 'bg-red-400'
+            ]"
+          ></div>
+          <span class="text-xs text-gray-500">
+            {{ isConnected ? '实时连接' : '连接断开' }}
+          </span>
+        </div>
+        
         <div class="text-sm text-gray-500">
           共 {{ totalBlocks.toLocaleString() }} 个区块
         </div>
         <div v-if="!authStore.isAuthenticated" class="text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded">
-          游客模式：仅显示20个区块
+          游客模式：仅显示100个区块
         </div>
       </div>
     </div>
@@ -299,8 +312,8 @@ const loadData = async () => {
       // 未登录用户：调用 /no-auth/ 下的API（有限制）
       console.log('👤 未登录用户，调用 /no-auth/ API 获取区块列表（有限制）')
       const response = await blocksApi.getBlocksPublic({ 
-        page: 1, 
-        page_size: 20, // 限制为20个区块
+        page: currentPage.value, 
+        page_size: Math.min(pageSize.value, 100), // 使用动态分页大小，但限制最大100个
         chain: 'eth' 
       })
       
@@ -387,7 +400,7 @@ const goToPage = (page: number) => {
 }
 
 // WebSocket集成
-const { subscribeChainEvent } = useChainWebSocket('eth')
+const { subscribeChainEvent, unsubscribeChainEvent, isConnected } = useChainWebSocket('eth')
 
 function handleBlockCountUpdate(message: any) {
   if (message.data && typeof message.data.totalBlocks === 'number') {
@@ -396,44 +409,172 @@ function handleBlockCountUpdate(message: any) {
 }
 
 function handleNewBlock(message: any) {
+  console.log('🔔 收到新区块WebSocket消息:', message)
+  
   // 只在第一页才动画插入
   if (currentPage.value === 1 && message.data) {
     const newBlock: BlockData = {
-      height: message.data.height,
-      timestamp: message.data.timestamp,
-      transactions: message.data.transactions,
+      height: message.data.height || message.data.number,
+      timestamp: typeof message.data.timestamp === 'string' 
+        ? new Date(message.data.timestamp).getTime() / 1000 
+        : message.data.timestamp,
+      transactions: message.data.transaction_count || message.data.transactions || 0,
       size: message.data.size,
-      gasUsed: message.data.gasUsed,
-      gasLimit: message.data.gasLimit,
-      miner: message.data.miner,
-      reward: message.data.reward
+      gasUsed: message.data.gas_used || message.data.gasUsed || 0,
+      gasLimit: message.data.gas_limit || message.data.gasLimit || 0,
+      miner: message.data.miner || '',
+      reward: message.data.total_amount || message.data.reward || 0
     }
     
-    blocks.value.unshift(newBlock)
-    if (blocks.value.length > pageSize.value) {
-      blocks.value.pop()
+    // 实现最新区块插入到列表头部的逻辑
+    // 1. 先删除列表中最晚的一条（如果列表已满）
+    if (blocks.value.length >= pageSize.value) {
+      blocks.value.pop() // 删除最后一条
     }
+    
+    // 2. 在列表头部插入最新区块
+    blocks.value.unshift(newBlock)
+    
+    // 3. 更新总数（如果后端没有实时更新）
+    if (totalBlocks.value > 0) {
+      totalBlocks.value++
+    }
+    
+    console.log('✅ 新区块已插入到列表头部:', newBlock.height)
+  }
+}
+
+function handleStatsUpdate(message: any) {
+  if (message.data && typeof message.data.totalBlocks === 'number') {
+    totalBlocks.value = message.data.totalBlocks
+    console.log('📊 统计信息更新:', message.data)
   }
 }
 
 onMounted(() => {
   loadData()
-  const unsubscribeStats = subscribeChainEvent('stats', handleBlockCountUpdate)
+  
+  // 订阅WebSocket事件
   const unsubscribeBlocks = subscribeChainEvent('block', handleNewBlock)
+  const unsubscribeStats = subscribeChainEvent('stats', handleStatsUpdate)
   
   onUnmounted(() => {
-    unsubscribeStats()
+    // 取消WebSocket订阅
     unsubscribeBlocks()
+    unsubscribeStats()
+    
+    // 同时取消服务器端订阅
+    unsubscribeChainEvent('block')
+    unsubscribeChainEvent('stats')
   })
 })
 
 // 监听搜索查询
 watch(searchQuery, (newQuery) => {
   if (newQuery) {
-    // 这里应该实现搜索逻辑
-    console.log('搜索:', newQuery)
+    // 实现搜索逻辑
+    console.log('🔍 搜索区块:', newQuery)
+    performSearch(newQuery)
+  } else {
+    // 清空搜索，重新加载默认数据
+    console.log('🔄 清空搜索，重新加载数据')
+    currentPage.value = 1
+    loadData()
   }
 })
+
+// 执行搜索
+const performSearch = async (query: string) => {
+  try {
+    isLoading.value = true
+    console.log('🔍 开始搜索区块:', query)
+    
+    // 根据登录状态调用不同的搜索API
+    if (authStore.isAuthenticated) {
+      // 已登录用户：调用 /v1/ 下的搜索API
+      console.log('🔐 已登录用户，调用 /v1/ API 搜索区块')
+      const response = await blocksApi.searchBlocks({ 
+        query: query,
+        page: 1, 
+        page_size: pageSize.value
+      })
+      
+      if (response && response.success === true) {
+        console.log('📊 搜索返回数据:', response.data)
+        handleSearchResults(response.data, query)
+      } else {
+        console.error('搜索失败:', response?.message)
+        // 搜索失败时显示空结果
+        blocks.value = []
+        totalBlocks.value = 0
+      }
+    } else {
+      // 未登录用户：调用 /no-auth/ 下的搜索API
+      console.log('👤 未登录用户，调用 /no-auth/ API 搜索区块')
+      const response = await blocksApi.searchBlocksPublic({ 
+        query: query,
+        page: 1, 
+        page_size: Math.min(pageSize.value, 20) // 限制为20个
+      })
+      
+      if (response && response.success === true) {
+        console.log('📊 搜索返回数据:', response.data)
+        handleSearchResults(response.data, query)
+      } else {
+        console.error('搜索失败:', response?.message)
+        // 搜索失败时显示空结果
+        blocks.value = []
+        totalBlocks.value = 0
+      }
+    }
+  } catch (error) {
+    console.error('搜索出错:', error)
+    // 搜索出错时显示空结果
+    blocks.value = []
+    totalBlocks.value = 0
+  } finally {
+    isLoading.value = false
+  }
+}
+
+// 处理搜索结果
+const handleSearchResults = (responseData: any, query: string) => {
+  let blocksData: any[] = []
+  let totalCount = 0
+  
+  // 检查不同的数据结构
+  if (Array.isArray(responseData)) {
+    blocksData = responseData
+    totalCount = responseData.length
+  } else if (responseData?.blocks && Array.isArray(responseData.blocks)) {
+    blocksData = responseData.blocks
+    totalCount = responseData.total || responseData.blocks.length
+  } else if (responseData?.data && Array.isArray(responseData.data)) {
+    blocksData = responseData.data
+    totalCount = responseData.pagination?.total || responseData.data.length
+  } else {
+    console.warn('未知的搜索响应数据结构:', responseData)
+    blocksData = []
+    totalCount = 0
+  }
+  
+  // 转换搜索结果
+  blocks.value = blocksData.map((block: any) => ({
+    height: block.height || block.number,
+    timestamp: typeof block.timestamp === 'string' ? new Date(block.timestamp).getTime() / 1000 : block.timestamp,
+    transactions: block.transaction_count || block.transactions || 0,
+    size: block.size,
+    gasUsed: block.gas_used || block.gasUsed || 0,
+    gasLimit: block.gas_limit || block.gasLimit || 0,
+    miner: block.miner || '',
+    reward: block.total_amount || block.reward || 0
+  }))
+  
+  totalBlocks.value = totalCount
+  currentPage.value = 1 // 搜索后重置到第一页
+  
+  console.log('✅ 搜索完成:', query, '找到', totalCount, '个结果')
+}
 
 // 监听页面大小变化
 watch(pageSize, () => {

@@ -172,3 +172,20 @@ export function searchBlocks(data: SearchBlocksRequest): Promise<PaginatedRespon
     params: data
   })
 }
+
+/**
+ * 搜索区块（公开接口，有限制）
+ */
+export function searchBlocksPublic(data: SearchBlocksRequest): Promise<PaginatedResponse<Block>> {
+  if (__USE_MOCK__) {
+    console.log('🔧 使用Mock数据 - searchBlocksPublic')
+    return handleMockGetBlocks(data) as Promise<PaginatedResponse<Block>>
+  }
+  
+  console.log('🌐 使用真实API - searchBlocksPublic (公开接口)')
+  return request({
+    url: '/api/no-auth/blocks/search',
+    method: 'GET',
+    params: data
+  })
+}

@@ -1,12 +1,12 @@
 import { ref, computed } from 'vue'
 
-// WebSocket消息类型定义
+// WebSocket消息类型定义 - 与后端三级分类保持一致
 export interface WebSocketMessage {
   type: 'event' | 'notification'  // 第一级别：事件或通知
   category: 'transaction' | 'block' | 'address' | 'stats' | 'network'  // 第二级别：数据类型
   data: Record<string, unknown>  // 第三级别：真实数据
   timestamp: number
-  chain?: 'eth' | 'btc'  // 可选：指定链类型
+  chain: 'eth' | 'btc'  // 区块链类型
 }
 
 // WebSocket事件类型
@@ -160,7 +160,10 @@ class WebSocketManager {
       'data' in message &&
       (message as WebSocketMessage).data !== undefined &&
       'timestamp' in message &&
-      typeof (message as WebSocketMessage).timestamp === 'number'
+      typeof (message as WebSocketMessage).timestamp === 'number' &&
+      'chain' in message &&
+      typeof (message as WebSocketMessage).chain === 'string' &&
+      ['eth', 'btc'].includes((message as WebSocketMessage).chain)
     ) as boolean
   }
 
@@ -176,6 +179,50 @@ class WebSocketManager {
       return true
     } catch (error) {
       console.error('Failed to send message:', error)
+      return false
+    }
+  }
+
+  // 发送订阅消息
+  public sendSubscribe(category: string, chain: string): boolean {
+    const subscribeMessage = {
+      type: 'subscribe',
+      category: category,
+      chain: chain
+    }
+    
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.warn('WebSocket is not connected')
+      return false
+    }
+
+    try {
+      this.ws.send(JSON.stringify(subscribeMessage))
+      return true
+    } catch (error) {
+      console.error('Failed to send subscribe message:', error)
+      return false
+    }
+  }
+
+  // 发送取消订阅消息
+  public sendUnsubscribe(category: string, chain: string): boolean {
+    const unsubscribeMessage = {
+      type: 'unsubscribe',
+      category: category,
+      chain: chain
+    }
+    
+    if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
+      console.warn('WebSocket is not connected')
+      return false
+    }
+
+    try {
+      this.ws.send(JSON.stringify(unsubscribeMessage))
+      return true
+    } catch (error) {
+      console.error('Failed to send unsubscribe message:', error)
       return false
     }
   }
@@ -220,7 +267,8 @@ class WebSocketManager {
             type: 'event',
             category: 'network',
             data: { type: 'heartbeat' },
-            timestamp: Date.now()
+            timestamp: Date.now(),
+            chain: 'eth'
           })
         }
       }, this.options.heartbeatInterval)

@@ -152,113 +152,130 @@ func (bs *BlockScanner) scanChain(chainName string, scanner Scanner) {
 	logrus.Infof("[%s] Starting continuous scanning for chain %s", chainName, chainName)
 
 	// 保存一下上次扫描的高度，避免重复扫描
-	lastScanHeight := uint64(0)
+	var lastScanHeight uint64
+	var heightMutex sync.RWMutex
 
-	// 持续扫描循环 - 永不停止直到程序关闭
-	for bs.IsRunning() {
-		// 获取最新区块高度
-		latestHeight, err := scanner.GetLatestBlockHeight()
-		if err != nil {
-			logrus.Errorf("[%s] Failed to get latest block height: %v", chainName, err)
-			time.Sleep(chainConfig.Scan.RetryDelay)
-			continue
+	// 创建定时器
+	ticker := time.NewTicker(chainConfig.Scan.Interval)
+	defer ticker.Stop()
+
+	// 持续扫描循环 - 使用定时器确保精确的扫描间隔
+	for {
+		select {
+		case <-bs.stopChan:
+			logrus.Infof("[%s] Stopped continuous scanning", chainName)
+			return
+		case <-ticker.C:
+			// 使用协程处理单个扫描周期，避免阻塞定时器
+			go bs.processScanCycle(chainName, scanner, chainConfig, &lastScanHeight, &heightMutex)
 		}
+	}
+}
 
-		// 计算确认后的安全高度
-		safeHeight := latestHeight
-		if latestHeight > uint64(chainConfig.Scan.Confirmations) {
-			safeHeight = latestHeight - uint64(chainConfig.Scan.Confirmations)
-		}
-
-		if lastScanHeight > 0 && lastScanHeight >= safeHeight {
-			time.Sleep(chainConfig.Scan.Interval)
-			continue
-		}
-
-		// 如果安全高度为0，说明还没有足够的确认，等待新区块
-		if safeHeight == 0 {
-			logrus.Debugf("[%s] Safe height is 0, waiting for more confirmations (latest: %d, confirmations: %d)",
-				chainName, latestHeight, chainConfig.Scan.Confirmations)
-			time.Sleep(chainConfig.Scan.Interval)
-			continue
-		}
-
-		// 扫描当前高度的区块
-		logrus.Infof("[%s] Scanning block at height %d (latest: %d, safe: %d)", chainName, safeHeight, latestHeight, safeHeight)
-
-		// 扫描单个区块
-		bs.scanSingleBlock(chainName, scanner, safeHeight, chainConfig)
-
-		lastScanHeight = safeHeight
-		// 按照配置的间隔休息
-		time.Sleep(chainConfig.Scan.Interval)
+// processScanCycle 处理单个扫描周期
+func (bs *BlockScanner) processScanCycle(chainName string, scanner Scanner, chainConfig *config.ChainConfig, lastScanHeight *uint64, heightMutex *sync.RWMutex) {
+	// 获取最新区块高度
+	latestHeight, err := scanner.GetLatestBlockHeight()
+	if err != nil {
+		logrus.Errorf("[%s] Failed to get latest block height: %v", chainName, err)
+		return
 	}
 
-	logrus.Infof("[%s] Stopped continuous scanning", chainName)
+	// 计算确认后的安全高度
+	safeHeight := latestHeight
+	if latestHeight > uint64(chainConfig.Scan.Confirmations) {
+		safeHeight = latestHeight - uint64(chainConfig.Scan.Confirmations)
+	}
+
+	// 线程安全地检查是否需要扫描
+	heightMutex.RLock()
+	lastHeight := *lastScanHeight
+	heightMutex.RUnlock()
+
+	if lastHeight > 0 && lastHeight >= safeHeight {
+		return
+	}
+
+	// 如果安全高度为0，说明还没有足够的确认，等待新区块
+	if safeHeight == 0 {
+		logrus.Debugf("[%s] Safe height is 0, waiting for more confirmations (latest: %d, confirmations: %d)",
+			chainName, latestHeight, chainConfig.Scan.Confirmations)
+		return
+	}
+
+	// 检查是否有遗漏的区块需要补扫
+	startHeight := lastHeight + 1
+	if startHeight == 1 { // 第一次扫描
+		startHeight = safeHeight
+	}
+
+	// 扫描从startHeight到safeHeight的所有区块
+	for height := startHeight; height <= safeHeight; height++ {
+		select {
+		case <-bs.stopChan:
+			return // 如果收到停止信号，立即退出
+		default:
+			logrus.Infof("[%s] Scanning block at height %d (latest: %d, safe: %d)", chainName, height, latestHeight, safeHeight)
+
+			// 扫描单个区块
+			go bs.scanSingleBlock(chainName, scanner, height, chainConfig)
+
+			// 线程安全地更新最后扫描高度
+			heightMutex.Lock()
+			*lastScanHeight = height
+			heightMutex.Unlock()
+		}
+	}
 }
 
 // scanSingleBlock 扫描单个区块
 func (bs *BlockScanner) scanSingleBlock(chainName string, scanner Scanner, height uint64, chainConfig *config.ChainConfig) {
 	startTime := time.Now()
 
-	// 重试机制
-	for retry := 0; retry <= chainConfig.Scan.MaxRetries; retry++ {
-		block, err := scanner.GetBlockByHeight(height)
-		if err != nil {
-			if retry < chainConfig.Scan.MaxRetries {
-				logrus.Warnf("[%s] Failed to get block %d (retry %d/%d): %v",
-					chainName, height, retry+1, chainConfig.Scan.MaxRetries, err)
-				time.Sleep(chainConfig.Scan.RetryDelay)
-				continue
-			} else {
-				logrus.Errorf("[%s] Failed to get block %d after %d retries: %v",
-					chainName, height, chainConfig.Scan.MaxRetries, err)
-				return
-			}
-		}
-
-		// 验证区块
-		if err := scanner.ValidateBlock(block); err != nil {
-			logrus.Errorf("[%s] Block validation failed for block %d: %v", chainName, height, err)
-			return
-		}
-
-		// 获取交易信息 - 直接从区块获取，避免哈希不一致问题
-		transactions, err := scanner.GetBlockTransactionsFromBlock(block)
-		if err != nil {
-			logrus.Warnf("[%s] Failed to get transactions for block %d: %v", chainName, height, err)
-		} else {
-			scanner.CalculateBlockStats(block, transactions)
-			// 提取到服务器
-		}
-
-		// 上传交易信息到服务器
-		if len(transactions) > 0 {
-			if err := bs.submitTransactionsToServer(chainName, block, transactions); err != nil {
-				logrus.Warnf("[%s] Failed to submit transactions for block %d: %v", chainName, height, err)
-			} else {
-				logrus.Infof("[%s] Successfully submitted %d transactions for block %d", chainName, len(transactions), height)
-			}
-		}
-
-		// 提交到服务器
-		if err := bs.submitBlockToServer(block); err != nil {
-			logrus.Errorf("[%s] Failed to submit block %d to server: %v", chainName, height, err)
-			return
-		}
-
-		// 保存到文件（如果启用）
-		if chainConfig.Scan.SaveToFile {
-			if err := bs.saveBlockToFile(block, chainConfig.Scan.OutputDir); err != nil {
-				logrus.Warnf("[%s] Failed to save block %d to file: %v", chainName, height, err)
-			}
-		}
-
-		processTime := time.Since(startTime).Milliseconds()
-		logrus.Infof("[%s] Successfully processed block %d (hash: %s, %d tx, %dms)",
-			chainName, height, block.Hash[:16]+"...", block.TransactionCount, processTime)
-		return // 单个区块扫描成功后退出
+	block, err := scanner.GetBlockByHeight(height)
+	if err != nil {
+		logrus.Errorf("[%s] Failed to get block %d: %v", chainName, height, err)
+		return
 	}
+
+	// 验证区块
+	if err := scanner.ValidateBlock(block); err != nil {
+		logrus.Errorf("[%s] Block validation failed for block %d: %v", chainName, height, err)
+		return
+	}
+
+	// 获取交易信息 - 直接从区块获取，避免哈希不一致问题
+	transactions, err := scanner.GetBlockTransactionsFromBlock(block)
+	if err != nil {
+		logrus.Warnf("[%s] Failed to get transactions for block %d: %v", chainName, height, err)
+	} else {
+		scanner.CalculateBlockStats(block, transactions)
+		// 提取到服务器
+	}
+
+	// 上传交易信息到服务器
+	if len(transactions) > 0 {
+		if err := bs.submitTransactionsToServer(chainName, block, transactions); err != nil {
+			logrus.Warnf("[%s] Failed to submit transactions for block %d: %v", chainName, height, err)
+		}
+	}
+
+	// 提交到服务器
+	if err := bs.submitBlockToServer(block); err != nil {
+		logrus.Errorf("[%s] Failed to submit block %d to server: %v", chainName, height, err)
+		return
+	}
+
+	// 保存到文件（如果启用）
+	if chainConfig.Scan.SaveToFile {
+		if err := bs.saveBlockToFile(block, chainConfig.Scan.OutputDir); err != nil {
+			logrus.Warnf("[%s] Failed to save block %d to file: %v", chainName, height, err)
+		}
+	}
+
+	processTime := time.Since(startTime).Milliseconds()
+	logrus.Infof("[%s] Successfully processed block %d (hash: %s, %d tx, %dms)",
+		chainName, height, block.Hash[:16]+"...", block.TransactionCount, processTime)
 }
 
 // submitBlockToServer 提交区块到服务器
@@ -292,6 +309,24 @@ func (bs *BlockScanner) submitBlockToServer(block *models.Block) error {
 		ParentHash:       block.PreviousHash, // 近似映射
 		Nonce:            fmt.Sprintf("%d", block.Nonce),
 		Difficulty:       fmt.Sprintf("%f", block.Difficulty),
+		BaseFee: func() string {
+			if block.BaseFee != nil {
+				return block.BaseFee.String()
+			}
+			return ""
+		}(),
+		BurnedEth: func() string {
+			if block.BurnedEth != nil {
+				return block.BurnedEth.Text('f', 18)
+			}
+			return ""
+		}(),
+		MinerTipEth: func() string {
+			if block.MinerTipEth != nil {
+				return block.MinerTipEth.Text('f', 18)
+			}
+			return ""
+		}(),
 	}
 
 	// 使用API上传区块
@@ -379,6 +414,8 @@ func (bs *BlockScanner) submitTransactionsToServer(chainName string, block *mode
 			"tx_scene":      "blockchain_scan",
 			"remark":        "Scanned from blockchain",
 			"block_index":   tx["block_index"],
+			"logs":          tx["logs"],
+			"receipt":       tx["receipt"],
 		}
 
 		// 上传交易

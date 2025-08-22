@@ -1,10 +1,10 @@
 # 区块链浏览器后端服务配置
 
 server:
-  host: "localhost"
+  host: "0.0.0.0"
   port: 8080
-  tls_enabled: true
-  tls_port: 8443
+  tls_enabled: false
+  tls_port: 0
   cert_file: "./certs/localhost.crt"
   key_file: "./certs/localhost.key"
   read_timeout: 30s

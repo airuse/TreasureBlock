@@ -8,7 +8,7 @@
           共 {{ totalBlocks.toLocaleString() }} 个区块
         </div>
         <div v-if="!authStore.isAuthenticated" class="text-xs text-orange-600 bg-orange-50 px-2 py-1 rounded">
-          游客模式：仅显示20个区块
+          游客模式：仅显示100个区块
         </div>
       </div>
     </div>

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"encoding/json"
 	"net/http"
 	"strconv"
 
@@ -12,13 +13,15 @@ import (
 
 // TransactionHandler 交易处理器
 type TransactionHandler struct {
-	txService services.TransactionService
+	txService      services.TransactionService
+	receiptService services.TransactionReceiptService
 }
 
 // NewTransactionHandler 创建交易处理器
-func NewTransactionHandler(txService services.TransactionService) *TransactionHandler {
+func NewTransactionHandler(txService services.TransactionService, receiptService services.TransactionReceiptService) *TransactionHandler {
 	return &TransactionHandler{
-		txService: txService,
+		txService:      txService,
+		receiptService: receiptService,
 	}
 }
 
@@ -208,36 +211,84 @@ func (h *TransactionHandler) ListTransactionsPublic(c *gin.Context) {
 
 // CreateTransaction 创建交易记录
 func (h *TransactionHandler) CreateTransaction(c *gin.Context) {
-	var req dto.CreateTransactionRequest
-	if err := c.ShouldBindJSON(&req); err != nil {
-		c.JSON(http.StatusBadRequest, gin.H{
-			"success": false,
-			"error":   "请求参数验证失败",
-			"details": err.Error(),
-		})
+	var rawData map[string]interface{}
+	if err := c.ShouldBindJSON(&rawData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "请求参数验证失败", "details": err.Error()})
 		return
 	}
 
-	// 转换为模型
-	tx := req.ToModel()
+	var req dto.CreateTransactionRequest
+	if err := mapToStruct(rawData, &req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "交易数据转换失败", "details": err.Error()})
+		return
+	}
 
-	// 调用服务创建交易
-	err := h.txService.CreateTransaction(c.Request.Context(), tx)
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{
-			"success": false,
-			"error":   "创建交易失败",
-			"details": err.Error(),
-		})
+	if req.Receipt != nil {
+		receiptData := map[string]interface{}{"tx_hash": req.TxID, "chain": req.Chain}
+
+		// type -> tx_type (convert interface{} to uint8)
+		if req.Receipt.Type != nil {
+			if v := convertToUint64(req.Receipt.Type); v != nil {
+				if *v <= 255 {
+					receiptData["tx_type"] = uint8(*v)
+				}
+			}
+		}
+		if req.Receipt.Root != nil {
+			receiptData["post_state"] = *req.Receipt.Root
+		}
+		if req.Receipt.Status != nil {
+			if v := convertToUint64(req.Receipt.Status); v != nil {
+				receiptData["status"] = *v
+			}
+		}
+		if req.Receipt.CumulativeGasUsed != nil {
+			if v := convertToUint64(req.Receipt.CumulativeGasUsed); v != nil {
+				receiptData["cumulative_gas_used"] = *v
+			}
+		}
+		if req.Receipt.LogsBloom != nil {
+			receiptData["bloom"] = *req.Receipt.LogsBloom
+		}
+		if req.Receipt.Logs != nil {
+			receiptData["logs_data"] = req.Receipt.Logs
+		}
+		if req.Receipt.ContractAddress != nil {
+			receiptData["contract_address"] = *req.Receipt.ContractAddress
+		}
+		if req.Receipt.GasUsed != nil {
+			if v := convertToUint64(req.Receipt.GasUsed); v != nil {
+				receiptData["gas_used"] = *v
+			}
+		}
+		if req.Receipt.BlockHash != nil {
+			receiptData["block_hash"] = *req.Receipt.BlockHash
+		}
+		if req.Receipt.BlockNumber != nil {
+			if v := convertToUint64(req.Receipt.BlockNumber); v != nil {
+				receiptData["block_number"] = *v
+			}
+		}
+		if req.Receipt.TransactionIndex != nil {
+			if v := convertToUint(req.Receipt.TransactionIndex); v != nil {
+				receiptData["transaction_index"] = *v
+			}
+		}
+
+		if err := h.receiptService.CreateTransactionReceipt(c.Request.Context(), receiptData); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "创建交易凭证失败", "details": err.Error()})
+			return
+		}
+	}
+
+	tx := req.ToModel()
+	if err := h.txService.CreateTransaction(c.Request.Context(), tx); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "创建交易失败", "details": err.Error()})
 		return
 	}
 
 	response := dto.NewTransactionResponse(tx)
-	c.JSON(http.StatusCreated, gin.H{
-		"success": true,
-		"data":    response,
-		"message": "交易创建成功",
-	})
+	c.JSON(http.StatusCreated, gin.H{"success": true, "data": response, "message": "交易和凭证创建成功"})
 }
 
 // GetTransactionsByBlockHeight 根据区块高度获取交易列表（支持分页）
@@ -405,4 +456,89 @@ func (h *TransactionHandler) GetTransactionsByBlockHeightPublic(c *gin.Context) 
 			"note":          "如需更多数据，请登录后使用完整API",
 		},
 	})
+}
+
+// GetTransactionReceiptByHash 根据交易哈希获取凭证
+func (h *TransactionHandler) GetTransactionReceiptByHash(c *gin.Context) {
+	Hash := c.Param("hash")
+	if Hash == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "transaction hash is required",
+		})
+		return
+	}
+
+	receipt, err := h.receiptService.GetTransactionReceiptByHash(c.Request.Context(), Hash)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    receipt,
+	})
+}
+
+// mapToStruct 将map转换为struct
+func mapToStruct(data map[string]interface{}, target interface{}) error {
+	jsonData, err := json.Marshal(data)
+	if err != nil {
+		return err
+	}
+	return json.Unmarshal(jsonData, target)
+}
+
+// convertToUint64 智能转换各种类型到uint64
+func convertToUint64(value interface{}) *uint64 {
+	if value == nil {
+		return nil
+	}
+	switch v := value.(type) {
+	case string:
+		if len(v) > 2 && v[:2] == "0x" {
+			if num, err := strconv.ParseUint(v[2:], 16, 64); err == nil {
+				return &num
+			}
+		}
+		if num, err := strconv.ParseUint(v, 10, 64); err == nil {
+			return &num
+		}
+	case float64:
+		if v >= 0 && v <= float64(^uint64(0)) {
+			num := uint64(v)
+			return &num
+		}
+	case int:
+		if v >= 0 {
+			num := uint64(v)
+			return &num
+		}
+	case int64:
+		if v >= 0 {
+			num := uint64(v)
+			return &num
+		}
+	case uint64:
+		return &v
+	}
+	return nil
+}
+
+// convertToUint 智能转换各种类型到uint
+func convertToUint(value interface{}) *uint {
+	if value == nil {
+		return nil
+	}
+	if uint64Value := convertToUint64(value); uint64Value != nil {
+		if *uint64Value <= uint64(^uint(0)) {
+			u := uint(*uint64Value)
+			return &u
+		}
+	}
+	return nil
 }

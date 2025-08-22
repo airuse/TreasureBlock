@@ -1,14 +1,15 @@
 server:
-  host: "localhost"
-  port: 8443
-  protocol: "https"
-  api_key: "ak_8d9cc55f2905a5b76b4c9a7cfe2c3cbb"
-  secret_key: "sk_7fcb76e4a8a9dd57d7d65290ece63a55554e08d81db560a15fd54b4878a55e50"
-  # HTTPS相关配置
-  tls:
-    enabled: true
-    skip_verify: false
-    ca_cert: "../server/certs/localhost.crt"
+  host: "39.106.34.163"  # 域名
+  port: 8080
+  protocol: "http"
+  environment: "production"  # 新增环境标识，当production时用的是线上环境 development 是本地环境
+  api_key: "ak_1ecdcce27a88af7108e78126fe2f40fa"
+  secret_key: "sk_21855c08bacedd1250abc11520089d3d8655d5accd12090e94f1a2bcc434d0ee"
+  # # HTTPS相关配置
+  # tls:
+  #   enabled: true
+  #   skip_verify: false
+  #   ca_cert: "../server/certs/localhost.crt"
 
 blockchain:
   chains:
@@ -47,9 +48,45 @@ blockchain:
       enabled: true
       # rpc_url: "http://192.168.1.70:8545"
       explorer_api_urls:
-        - "https://alpha-clean-yard.ethereum-sepolia.quiknode.pro/7979488c04b1a36bdc4230b23e3eaac3e9c1c1af"
-        - "https://yolo-smart-tree.ethereum-sepolia.quiknode.pro/52836b8f979fca7325258c42925d6c245ca45079"
-        - "https://newest-ultra-friday.ethereum-sepolia.quiknode.pro/7091d98af3809c189285739c3f4141b94f368fff"
+        - "https://yolo-smart-tree.quiknode.pro/52836b8f979fca7325258c42925d6c245ca45079"
+        - "https://alpha-clean-yard.quiknode.pro/7979488c04b1a36bdc4230b23e3eaac3e9c1c1af"
+        - "https://newest-ultra-friday.quiknode.pro/7091d98af3809c189285739c3f4141b94f368fff"
+        - "https://thrilling-summer-frost.quiknode.pro/ca8e71700184f645a7935acf1487acd191e429a1"
+        - "https://warmhearted-bold-emerald.quiknode.pro/be4e6633f9443a4dd26046d40be1650a810db3a1"
+        - "https://empty-hardworking-spree.quiknode.pro/d1cb31945987ed11caa6f3e63c2b8b86b00d41ff"
+        - "https://chaotic-maximum-field.quiknode.pro/86729522e8f604ddcbeb3f6b777bacc447ce5538"
+        - "https://special-frequent-sailboat.quiknode.pro/1bd586fffc3fd32d4a0f16b3a7d80831b2431afd"
+        - "https://newest-holy-spree.quiknode.pro/ff40bb3a1adb4da61a6c21d8d30e8c590aa211dc"
+        - "https://necessary-late-shadow.quiknode.pro/1c50e1c16fecbfd54e4bae3bcebaf639344c3d8e"
+        - "https://omniscient-skilled-moon.quiknode.pro/631e501f8f1a5ba844344cf86a56828117f35aed"
+        - "https://wandering-tiniest-yard.quiknode.pro/f58f57a3bf0974d29db0ab826b91926fe71e3d72"
+        - "https://quaint-multi-valley.quiknode.pro/636044aa729112ea69a2dfc80a0faa3f6a49f86f"
+        - "https://twilight-weathered-dust.quiknode.pro/aaef3e3eff58ac9c8cc92a31733f28f7e8a9f96a"
+        - "https://compatible-boldest-patron.quiknode.pro/f30417525f63f4feea90e053e314f86b1b1d3a1d"
+        - "https://wandering-tame-county.quiknode.pro/a20d01c91e03f4f261cd698a6bcf1dc577e390a2"
+        - "https://rough-old-silence.quiknode.pro/e72a4bfa9b596c4fb3bbffc031570c7ec6971c36"
+        - "https://quick-still-friday.quiknode.pro/12a85d6d6f82fb5dc08bb770c8ec21b0401081a4"
+        - "https://chaotic-powerful-yard.quiknode.pro/50b227887e4c1e0912ce7b9535be33ecb8f056c6"
+
+        # - "https://alpha-clean-yard.ethereum-sepolia.quiknode.pro/7979488c04b1a36bdc4230b23e3eaac3e9c1c1af"
+        # - "https://yolo-smart-tree.ethereum-sepolia.quiknode.pro/52836b8f979fca7325258c42925d6c245ca45079"
+        # - "https://newest-ultra-friday.ethereum-sepolia.quiknode.pro/7091d98af3809c189285739c3f4141b94f368fff"
+        # - "https://thrilling-summer-frost.ethereum-sepolia.quiknode.pro/ca8e71700184f645a7935acf1487acd191e429a1"
+        # - "https://warmhearted-bold-emerald.ethereum-sepolia.quiknode.pro/be4e6633f9443a4dd26046d40be1650a810db3a1"
+        # - "https://empty-hardworking-spree.ethereum-sepolia.quiknode.pro/d1cb31945987ed11caa6f3e63c2b8b86b00d41ff"
+        # - "https://chaotic-maximum-field.ethereum-sepolia.quiknode.pro/86729522e8f604ddcbeb3f6b777bacc447ce5538"
+        # - "https://special-frequent-sailboat.ethereum-sepolia.quiknode.pro/1bd586fffc3fd32d4a0f16b3a7d80831b2431afd"
+        # - "https://newest-holy-spree.ethereum-sepolia.quiknode.pro/ff40bb3a1adb4da61a6c21d8d30e8c590aa211dc"
+        # - "https://necessary-late-shadow.ethereum-sepolia.quiknode.pro/1c50e1c16fecbfd54e4bae3bcebaf639344c3d8e"
+        # - "https://omniscient-skilled-moon.ethereum-sepolia.quiknode.pro/631e501f8f1a5ba844344cf86a56828117f35aed"
+        # - "https://wandering-tiniest-yard.ethereum-sepolia.quiknode.pro/f58f57a3bf0974d29db0ab826b91926fe71e3d72"
+        # - "https://quaint-multi-valley.ethereum-sepolia.quiknode.pro/636044aa729112ea69a2dfc80a0faa3f6a49f86f"
+        # - "https://twilight-weathered-dust.ethereum-sepolia.quiknode.pro/aaef3e3eff58ac9c8cc92a31733f28f7e8a9f96a"
+        # - "https://compatible-boldest-patron.ethereum-sepolia.quiknode.pro/f30417525f63f4feea90e053e314f86b1b1d3a1d"
+        # - "https://wandering-tame-county.ethereum-sepolia.quiknode.pro/a20d01c91e03f4f261cd698a6bcf1dc577e390a2"
+        # - "https://rough-old-silence.ethereum-sepolia.quiknode.pro/e72a4bfa9b596c4fb3bbffc031570c7ec6971c36"
+        # - "https://quick-still-friday.ethereum-sepolia.quiknode.pro/12a85d6d6f82fb5dc08bb770c8ec21b0401081a4"
+        # - "https://chaotic-powerful-yard.ethereum-sepolia.quiknode.pro/50b227887e4c1e0912ce7b9535be33ecb8f056c6"
       api_key: ""  # 如果需要的话
       username: ""
       password: ""
@@ -59,21 +96,21 @@ blockchain:
         - "0xB0b86a33E6441b8c4C8C0C4b0c4b0c4b0c4b0c4b"  # 示例：USDC合约地址    
       # ETH链特定的扫描配置
       scan:
-        enabled: true
-        interval: 15s
-        max_retries: 3
-        retry_delay: 3s
-        confirmations: 61
-        start_block_height: 0
-        auto_start: true
-        save_to_file: false
-        output_dir: "./output/eth"
-        priority: 2  # 中等优先级
-        max_concurrent: 3
-        block_timeout: 45s
-        rescan_interval: 120s
-        enable_mempool: true
-        mempool_interval: 10s
+        enabled: true                # 是否启用ETH链扫描
+        interval: 5s                 # 扫描区块的时间间隔
+        max_retries: 3               # 区块扫描失败时的最大重试次数
+        retry_delay: 3s              # 重试间隔时间
+        confirmations: 61            # 需要等待的区块确认数
+        start_block_height: 0        # 扫描起始区块高度
+        auto_start: true             # 启动时是否自动开始扫描
+        save_to_file: false          # 是否将扫描结果保存到文件
+        output_dir: "./output/eth"   # 扫描结果输出目录
+        priority: 2                  # 扫描任务优先级（2为中等优先级）
+        max_concurrent: 30            # 最大并发扫描区块数
+        block_timeout: 45s           # 单个区块扫描超时时间
+        rescan_interval: 120s        # 重新扫描的时间间隔
+        enable_mempool: true         # 是否启用内存池（mempool）扫描
+        mempool_interval: 10s        # 内存池扫描的时间间隔
 
 log:
   level: "info"

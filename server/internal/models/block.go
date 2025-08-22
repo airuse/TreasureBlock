@@ -35,6 +35,11 @@ type Block struct {
 	Nonce      string `json:"nonce,omitempty" gorm:"type:varchar(20)"`
 	Difficulty string `json:"difficulty,omitempty" gorm:"type:varchar(50)"`
 
+	// ETH London 升级相关字段
+	BaseFee     string `json:"base_fee,omitempty" gorm:"type:varchar(100);comment:基础费"`       // wei，字符串存储
+	BurnedEth   string `json:"burned_eth,omitempty" gorm:"type:varchar(100);comment:燃烧费"`     // ETH数量字符串
+	MinerTipEth string `json:"miner_tip_eth,omitempty" gorm:"type:varchar(100);comment:款工收益"` // ETH数量字符串
+
 	// 通用时间字段
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`

@@ -102,6 +102,8 @@ func SetupRoutes(
 	noAuthAPI.Use(publicRateLimiter.PublicRateLimitMiddleware()) // 添加限流中间件
 	{
 		noAuthAPI.GET("/blocks", blockHandler.ListBlocksPublic)                                                // 限制最多20个区块
+		noAuthAPI.GET("/blocks/height/:height", blockHandler.GetBlockByHeightPublic)                           // 根据高度获取区块详情（公开接口）
+		noAuthAPI.GET("/blocks/search", blockHandler.SearchBlocksPublic)                                       // 搜索区块（公开接口）
 		noAuthAPI.GET("/transactions", txHandler.ListTransactionsPublic)                                       // 限制最多1000条交易
 		noAuthAPI.GET("/transactions/block-height/:blockHeight", txHandler.GetTransactionsByBlockHeightPublic) // 根据区块高度获取交易（公开接口）
 	}
@@ -119,6 +121,7 @@ func SetupRoutes(
 			blocks.GET("/latest", blockHandler.GetLatestBlock)           // 获取最新区块
 			blocks.GET("/hash/:hash", blockHandler.GetBlockByHash)       // 根据哈希获取区块
 			blocks.GET("/height/:height", blockHandler.GetBlockByHeight) // 根据高度获取区块
+			blocks.GET("/search", blockHandler.SearchBlocks)             // 搜索区块（认证用户）
 			blocks.POST("/create", blockHandler.CreateBlock)             // 创建区块
 		}
 
@@ -131,6 +134,7 @@ func SetupRoutes(
 			transactions.GET("/block-hash/:blockHash", txHandler.GetTransactionsByBlockHash)       // 根据区块哈希获取交易
 			transactions.GET("/block-height/:blockHeight", txHandler.GetTransactionsByBlockHeight) // 根据区块高度获取交易
 			transactions.POST("/create", txHandler.CreateTransaction)                              // 创建交易记录
+			transactions.GET("/receipt/:hash", txHandler.GetTransactionReceiptByHash)              // 根据哈希获取交易凭证
 		}
 
 		// 地址相关路由

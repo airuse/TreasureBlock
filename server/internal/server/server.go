@@ -62,10 +62,14 @@ func New() *Server {
 	)
 	userAddressService := services.NewUserAddressService(userAddressRepo)
 
+	// 创建交易凭证相关服务
+	transactionReceiptRepo := repository.NewTransactionReceiptRepository(database.GetDB())
+	transactionReceiptService := services.NewTransactionReceiptService(transactionReceiptRepo)
+
 	// 创建处理器
-	blockHandler := handlers.NewBlockHandler(blockService)
-	txHandler := handlers.NewTransactionHandler(txService)
+	txHandler := handlers.NewTransactionHandler(txService, transactionReceiptService)
 	wsHandler := handlers.NewWebSocketHandler()
+	blockHandler := handlers.NewBlockHandler(blockService, wsHandler)
 	addressHandler := handlers.NewAddressHandler(addressService)
 	assetHandler := handlers.NewAssetHandler(assetService)
 	coinConfigHandler := handlers.NewCoinConfigHandler(coinConfigService)

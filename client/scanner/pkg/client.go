@@ -24,10 +24,11 @@ type Client struct {
 	accessToken string
 	tokenExpiry time.Time
 	mutex       sync.RWMutex
+	environment string
 }
 
 // NewClient 创建新的API客户端
-func NewClient(baseURL, apiKey, secretKey string) *Client {
+func NewClient(baseURL, apiKey, secretKey, environment string) *Client {
 	// 创建支持HTTPS的HTTP客户端
 	httpClient := &http.Client{
 		Timeout: 30 * time.Second,
@@ -35,51 +36,64 @@ func NewClient(baseURL, apiKey, secretKey string) *Client {
 
 	// 如果使用HTTPS，配置TLS
 	if len(baseURL) > 5 && baseURL[:5] == "https" {
-		// 尝试使用自定义CA证书，支持多个可能的路径
-		caCertPaths := []string{
-			"../server/certs/localhost.crt",
-			"../../server/certs/localhost.crt",
-			"./certs/localhost.crt",
-			"../certs/localhost.crt",
-			"../../certs/localhost.crt",
-		}
-
-		var caCertPool *x509.CertPool
-		for _, certPath := range caCertPaths {
-			if caCert, err := os.ReadFile(certPath); err == nil {
-				caCertPool = x509.NewCertPool()
-				if caCertPool.AppendCertsFromPEM(caCert) {
-					logrus.Infof("Successfully loaded CA certificate from: %s", certPath)
-					break
-				}
-			}
-		}
-
-		if caCertPool != nil {
-			// 使用自定义CA证书
+		// 生产环境使用系统默认证书，开发环境尝试使用自定义CA证书
+		if environment == "production" {
+			// 生产环境：使用系统默认的根证书，不跳过验证
+			logrus.Info("Production environment detected, using system default certificates")
 			transport := &http.Transport{
 				TLSClientConfig: &tls.Config{
-					RootCAs: caCertPool,
+					// 使用系统默认的根证书
 				},
 			}
 			httpClient.Transport = transport
 		} else {
-			// 如果无法加载证书，使用跳过验证（仅用于开发环境）
-			logrus.Warn("Failed to load CA certificate, using InsecureSkipVerify (not recommended for production)")
-			transport := &http.Transport{
-				TLSClientConfig: &tls.Config{
-					InsecureSkipVerify: true,
-				},
+			// 开发环境：尝试使用自定义CA证书，支持多个可能的路径
+			caCertPaths := []string{
+				"../server/certs/localhost.crt",
+				"../../server/certs/localhost.crt",
+				"./certs/localhost.crt",
+				"../certs/localhost.crt",
+				"../../certs/localhost.crt",
 			}
-			httpClient.Transport = transport
+
+			var caCertPool *x509.CertPool
+			for _, certPath := range caCertPaths {
+				if caCert, err := os.ReadFile(certPath); err == nil {
+					caCertPool = x509.NewCertPool()
+					if caCertPool.AppendCertsFromPEM(caCert) {
+						logrus.Infof("Successfully loaded CA certificate from: %s", certPath)
+						break
+					}
+				}
+			}
+
+			if caCertPool != nil {
+				// 使用自定义CA证书
+				transport := &http.Transport{
+					TLSClientConfig: &tls.Config{
+						RootCAs: caCertPool,
+					},
+				}
+				httpClient.Transport = transport
+			} else {
+				// 如果无法加载证书，使用跳过验证（仅用于开发环境）
+				logrus.Warn("Failed to load CA certificate, using InsecureSkipVerify (not recommended for production)")
+				transport := &http.Transport{
+					TLSClientConfig: &tls.Config{
+						InsecureSkipVerify: true,
+					},
+				}
+				httpClient.Transport = transport
+			}
 		}
 	}
 
 	return &Client{
-		baseURL:    baseURL,
-		httpClient: httpClient,
-		apiKey:     apiKey,
-		secretKey:  secretKey,
+		baseURL:     baseURL,
+		httpClient:  httpClient,
+		apiKey:      apiKey,
+		secretKey:   secretKey,
+		environment: environment,
 	}
 }
 
@@ -132,7 +146,12 @@ func (c *Client) ensureValidToken() error {
 
 // requestWithoutAuth 执行不需要认证的HTTP请求
 func (c *Client) requestWithoutAuth(method, endpoint string, payload interface{}, result interface{}) error {
-	url := c.baseURL + endpoint
+	prefix := ""
+	if c.environment == "production" {
+		// 线上Nginx已挂了/api，后端服务自身也带/api，最终需要/api/api
+		prefix = ""
+	}
+	url := c.baseURL + prefix + endpoint
 
 	var body io.Reader
 	if payload != nil {
@@ -198,7 +217,12 @@ func (c *Client) request(method, endpoint string, payload interface{}, result in
 		return fmt.Errorf("确保访问令牌失败: %w", err)
 	}
 
-	url := c.baseURL + endpoint
+	prefix := ""
+	if c.environment == "production" {
+		// 线上Nginx已挂了/api，后端服务自身也带/api，最终需要/api/api
+		prefix = ""
+	}
+	url := c.baseURL + prefix + endpoint
 
 	var body io.Reader
 	if payload != nil {

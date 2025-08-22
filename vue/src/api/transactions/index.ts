@@ -91,3 +91,31 @@ export function searchTransactions(data: SearchTransactionsRequest): Promise<Pag
     params: data
   })
 }
+
+/**
+ * 获取交易凭证
+ */
+export function getTransactionReceipt(hash: string): Promise<ApiResponse<any>> {
+  if (__USE_MOCK__) {
+    console.log('🔧 使用Mock数据 - getTransactionReceipt')
+    return Promise.resolve({
+      success: true,
+      data: {
+        tx_hash: hash,
+        status: 1,
+        gas_used: 21000,
+        cumulative_gas_used: 21000,
+        transaction_index: 0,
+        block_number: 9009097,
+        logs_data: '[{"address":"0x...","topics":["0x..."],"data":"0x..."}]',
+        contract_address: null
+      }
+    })
+  }
+  
+  console.log('🌐 使用真实API - getTransactionReceipt')
+  return request({
+    url: `/api/v1/transactions/receipt/${hash}`,
+    method: 'GET'
+  })
+}

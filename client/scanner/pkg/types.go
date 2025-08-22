@@ -69,12 +69,15 @@ type BlockUploadRequest struct {
 	Weight     uint64 `json:"weight,omitempty"`
 
 	// ETH特有字段
-	GasLimit   uint64 `json:"gas_limit,omitempty"`
-	GasUsed    uint64 `json:"gas_used,omitempty"`
-	Miner      string `json:"miner,omitempty"`
-	ParentHash string `json:"parent_hash,omitempty"`
-	Nonce      string `json:"nonce,omitempty"`
-	Difficulty string `json:"difficulty,omitempty"`
+	GasLimit    uint64 `json:"gas_limit,omitempty"`
+	GasUsed     uint64 `json:"gas_used,omitempty"`
+	Miner       string `json:"miner,omitempty"`
+	ParentHash  string `json:"parent_hash,omitempty"`
+	Nonce       string `json:"nonce,omitempty"`
+	Difficulty  string `json:"difficulty,omitempty"`
+	BaseFee     string `json:"base_fee,omitempty"`
+	BurnedEth   string `json:"burned_eth,omitempty"`
+	MinerTipEth string `json:"miner_tip_eth,omitempty"`
 }
 
 // BlockResponse 区块响应（与后端DTO对齐）
@@ -99,12 +102,15 @@ type BlockResponse struct {
 	Weight     uint64 `json:"weight,omitempty"`
 
 	// ETH特有字段
-	GasLimit   uint64 `json:"gas_limit,omitempty"`
-	GasUsed    uint64 `json:"gas_used,omitempty"`
-	Miner      string `json:"miner,omitempty"`
-	ParentHash string `json:"parent_hash,omitempty"`
-	Nonce      string `json:"nonce,omitempty"`
-	Difficulty string `json:"difficulty,omitempty"`
+	GasLimit    uint64 `json:"gas_limit,omitempty"`
+	GasUsed     uint64 `json:"gas_used,omitempty"`
+	Miner       string `json:"miner,omitempty"`
+	ParentHash  string `json:"parent_hash,omitempty"`
+	Nonce       string `json:"nonce,omitempty"`
+	Difficulty  string `json:"difficulty,omitempty"`
+	BaseFee     string `json:"base_fee,omitempty"`
+	BurnedEth   string `json:"burned_eth,omitempty"`
+	MinerTipEth string `json:"miner_tip_eth,omitempty"`
 
 	// 时间
 	CreatedAt time.Time `json:"created_at"`
