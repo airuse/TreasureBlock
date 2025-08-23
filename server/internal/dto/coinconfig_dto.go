@@ -1,207 +1,191 @@
 package dto
 
 import (
-	"blockChainBrowser/server/internal/models"
 	"time"
+
+	"blockChainBrowser/server/internal/models"
 )
 
 // CreateCoinConfigRequest 创建币种配置请求DTO
 type CreateCoinConfigRequest struct {
-	ChainName        string  `json:"chain_name" validate:"required,max=50"`
-	CoinType         uint8   `json:"coin_type" validate:"required,lte=5"` // 0：eth,1：ERC20，2：ERC223，3：ERC773,4:TRC10, 5:TRC20
-	ContractAddr     string  `json:"contract_addr" validate:"required,max=120"`
-	Precision        uint    `json:"precision" validate:"required,lte=18"`
-	ColdAddress      string  `json:"cold_address" validate:"required,max=200"`
-	ColdAddressHash  string  `json:"cold_address_hash" validate:"required,max=120"`
-	MaxStock         float64 `json:"max_stock" validate:"gte=0"`
-	MaxBalance       float64 `json:"max_balance" validate:"gte=0"`
-	MinBalance       float64 `json:"min_balance" validate:"gte=0"`
-	CollectLimit     float64 `json:"collect_limit" validate:"gte=0"`
-	CollectLeft      float64 `json:"collect_left" validate:"gte=0"`
-	InternalGasLimit uint    `json:"internal_gas_limit" validate:"required"`
-	OnceMinFee       float64 `json:"once_min_fee" validate:"gte=0"`
-	SymbolID         string  `json:"symbol_id" validate:"max=100"`
-	Status           int8    `json:"status" validate:"oneof=0 1"`
+	ChainName     string `json:"chain_name" validate:"required,max=20"`
+	Symbol        string `json:"symbol" validate:"required,max=20"`
+	CoinType      uint8  `json:"coin_type" validate:"gte=0,lte=4"`
+	ContractAddr  string `json:"contract_addr" validate:"max=120"`
+	Precision     uint   `json:"precision" validate:"gte=0,lte=18"`
+	Decimals      uint   `json:"decimals" validate:"gte=0,lte=18"`
+	Name          string `json:"name" validate:"required,max=100"`
+	LogoURL       string `json:"logo_url" validate:"max=255"`
+	WebsiteURL    string `json:"website_url" validate:"max=255"`
+	ExplorerURL   string `json:"explorer_url" validate:"max=255"`
+	Description   string `json:"description"`
+	MarketCapRank uint   `json:"market_cap_rank"`
+	IsStablecoin  bool   `json:"is_stablecoin"`
+	IsVerified    bool   `json:"is_verified"`
+	Status        int8   `json:"status" validate:"oneof=0 1"`
 }
 
 // UpdateCoinConfigRequest 更新币种配置请求DTO
 type UpdateCoinConfigRequest struct {
-	ChainName        *string  `json:"chain_name,omitempty" validate:"omitempty,max=50"`
-	CoinType         *uint8   `json:"coin_type,omitempty" validate:"omitempty,lte=5"`
-	ContractAddr     *string  `json:"contract_addr,omitempty" validate:"omitempty,max=120"`
-	Precision        *uint    `json:"precision,omitempty" validate:"omitempty,lte=18"`
-	ColdAddress      *string  `json:"cold_address,omitempty" validate:"omitempty,max=200"`
-	ColdAddressHash  *string  `json:"cold_address_hash,omitempty" validate:"omitempty,max=120"`
-	MaxStock         *float64 `json:"max_stock,omitempty" validate:"omitempty,gte=0"`
-	MaxBalance       *float64 `json:"max_balance,omitempty" validate:"omitempty,gte=0"`
-	MinBalance       *float64 `json:"min_balance,omitempty" validate:"omitempty,gte=0"`
-	CollectLimit     *float64 `json:"collect_limit,omitempty" validate:"omitempty,gte=0"`
-	CollectLeft      *float64 `json:"collect_left,omitempty" validate:"omitempty,gte=0"`
-	InternalGasLimit *uint    `json:"internal_gas_limit,omitempty"`
-	OnceMinFee       *float64 `json:"once_min_fee,omitempty" validate:"omitempty,gte=0"`
-	SymbolID         *string  `json:"symbol_id,omitempty" validate:"omitempty,max=100"`
-	Status           *int8    `json:"status,omitempty" validate:"omitempty,oneof=0 1"`
+	ChainName     *string `json:"chain_name,omitempty" validate:"omitempty,max=20"`
+	Symbol        *string `json:"symbol,omitempty" validate:"omitempty,max=20"`
+	CoinType      *uint8  `json:"coin_type,omitempty" validate:"omitempty,gte=0,lte=4"`
+	ContractAddr  *string `json:"contract_addr,omitempty" validate:"omitempty,max=120"`
+	Precision     *uint   `json:"precision,omitempty" validate:"omitempty,gte=0,lte=18"`
+	Decimals      *uint   `json:"decimals,omitempty" validate:"omitempty,gte=0,lte=18"`
+	Name          *string `json:"name,omitempty" validate:"omitempty,max=100"`
+	LogoURL       *string `json:"logo_url,omitempty" validate:"omitempty,max=255"`
+	WebsiteURL    *string `json:"website_url,omitempty" validate:"omitempty,max=255"`
+	ExplorerURL   *string `json:"explorer_url,omitempty" validate:"omitempty,max=255"`
+	Description   *string `json:"description,omitempty"`
+	MarketCapRank *uint   `json:"market_cap_rank,omitempty"`
+	IsStablecoin  *bool   `json:"is_stablecoin,omitempty"`
+	IsVerified    *bool   `json:"is_verified,omitempty"`
+	Status        *int8   `json:"status,omitempty" validate:"omitempty,oneof=0 1"`
 }
 
 // CoinConfigResponse 币种配置响应DTO
 type CoinConfigResponse struct {
-	ID               uint      `json:"id"`
-	ChainName        string    `json:"chain_name"`
-	Symbol           string    `json:"symbol"`
-	CoinType         uint8     `json:"coin_type"`
-	ContractAddr     string    `json:"contract_addr"`
-	Precision        uint      `json:"precision"`
-	ColdAddress      string    `json:"cold_address"`
-	ColdAddressHash  string    `json:"cold_address_hash"`
-	MaxStock         float64   `json:"max_stock"`
-	MaxBalance       float64   `json:"max_balance"`
-	MinBalance       float64   `json:"min_balance"`
-	CollectLimit     float64   `json:"collect_limit"`
-	CollectLeft      float64   `json:"collect_left"`
-	InternalGasLimit uint      `json:"internal_gas_limit"`
-	OnceMinFee       float64   `json:"once_min_fee"`
-	CTime            time.Time `json:"ctime"`
-	MTime            time.Time `json:"mtime"`
-	SymbolID         string    `json:"symbol_id"`
-	Status           int8      `json:"status"`
+	ID            uint      `json:"id"`
+	ChainName     string    `json:"chain_name"`
+	Symbol        string    `json:"symbol"`
+	CoinType      uint8     `json:"coin_type"`
+	ContractAddr  string    `json:"contract_addr"`
+	Precision     uint      `json:"precision"`
+	Decimals      uint      `json:"decimals"`
+	Name          string    `json:"name"`
+	LogoURL       string    `json:"logo_url"`
+	WebsiteURL    string    `json:"website_url"`
+	ExplorerURL   string    `json:"explorer_url"`
+	Description   string    `json:"description"`
+	MarketCapRank uint      `json:"market_cap_rank"`
+	IsStablecoin  bool      `json:"is_stablecoin"`
+	IsVerified    bool      `json:"is_verified"`
+	Status        int8      `json:"status"`
+	CreatedAt     time.Time `json:"created_at"`
+	UpdatedAt     time.Time `json:"updated_at"`
 }
 
-// CoinConfigSummaryResponse 币种配置摘要响应DTO
-type CoinConfigSummaryResponse struct {
-	Symbol   string `json:"symbol"`
-	CoinType uint8  `json:"coin_type"`
-	Chain    string `json:"chain_name"`
-	Status   int8   `json:"status"`
+// CoinConfigListResponse 币种配置列表响应DTO
+type CoinConfigListResponse struct {
+	CoinConfigs []*CoinConfigResponse `json:"coin_configs"`
+	Total       int64                 `json:"total"`
+	Page        int                   `json:"page"`
+	PageSize    int                   `json:"page_size"`
+	TotalPages  int                   `json:"total_pages"`
 }
 
-// GetAllCoinConfigsResponse 获取所有币种配置的响应DTO
-type GetAllCoinConfigsResponse struct {
-	Symbol       string `json:"symbol"`
-	ChainName    string `json:"chain_name"`
-	ContractAddr string `json:"contract_addr"`
-	Status       int8   `json:"status"`
-}
-
-// ToModel 将CreateCoinConfigRequest转换为CoinConfig模型
-func (req *CreateCoinConfigRequest) ToModel(symbol string) *models.CoinConfig {
-	return &models.CoinConfig{
-		ChainName:        req.ChainName,
-		Symbol:           symbol,
-		CoinType:         req.CoinType,
-		ContractAddr:     req.ContractAddr,
-		Precision:        req.Precision,
-		ColdAddress:      req.ColdAddress,
-		ColdAddressHash:  req.ColdAddressHash,
-		MaxStock:         req.MaxStock,
-		MaxBalance:       req.MaxBalance,
-		MinBalance:       req.MinBalance,
-		CollectLimit:     req.CollectLimit,
-		CollectLeft:      req.CollectLeft,
-		InternalGasLimit: req.InternalGasLimit,
-		OnceMinFee:       req.OnceMinFee,
-		SymbolID:         req.SymbolID,
-		Status:           req.Status,
-		CTime:            time.Now(),
-		MTime:            time.Now(),
+// NewCoinConfigResponse 创建币种配置响应
+func NewCoinConfigResponse(coinConfig *models.CoinConfig) *CoinConfigResponse {
+	return &CoinConfigResponse{
+		ID:            coinConfig.ID,
+		ChainName:     coinConfig.ChainName,
+		Symbol:        coinConfig.Symbol,
+		CoinType:      coinConfig.CoinType,
+		ContractAddr:  coinConfig.ContractAddr,
+		Precision:     coinConfig.Precision,
+		Decimals:      coinConfig.Decimals,
+		Name:          coinConfig.Name,
+		LogoURL:       coinConfig.LogoURL,
+		WebsiteURL:    coinConfig.WebsiteURL,
+		ExplorerURL:   coinConfig.ExplorerURL,
+		Description:   coinConfig.Description,
+		MarketCapRank: coinConfig.MarketCapRank,
+		IsStablecoin:  coinConfig.IsStablecoin,
+		IsVerified:    coinConfig.IsVerified,
+		Status:        coinConfig.Status,
+		CreatedAt:     coinConfig.CreatedAt,
+		UpdatedAt:     coinConfig.UpdatedAt,
 	}
 }
 
-// NewGetAllCoinConfigsResponse 从CoinConfig模型创建GetAllCoinConfigsResponse
-func NewGetAllCoinConfigsResponse(config *models.CoinConfig) *GetAllCoinConfigsResponse {
-	return &GetAllCoinConfigsResponse{
-		Symbol:       config.Symbol,
-		ChainName:    config.ChainName,
-		ContractAddr: config.ContractAddr,
-		Status:       config.Status,
+// NewCoinConfigListResponse 创建币种配置列表响应
+func NewCoinConfigListResponse(coinConfigs []*models.CoinConfig, total int64, page, pageSize int) *CoinConfigListResponse {
+	coinConfigResponses := make([]*CoinConfigResponse, len(coinConfigs))
+	for i, coinConfig := range coinConfigs {
+		coinConfigResponses[i] = NewCoinConfigResponse(coinConfig)
+	}
+
+	totalPages := int((total + int64(pageSize) - 1) / int64(pageSize))
+
+	return &CoinConfigListResponse{
+		CoinConfigs: coinConfigResponses,
+		Total:       total,
+		Page:        page,
+		PageSize:    pageSize,
+		TotalPages:  totalPages,
+	}
+}
+
+// ToModel 将CreateCoinConfigRequest转换为CoinConfig模型
+func (req *CreateCoinConfigRequest) ToModel() *models.CoinConfig {
+	return &models.CoinConfig{
+		ChainName:     req.ChainName,
+		Symbol:        req.Symbol,
+		CoinType:      req.CoinType,
+		ContractAddr:  req.ContractAddr,
+		Precision:     req.Precision,
+		Decimals:      req.Decimals,
+		Name:          req.Name,
+		LogoURL:       req.LogoURL,
+		WebsiteURL:    req.WebsiteURL,
+		ExplorerURL:   req.ExplorerURL,
+		Description:   req.Description,
+		MarketCapRank: req.MarketCapRank,
+		IsStablecoin:  req.IsStablecoin,
+		IsVerified:    req.IsVerified,
+		Status:        req.Status,
+		CreatedAt:     time.Now(),
+		UpdatedAt:     time.Now(),
 	}
 }
 
 // ApplyToModel 将UpdateCoinConfigRequest应用到CoinConfig模型
-func (req *UpdateCoinConfigRequest) ApplyToModel(config *models.CoinConfig) {
+func (req *UpdateCoinConfigRequest) ApplyToModel(coinConfig *models.CoinConfig) {
 	if req.ChainName != nil {
-		config.ChainName = *req.ChainName
+		coinConfig.ChainName = *req.ChainName
+	}
+	if req.Symbol != nil {
+		coinConfig.Symbol = *req.Symbol
 	}
 	if req.CoinType != nil {
-		config.CoinType = *req.CoinType
+		coinConfig.CoinType = *req.CoinType
 	}
 	if req.ContractAddr != nil {
-		config.ContractAddr = *req.ContractAddr
+		coinConfig.ContractAddr = *req.ContractAddr
 	}
 	if req.Precision != nil {
-		config.Precision = *req.Precision
+		coinConfig.Precision = *req.Precision
 	}
-	if req.ColdAddress != nil {
-		config.ColdAddress = *req.ColdAddress
+	if req.Decimals != nil {
+		coinConfig.Decimals = *req.Decimals
 	}
-	if req.ColdAddressHash != nil {
-		config.ColdAddressHash = *req.ColdAddressHash
+	if req.Name != nil {
+		coinConfig.Name = *req.Name
 	}
-	if req.MaxStock != nil {
-		config.MaxStock = *req.MaxStock
+	if req.LogoURL != nil {
+		coinConfig.LogoURL = *req.LogoURL
 	}
-	if req.MaxBalance != nil {
-		config.MaxBalance = *req.MaxBalance
+	if req.WebsiteURL != nil {
+		coinConfig.WebsiteURL = *req.WebsiteURL
 	}
-	if req.MinBalance != nil {
-		config.MinBalance = *req.MinBalance
+	if req.ExplorerURL != nil {
+		coinConfig.ExplorerURL = *req.ExplorerURL
 	}
-	if req.CollectLimit != nil {
-		config.CollectLimit = *req.CollectLimit
+	if req.Description != nil {
+		coinConfig.Description = *req.Description
 	}
-	if req.CollectLeft != nil {
-		config.CollectLeft = *req.CollectLeft
+	if req.MarketCapRank != nil {
+		coinConfig.MarketCapRank = *req.MarketCapRank
 	}
-	if req.InternalGasLimit != nil {
-		config.InternalGasLimit = *req.InternalGasLimit
+	if req.IsStablecoin != nil {
+		coinConfig.IsStablecoin = *req.IsStablecoin
 	}
-	if req.OnceMinFee != nil {
-		config.OnceMinFee = *req.OnceMinFee
-	}
-	if req.SymbolID != nil {
-		config.SymbolID = *req.SymbolID
+	if req.IsVerified != nil {
+		coinConfig.IsVerified = *req.IsVerified
 	}
 	if req.Status != nil {
-		config.Status = *req.Status
+		coinConfig.Status = *req.Status
 	}
-	config.MTime = time.Now()
-}
-
-// FromModel 将CoinConfig模型转换为CoinConfigResponse
-func (resp *CoinConfigResponse) FromModel(config *models.CoinConfig) {
-	resp.ID = config.ID
-	resp.ChainName = config.ChainName
-	resp.Symbol = config.Symbol
-	resp.CoinType = config.CoinType
-	resp.ContractAddr = config.ContractAddr
-	resp.Precision = config.Precision
-	resp.ColdAddress = config.ColdAddress
-	resp.ColdAddressHash = config.ColdAddressHash
-	resp.MaxStock = config.MaxStock
-	resp.MaxBalance = config.MaxBalance
-	resp.MinBalance = config.MinBalance
-	resp.CollectLimit = config.CollectLimit
-	resp.CollectLeft = config.CollectLeft
-	resp.InternalGasLimit = config.InternalGasLimit
-	resp.OnceMinFee = config.OnceMinFee
-	resp.CTime = config.CTime
-	resp.MTime = config.MTime
-	resp.SymbolID = config.SymbolID
-	resp.Status = config.Status
-}
-
-// NewCoinConfigResponse 创建CoinConfigResponse
-func NewCoinConfigResponse(config *models.CoinConfig) *CoinConfigResponse {
-	resp := &CoinConfigResponse{}
-	resp.FromModel(config)
-	return resp
-}
-
-// NewCoinConfigSummaryResponse 创建CoinConfigSummaryResponse
-func NewCoinConfigSummaryResponse(config *models.CoinConfig) *CoinConfigSummaryResponse {
-	return &CoinConfigSummaryResponse{
-		Symbol:   config.Symbol,
-		CoinType: config.CoinType,
-		Chain:    config.ChainName,
-		Status:   config.Status,
-	}
+	coinConfig.UpdatedAt = time.Now()
 }

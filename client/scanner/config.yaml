@@ -1,15 +1,17 @@
 server:
-  host: "39.106.34.163"  # 域名
-  port: 8080
-  protocol: "http"
-  environment: "production"  # 新增环境标识，当production时用的是线上环境 development 是本地环境
-  api_key: "ak_1ecdcce27a88af7108e78126fe2f40fa"
-  secret_key: "sk_21855c08bacedd1250abc11520089d3d8655d5accd12090e94f1a2bcc434d0ee"
+  host: "localhost"  # 域名
+  port: 8443
+  protocol: "https"
+  environment: "development"  # 新增环境标识，当 production 时用的是线上环境 development 是本地环境
+  api_key: "ak_3247cde976e87680970b1a98360d54e2"
+  secret_key: "sk_55ff98cd09d7df039a1726f3521143ca9bcc394a9b6645f40eeee1bc3aea3d20"
+  # api_key: "ak_1ecdcce27a88af7108e78126fe2f40fa"
+  # secret_key: "sk_21855c08bacedd1250abc11520089d3d8655d5accd12090e94f1a2bcc434d0ee"
   # # HTTPS相关配置
-  # tls:
-  #   enabled: true
-  #   skip_verify: false
-  #   ca_cert: "../server/certs/localhost.crt"
+  tls:
+    enabled: true
+    skip_verify: true
+    ca_cert: "../server/certs/localhost.crt"
 
 blockchain:
   chains:

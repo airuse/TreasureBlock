@@ -9,10 +9,10 @@ import (
 
 // TransactionReceiptData 交易凭证数据（对齐go-ethereum Receipt的JSON字段）
 type TransactionReceiptData struct {
-	Type              interface{}              `json:"type,omitempty"`
-	Root              *string                  `json:"root,omitempty"`
-	Status            interface{}              `json:"status,omitempty"`
-	CumulativeGasUsed interface{}              `json:"cumulativeGasUsed,omitempty"`
+	Type   interface{} `json:"type,omitempty"`
+	Root   *string     `json:"root,omitempty"`
+	Status interface{} `json:"status,omitempty"`
+	// CumulativeGasUsed 字段已移除，不再需要
 	LogsBloom         *string                  `json:"logsBloom,omitempty"`
 	Logs              []map[string]interface{} `json:"logs,omitempty"`
 	TransactionHash   *string                  `json:"transactionHash,omitempty"`
@@ -55,6 +55,11 @@ type CreateTransactionRequest struct {
 	GasPrice string `json:"gas_price" validate:"required"`
 	GasUsed  uint   `json:"gas_used" validate:"gte=0"`
 
+	// EIP-1559 相关字段（ETH特有）
+	MaxFeePerGas         string `json:"max_fee_per_gas,omitempty"`          // 最高费用（MaxFee）
+	MaxPriorityFeePerGas string `json:"max_priority_fee_per_gas,omitempty"` // 最高小费（MaxPriorityFee）
+	EffectiveGasPrice    string `json:"effective_gas_price,omitempty"`      // 有效Gas价格
+
 	// 手续费字段
 	Fee        string  `json:"fee" validate:"required"`
 	UsedFee    *string `json:"used_fee,omitempty"`
@@ -79,30 +84,45 @@ type UpdateTransactionRequest struct {
 
 // TransactionResponse 交易响应DTO
 type TransactionResponse struct {
-	ID           uint      `json:"id"`
-	TxID         string    `json:"tx_id"`
-	TxType       uint8     `json:"tx_type"`
-	Confirm      uint      `json:"confirm"`
-	Status       uint8     `json:"status"`
-	SendStatus   uint8     `json:"send_status"`
-	Balance      string    `json:"balance"`
-	Amount       string    `json:"amount"`
-	TransID      uint      `json:"trans_id"`
-	Symbol       string    `json:"symbol"`
-	AddressFrom  string    `json:"address_from"`
-	AddressTo    string    `json:"address_to"`
-	GasLimit     uint      `json:"gas_limit"`
-	GasPrice     string    `json:"gas_price"`
-	GasUsed      uint      `json:"gas_used"`
-	Fee          string    `json:"fee"`
-	UsedFee      *string   `json:"used_fee"`
-	Height       uint64    `json:"height"`
-	ContractAddr string    `json:"contract_addr"`
-	Hex          *string   `json:"hex"`
-	TxScene      string    `json:"tx_scene"`
-	Remark       string    `json:"remark"`
-	Ctime        time.Time `json:"ctime"`
-	Mtime        time.Time `json:"mtime"`
+	ID                   uint      `json:"id"`
+	TxID                 string    `json:"tx_id"`
+	TxType               uint8     `json:"tx_type"`
+	Confirm              uint      `json:"confirm"`
+	Status               uint8     `json:"status"`
+	SendStatus           uint8     `json:"send_status"`
+	Balance              string    `json:"balance"`
+	Amount               string    `json:"amount"`
+	TransID              uint      `json:"trans_id"`
+	Symbol               string    `json:"symbol"`
+	AddressFrom          string    `json:"address_from"`
+	AddressTo            string    `json:"address_to"`
+	GasLimit             uint      `json:"gas_limit"`
+	GasPrice             string    `json:"gas_price"`
+	GasUsed              uint      `json:"gas_used"`
+	MaxFeePerGas         string    `json:"max_fee_per_gas,omitempty"`
+	MaxPriorityFeePerGas string    `json:"max_priority_fee_per_gas,omitempty"`
+	EffectiveGasPrice    string    `json:"effective_gas_price,omitempty"`
+	Fee                  string    `json:"fee"`
+	UsedFee              *string   `json:"used_fee"`
+	Height               uint64    `json:"height"`
+	ContractAddr         string    `json:"contract_addr"`
+	Hex                  *string   `json:"hex"`
+	TxScene              string    `json:"tx_scene"`
+	Remark               string    `json:"remark"`
+	IsToken              bool      `json:"is_token"`
+	TokenName            string    `json:"token_name,omitempty"`            // 代币全名
+	TokenSymbol          string    `json:"token_symbol,omitempty"`          // 代币符号
+	TokenDecimals        uint8     `json:"token_decimals,omitempty"`        // 代币精度
+	TokenDescription     string    `json:"token_description,omitempty"`     // 代币描述
+	TokenWebsite         string    `json:"token_website,omitempty"`         // 代币官网
+	TokenExplorer        string    `json:"token_explorer,omitempty"`        // 代币浏览器链接
+	TokenLogo            string    `json:"token_logo,omitempty"`            // 代币Logo
+	TokenMarketCapRank   *int      `json:"token_market_cap_rank,omitempty"` // 市值排名
+	TokenIsStablecoin    bool      `json:"token_is_stablecoin,omitempty"`   // 是否为稳定币
+	TokenIsVerified      bool      `json:"token_is_verified,omitempty"`     // 是否已验证
+	Nonce                uint64    `json:"nonce"`                           // 添加Nonce字段
+	Ctime                time.Time `json:"ctime"`
+	Mtime                time.Time `json:"mtime"`
 }
 
 // TransactionSummaryResponse 交易摘要响应DTO
@@ -136,33 +156,36 @@ func (req *CreateTransactionRequest) ToModel() *models.Transaction {
 	}
 
 	return &models.Transaction{
-		TxID:         req.TxID,
-		TxType:       req.TxType,
-		Confirm:      req.Confirm,
-		Status:       req.Status,
-		SendStatus:   req.SendStatus,
-		Balance:      req.Balance,
-		Amount:       req.Amount,
-		TransID:      req.TransID,
-		Height:       req.Height,
-		ContractAddr: req.ContractAddr,
-		Hex:          req.Hex,
-		TxScene:      req.TxScene,
-		Remark:       req.Remark,
-		Chain:        req.Chain,
-		Symbol:       req.Symbol,
-		AddressFrom:  req.AddressFrom,
-		AddressTo:    req.AddressTo,
-		GasLimit:     req.GasLimit,
-		GasPrice:     req.GasPrice,
-		GasUsed:      req.GasUsed,
-		Fee:          req.Fee,
-		UsedFee:      req.UsedFee,
-		BlockIndex:   req.BlockIndex,
-		Nonce:        req.Nonce,
-		Logs:         logsJSON,
-		Ctime:        time.Now(),
-		Mtime:        time.Now(),
+		TxID:                 req.TxID,
+		TxType:               req.TxType,
+		Confirm:              req.Confirm,
+		Status:               req.Status,
+		SendStatus:           req.SendStatus,
+		Balance:              req.Balance,
+		Amount:               req.Amount,
+		TransID:              req.TransID,
+		Height:               req.Height,
+		ContractAddr:         req.ContractAddr,
+		Hex:                  req.Hex,
+		TxScene:              req.TxScene,
+		Remark:               req.Remark,
+		Chain:                req.Chain,
+		Symbol:               req.Symbol,
+		AddressFrom:          req.AddressFrom,
+		AddressTo:            req.AddressTo,
+		GasLimit:             req.GasLimit,
+		GasPrice:             req.GasPrice,
+		GasUsed:              req.GasUsed,
+		MaxFeePerGas:         req.MaxFeePerGas,
+		MaxPriorityFeePerGas: req.MaxPriorityFeePerGas,
+		EffectiveGasPrice:    req.EffectiveGasPrice,
+		Fee:                  req.Fee,
+		UsedFee:              req.UsedFee,
+		BlockIndex:           req.BlockIndex,
+		Nonce:                req.Nonce,
+		Logs:                 logsJSON,
+		Ctime:                time.Now(),
+		Mtime:                time.Now(),
 	}
 }
 
@@ -209,6 +232,9 @@ func (resp *TransactionResponse) FromModel(tx *models.Transaction) {
 	resp.GasLimit = tx.GasLimit
 	resp.GasPrice = tx.GasPrice
 	resp.GasUsed = tx.GasUsed
+	resp.MaxFeePerGas = tx.MaxFeePerGas
+	resp.MaxPriorityFeePerGas = tx.MaxPriorityFeePerGas
+	resp.EffectiveGasPrice = tx.EffectiveGasPrice
 	resp.Fee = tx.Fee
 	resp.UsedFee = tx.UsedFee
 	resp.Height = tx.Height
@@ -216,6 +242,18 @@ func (resp *TransactionResponse) FromModel(tx *models.Transaction) {
 	resp.Hex = tx.Hex
 	resp.TxScene = tx.TxScene
 	resp.Remark = tx.Remark
+	resp.IsToken = tx.IsToken
+	resp.TokenName = tx.TokenName                   // 添加代币名称
+	resp.TokenSymbol = tx.TokenSymbol               // 添加代币符号
+	resp.TokenDecimals = tx.TokenDecimals           // 添加代币精度
+	resp.TokenDescription = tx.TokenDescription     // 添加代币描述
+	resp.TokenWebsite = tx.TokenWebsite             // 添加代币官网
+	resp.TokenExplorer = tx.TokenExplorer           // 添加代币浏览器链接
+	resp.TokenLogo = tx.TokenLogo                   // 添加代币Logo
+	resp.TokenMarketCapRank = tx.TokenMarketCapRank // 添加市值排名
+	resp.TokenIsStablecoin = tx.TokenIsStablecoin   // 添加是否为稳定币
+	resp.TokenIsVerified = tx.TokenIsVerified       // 添加是否已验证
+	resp.Nonce = tx.Nonce
 	resp.Ctime = tx.Ctime
 	resp.Mtime = tx.Mtime
 }
@@ -223,30 +261,45 @@ func (resp *TransactionResponse) FromModel(tx *models.Transaction) {
 // NewTransactionResponse 创建交易响应
 func NewTransactionResponse(tx *models.Transaction) *TransactionResponse {
 	return &TransactionResponse{
-		ID:           tx.ID,
-		TxID:         tx.TxID,
-		TxType:       tx.TxType,
-		Confirm:      tx.Confirm,
-		Status:       tx.Status,
-		SendStatus:   tx.SendStatus,
-		Balance:      tx.Balance,
-		Amount:       tx.Amount,
-		TransID:      tx.TransID,
-		Symbol:       tx.Symbol,
-		AddressFrom:  tx.AddressFrom,
-		AddressTo:    tx.AddressTo,
-		GasLimit:     tx.GasLimit,
-		GasPrice:     tx.GasPrice,
-		GasUsed:      tx.GasUsed,
-		Fee:          tx.Fee,
-		UsedFee:      tx.UsedFee,
-		Height:       tx.Height,
-		ContractAddr: tx.ContractAddr,
-		Hex:          tx.Hex,
-		TxScene:      tx.TxScene,
-		Remark:       tx.Remark,
-		Ctime:        tx.Ctime,
-		Mtime:        tx.Mtime,
+		ID:                   tx.ID,
+		TxID:                 tx.TxID,
+		TxType:               tx.TxType,
+		Confirm:              tx.Confirm,
+		Status:               tx.Status,
+		SendStatus:           tx.SendStatus,
+		Balance:              tx.Balance,
+		Amount:               tx.Amount,
+		TransID:              tx.TransID,
+		Symbol:               tx.Symbol,
+		AddressFrom:          tx.AddressFrom,
+		AddressTo:            tx.AddressTo,
+		GasLimit:             tx.GasLimit,
+		GasPrice:             tx.GasPrice,
+		GasUsed:              tx.GasUsed,
+		MaxFeePerGas:         tx.MaxFeePerGas,
+		MaxPriorityFeePerGas: tx.MaxPriorityFeePerGas,
+		EffectiveGasPrice:    tx.EffectiveGasPrice,
+		Fee:                  tx.Fee,
+		UsedFee:              tx.UsedFee,
+		Height:               tx.Height,
+		ContractAddr:         tx.ContractAddr,
+		Hex:                  tx.Hex,
+		TxScene:              tx.TxScene,
+		Remark:               tx.Remark,
+		IsToken:              tx.IsToken,
+		TokenName:            tx.TokenName,          // 添加代币名称
+		TokenSymbol:          tx.TokenSymbol,        // 添加代币符号
+		TokenDecimals:        tx.TokenDecimals,      // 添加代币精度
+		TokenDescription:     tx.TokenDescription,   // 添加代币描述
+		TokenWebsite:         tx.TokenWebsite,       // 添加代币官网
+		TokenExplorer:        tx.TokenExplorer,      // 添加代币浏览器链接
+		TokenLogo:            tx.TokenLogo,          // 添加代币Logo
+		TokenMarketCapRank:   tx.TokenMarketCapRank, // 添加市值排名
+		TokenIsStablecoin:    tx.TokenIsStablecoin,  // 添加是否为稳定币
+		TokenIsVerified:      tx.TokenIsVerified,    // 添加是否已验证
+		Nonce:                tx.Nonce,
+		Ctime:                tx.Ctime,
+		Mtime:                tx.Mtime,
 	}
 }
 

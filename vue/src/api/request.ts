@@ -3,7 +3,7 @@ import type { AxiosInstance, InternalAxiosRequestConfig, AxiosResponse } from 'a
 
 // 创建axios实例
 const request: AxiosInstance = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE_URL || 'https://treasureblock.top/api',
+  baseURL: import.meta.env.VITE_API_BASE_URL || 'https://localhost:8443',
   timeout: 30000,
   headers: {
     'Content-Type': 'application/json',

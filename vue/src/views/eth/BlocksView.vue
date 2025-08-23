@@ -99,7 +99,12 @@
                   <span class="font-mono">{{ formatAddress(block.miner) }}</span>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {{ formatAmount(block.reward) }} ETH
+                  <div>
+                    <div class="font-medium">{{ formatMinerTip(block.miner_tip_eth) }} ETH</div>
+                    <div v-if="block.burned_eth" class="text-xs text-gray-500">
+                      燃烧: {{ formatBurnedEth(block.burned_eth) }} ETH
+                    </div>
+                  </div>
                 </td>
               </tr>
             </template>
@@ -201,7 +206,8 @@ interface BlockData {
   gasUsed: number
   gasLimit: number
   miner: string
-  reward: number
+  miner_tip_eth?: string | number // 矿工奖励（MinerTipEth）
+  burned_eth?: string | number // 燃烧费用
 }
 
 const blocks = ref<BlockData[]>([])
@@ -223,6 +229,34 @@ const visiblePages = computed(() => {
 // 格式化函数
 const formatTimestamp = (timestamp: number) => {
   return new Date(timestamp * 1000).toLocaleString()
+}
+
+// 格式化矿工奖励（MinerTipEth）
+const formatMinerTip = (minerTip: string | number | undefined): string => {
+  if (minerTip === undefined || minerTip === null) {
+    return '0'
+  }
+  
+  if (typeof minerTip === 'string') {
+    const parsed = parseFloat(minerTip)
+    return isNaN(parsed) ? '0' : parsed.toFixed(6)
+  }
+  
+  return minerTip.toFixed(6)
+}
+
+// 格式化燃烧费用
+const formatBurnedEth = (burnedEth: string | number | undefined): string => {
+  if (burnedEth === undefined || burnedEth === null) {
+    return '0'
+  }
+  
+  if (typeof burnedEth === 'string') {
+    const parsed = parseFloat(burnedEth)
+    return isNaN(parsed) ? '0' : parsed.toFixed(6)
+  }
+  
+  return burnedEth.toFixed(6)
 }
 
 const formatAddress = (address: string) => {
@@ -297,7 +331,7 @@ const loadData = async () => {
           gasUsed: block.gas_used || block.gasUsed || 0,
           gasLimit: block.gas_limit || block.gasLimit || 0,
           miner: block.miner || '',
-          reward: block.total_amount || block.reward || 0
+          miner_tip_eth: block.miner_tip_eth // 传递原始字段用于调试
         }))
         
         totalBlocks.value = totalCount
@@ -353,7 +387,7 @@ const loadData = async () => {
           gasUsed: block.gas_used || block.gasUsed || 0,
           gasLimit: block.gas_limit || block.gasLimit || 0,
           miner: block.miner || '',
-          reward: block.total_amount || block.reward || 0
+          miner_tip_eth: block.miner_tip_eth // 传递原始字段用于调试
         }))
         
         totalBlocks.value = totalCount
@@ -423,7 +457,7 @@ function handleNewBlock(message: any) {
       gasUsed: message.data.gas_used || message.data.gasUsed || 0,
       gasLimit: message.data.gas_limit || message.data.gasLimit || 0,
       miner: message.data.miner || '',
-      reward: message.data.total_amount || message.data.reward || 0
+      miner_tip_eth: message.data.miner_tip_eth // 传递原始字段用于调试
     }
     
     // 实现最新区块插入到列表头部的逻辑
@@ -518,7 +552,7 @@ const performSearch = async (query: string) => {
       })
       
       if (response && response.success === true) {
-        console.log('📊 搜索返回数据:', response.data)
+        console.log('�� 搜索返回数据:', response.data)
         handleSearchResults(response.data, query)
       } else {
         console.error('搜索失败:', response?.message)
@@ -567,7 +601,7 @@ const handleSearchResults = (responseData: any, query: string) => {
     gasUsed: block.gas_used || block.gasUsed || 0,
     gasLimit: block.gas_limit || block.gasLimit || 0,
     miner: block.miner || '',
-    reward: block.total_amount || block.reward || 0
+    miner_tip_eth: block.miner_tip_eth // 传递原始字段用于调试
   }))
   
   totalBlocks.value = totalCount

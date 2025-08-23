@@ -215,11 +215,11 @@ func (api *ScannerAPI) GetAllCoinConfigs() ([]CoinConfigData, error) {
 	var result struct {
 		Success bool             `json:"success"`
 		Data    []CoinConfigData `json:"data"`
-		Message string           `json:"message"`
+		Message string           `json:"message,omitempty"`
 		Error   string           `json:"error,omitempty"`
 	}
 
-	if err := api.client.GET("/api/v1/coin-configs/all", &result); err != nil {
+	if err := api.client.GET("/api/v1/coin-configs/scanner", &result); err != nil {
 		return nil, fmt.Errorf("get all coin configs failed: %w", err)
 	}
 
@@ -228,6 +228,31 @@ func (api *ScannerAPI) GetAllCoinConfigs() ([]CoinConfigData, error) {
 	}
 
 	return result.Data, nil
+}
+
+// GetCoinConfigsByChain 根据链名称获取币种配置
+func (api *ScannerAPI) GetCoinConfigsByChain(chain string) ([]CoinConfigData, error) {
+	var result struct {
+		Success bool `json:"success"`
+		Data    struct {
+			ChainName   string           `json:"chain_name"`
+			CoinConfigs []CoinConfigData `json:"coin_configs"`
+			TotalCount  int              `json:"total_count"`
+		} `json:"data"`
+		Message string `json:"message,omitempty"`
+		Error   string `json:"error,omitempty"`
+	}
+
+	url := fmt.Sprintf("/api/v1/coin-configs/chain/%s", chain)
+	if err := api.client.GET(url, &result); err != nil {
+		return nil, fmt.Errorf("get coin configs by chain failed: %w", err)
+	}
+
+	if !result.Success {
+		return nil, fmt.Errorf("API returned error: %s", result.Error)
+	}
+
+	return result.Data.CoinConfigs, nil
 }
 
 // GetAllContracts 获取所有合约
@@ -259,9 +284,8 @@ func (api *ScannerAPI) UploadTransaction(tx map[string]interface{}) error {
 }
 
 // CreateCoinConfig 创建币种配置
-func (api *ScannerAPI) CreateCoinConfig(symbol string, config *CreateCoinConfigRequest) error {
-	endpoint := fmt.Sprintf("/api/v1/coin-configs/%s", symbol)
-	if err := api.client.POST(endpoint, config, nil); err != nil {
+func (api *ScannerAPI) CreateCoinConfig(config *CreateCoinConfigRequest) error {
+	if err := api.client.POST("/api/v1/coin-configs", config, nil); err != nil {
 		return fmt.Errorf("create coin config failed: %w", err)
 	}
 	return nil

@@ -35,7 +35,7 @@ func NewClient(baseURL, apiKey, secretKey, environment string) *Client {
 	}
 
 	// 如果使用HTTPS，配置TLS
-	if len(baseURL) > 5 && baseURL[:5] == "https" {
+	if len(baseURL) >= 5 && baseURL[:5] == "https" {
 		// 生产环境使用系统默认证书，开发环境尝试使用自定义CA证书
 		if environment == "production" {
 			// 生产环境：使用系统默认的根证书，不跳过验证

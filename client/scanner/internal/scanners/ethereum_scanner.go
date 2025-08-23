@@ -88,7 +88,9 @@ func (es *EthereumScanner) GetBlockByHeight(height uint64) (*models.Block, error
 	if err != nil {
 		return nil, err
 	}
-
+	if err := es.ValidateEthereumBlock(result); err != nil {
+		return nil, err
+	}
 	// 解析区块数据
 	block := es.parseBlock(result)
 
@@ -99,7 +101,7 @@ func (es *EthereumScanner) GetBlockByHeight(height uint64) (*models.Block, error
 
 // parseBlock 解析以太坊区块数据
 func (es *EthereumScanner) parseBlock(block *types.Block) *models.Block {
-	return &models.Block{
+	parsedBlock := &models.Block{
 		Chain:            "eth",
 		Hash:             block.Hash().Hex(),
 		Height:           block.NumberU64(),
@@ -117,9 +119,10 @@ func (es *EthereumScanner) parseBlock(block *types.Block) *models.Block {
 		Miner:            block.Coinbase().Hex(), // 获取矿工地址
 		BaseFee:          block.BaseFee(),
 	}
+	return parsedBlock
 }
 
-// ValidateBlock 验证区块
+// ValidateBlock 验证区块 - 使用go-ethereum内置验证
 func (es *EthereumScanner) ValidateBlock(block *models.Block) error {
 	// 基本验证
 	if block.Hash == "" {
@@ -134,16 +137,37 @@ func (es *EthereumScanner) ValidateBlock(block *models.Block) error {
 		return fmt.Errorf("block timestamp is zero")
 	}
 
-	// 验证哈希格式（66位，包含0x前缀）
-	if len(block.Hash) != 66 || block.Hash[:2] != "0x" {
-		return fmt.Errorf("invalid hash format: %s", block.Hash)
+	// 注意：go-ethereum包已经内置了完整的区块验证逻辑
+	// 包括哈希格式、区块头、交易等验证
+	// 这里只做最基本的业务逻辑验证
+
+	return nil
+}
+
+// ValidateEthereumBlock 验证以太坊区块 - 使用go-ethereum内置验证器
+func (es *EthereumScanner) ValidateEthereumBlock(ethBlock *types.Block) error {
+	if ethBlock == nil {
+		return fmt.Errorf("ethereum block is nil")
 	}
 
-	// 验证哈希字符（十六进制）
-	for _, c := range block.Hash[2:] {
-		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F')) {
-			return fmt.Errorf("invalid hash characters")
-		}
+	// 验证区块头
+	if ethBlock.Header() == nil {
+		return fmt.Errorf("block header is nil")
+	}
+
+	// 验证区块哈希
+	if ethBlock.Hash() == (common.Hash{}) {
+		return fmt.Errorf("block hash is zero")
+	}
+
+	// 验证区块高度
+	if ethBlock.NumberU64() == 0 {
+		return fmt.Errorf("block height is zero")
+	}
+
+	// 验证时间戳
+	if ethBlock.Time() == 0 {
+		return fmt.Errorf("block timestamp is zero")
 	}
 
 	return nil
@@ -169,9 +193,11 @@ func (es *EthereumScanner) extractTransactionsFromBlock(block *types.Block) []ma
 			maxFeePerGas = feeCap.String()
 			maxPriorityFeePerGas = tipCap.String()
 
-			// 有效支付单价 = min(feeCap, baseFee + tipCap)
+			// 注意：这里的effectiveGasPrice只是预估，真实值需要从交易回执中获取
+			// 在enrichTransactionsWithContractInfo中会用真实的EffectiveGasPrice覆盖
 			var effective *big.Int
-			if block.BaseFee() != nil {
+			if block.BaseFee() != nil && block.BaseFee().Sign() > 0 {
+				// 有BaseFee的情况（Ethereum主网或支持EIP-1559的信太链）
 				basePlusTip := new(big.Int).Add(block.BaseFee(), tipCap)
 				if basePlusTip.Cmp(feeCap) < 0 {
 					effective = basePlusTip
@@ -179,8 +205,15 @@ func (es *EthereumScanner) extractTransactionsFromBlock(block *types.Block) []ma
 					effective = feeCap
 				}
 			} else {
-				// 旧链或未暴露 baseFee 时，退化为上限
-				effective = feeCap
+				// 没有BaseFee的情况（可能是信太链或旧链）
+				if es.isL2Chain() {
+					// 信太链可能有不同的费用机制，使用tipCap作为基础
+					effective = tipCap
+					fmt.Printf("[ETH Scanner] L2 chain detected, using tipCap as effective gas price: %s\n", effective.String())
+				} else {
+					// 旧链或未暴露 baseFee 时，退化为上限
+					effective = feeCap
+				}
 			}
 			effectiveGasPrice = effective.String()
 			gasPriceStr = effectiveGasPrice
@@ -228,10 +261,10 @@ func (es *EthereumScanner) extractTransactionsFromBlock(block *types.Block) []ma
 			"maxFeePerGas":         maxFeePerGas,
 			"maxPriorityFeePerGas": maxPriorityFeePerGas,
 			"effectiveGasPrice":    effectiveGasPrice,
-			"gasLimit":             tx.Gas(),                     // 原始gas limit
-			"gasUsed":              tx.Gas(),                     // 暂时使用gas limit，后续可以通过receipt获取实际值
-			"data":                 fmt.Sprintf("%x", tx.Data()), // 保存原始交易数据为hex字符串
-			"raw_data":             tx.Data(),                    // 保存原始字节数据
+			"gasLimit":             tx.Gas(),                       // 原始gas limit
+			"gasUsed":              tx.Gas(),                       // 暂时使用gas limit，后续可以通过receipt获取实际值
+			"data":                 fmt.Sprintf("0x%x", tx.Data()), // 保存Input data为标准的0x前缀hex字符串
+			"raw_data":             tx.Data(),                      // 保存原始字节数据（用于调试）
 			"v":                    v.String(),
 			"r":                    r.String(),
 			"s":                    s.String(),
@@ -241,6 +274,8 @@ func (es *EthereumScanner) extractTransactionsFromBlock(block *types.Block) []ma
 		// 简化合约交易检测：仅检查是否为配置的代币地址
 		if toAddress != "" && es.isConfiguredTokenAddress(toAddress) && len(tx.Data()) > 0 {
 			txData["is_contract_tx"] = true
+			// 为代币交易设置合约地址
+			txData["contract_address"] = toAddress
 		} else {
 			txData["is_contract_tx"] = false
 		}
@@ -355,7 +390,6 @@ func (es *EthereumScanner) batchGetTransactionReceipts(block *models.Block, tran
 	// 收集所有结果
 	successCount := 0
 	failureCount := 0
-	logCount := 0
 	processedCount := 0
 
 	for i := 0; i < len(txHashes); i++ {
@@ -382,11 +416,23 @@ func (es *EthereumScanner) batchGetTransactionReceipts(block *models.Block, tran
 			// 设置实际使用的gas
 			tx["gasUsed"] = result.receipt.GasUsed
 
-			// 解析所有交易的日志（不仅仅是合约交易）
-			if len(result.receipt.Logs) > 0 {
-				es.parseContractLogs(tx, result.receipt)
-				logCount += len(result.receipt.Logs)
+			// 关键修复：使用交易回执中的真实EffectiveGasPrice
+			if result.receipt.EffectiveGasPrice != nil {
+				// 更新gas价格为真实值
+				tx["effectiveGasPrice"] = result.receipt.EffectiveGasPrice.String()
+				tx["gasPrice"] = result.receipt.EffectiveGasPrice.String()
+
+				// 计算真实的交易费用
+				realFee := new(big.Int).Mul(result.receipt.EffectiveGasPrice, big.NewInt(int64(result.receipt.GasUsed)))
+				tx["realFee"] = realFee.String()
+
+				// fmt.Printf("[ETH Scanner] Tx %s: Updated gas price to %s wei, real fee: %s wei\n",
+				// 	result.hash, result.receipt.EffectiveGasPrice.String(), realFee.String())
 			}
+
+			// 关键修复：为所有交易保存完整的回执信息，不管有没有日志
+			es.parseContractLogs(tx, result.receipt)
+
 			tx["receipt"] = result.receipt
 			successCount++
 		}
@@ -405,32 +451,60 @@ func (es *EthereumScanner) batchGetTransactionReceipts(block *models.Block, tran
 
 // parseContractLogs 保存合约交易的原始日志数据
 func (es *EthereumScanner) parseContractLogs(tx map[string]interface{}, receipt *types.Receipt) {
-	if receipt == nil || len(receipt.Logs) == 0 {
+	if receipt == nil {
 		return
+	}
+
+	// 关键修复：设置合约地址
+	// 如果交易回执中有合约地址，说明这是合约创建交易
+	if receipt.ContractAddress != (common.Address{}) {
+		tx["contract_address"] = receipt.ContractAddress.Hex()
+	} else if len(receipt.Logs) > 0 {
+		// 如果有日志，说明这是合约调用交易，使用第一个日志的地址作为合约地址
+		tx["contract_address"] = receipt.Logs[0].Address.Hex()
 	}
 
 	// 保存所有日志的原始数据，供后续手动解析使用
 	var logs []map[string]interface{}
-	for i, log := range receipt.Logs {
-		logData := map[string]interface{}{
-			"index":    i,
-			"address":  log.Address.Hex(),
-			"topics":   make([]string, len(log.Topics)),
-			"data":     fmt.Sprintf("%x", log.Data),
-			"raw_data": log.Data,
+	if len(receipt.Logs) > 0 {
+		for i, log := range receipt.Logs {
+			logData := map[string]interface{}{
+				"index":    i,
+				"address":  log.Address.Hex(),
+				"topics":   make([]string, len(log.Topics)),
+				"data":     fmt.Sprintf("%x", log.Data),
+				"raw_data": log.Data,
+			}
+
+			// 保存所有topics
+			for j, topic := range log.Topics {
+				logData["topics"].([]string)[j] = topic.Hex()
+			}
+
+			logs = append(logs, logData)
 		}
 
-		// 保存所有topics
-		for j, topic := range log.Topics {
-			logData["topics"].([]string)[j] = topic.Hex()
-		}
-
-		logs = append(logs, logData)
+		// 保存日志到交易数据中
+		tx["logs"] = logs
+		tx["log_count"] = len(logs)
 	}
 
-	// 保存日志到交易数据中
-	tx["logs"] = logs
-	tx["log_count"] = len(logs)
+	// 关键修复：保存完整的交易回执信息（不管有没有日志都要保存）
+	if receipt.EffectiveGasPrice != nil {
+		tx["effective_gas_price"] = receipt.EffectiveGasPrice.String()
+	}
+
+	if receipt.BlobGasUsed > 0 {
+		tx["blob_gas_used"] = receipt.BlobGasUsed
+	}
+
+	if receipt.BlobGasPrice != nil {
+		tx["blob_gas_price"] = receipt.BlobGasPrice.String()
+	}
+
+	if receipt.BlockNumber != nil {
+		tx["block_number"] = receipt.BlockNumber.Uint64()
+	}
 
 	// fmt.Printf("[ETH Scanner] Saved %d logs for transaction %s\n", len(logs), tx["hash"])
 }
@@ -470,7 +544,7 @@ func (es *EthereumScanner) CalculateBlockStats(block *models.Block, transactions
 	eip1559TxCount := 0
 
 	for _, tx := range transactions {
-		// 获取实际的gas使用量
+		// 获取实际的gas使用量 - 优先使用回执中的真实值
 		if gasUsed, ok := tx["gasUsed"].(uint64); ok {
 			totalGasUsed += gasUsed
 		} else {
@@ -489,34 +563,6 @@ func (es *EthereumScanner) CalculateBlockStats(block *models.Block, transactions
 			legacyTxCount++
 		}
 
-		// 计算费用 - 优先使用effectiveGasPrice（EIP-1559兼容）
-		var gasPrice *big.Int
-		if effectiveGasPriceStr, ok := tx["effectiveGasPrice"].(string); ok && effectiveGasPriceStr != "" {
-			if price, ok := new(big.Int).SetString(effectiveGasPriceStr, 10); ok {
-				gasPrice = price
-			}
-		} else if gasPriceStr, ok := tx["gasPrice"].(string); ok {
-			if price, ok := new(big.Int).SetString(gasPriceStr, 10); ok {
-				gasPrice = price
-			}
-		}
-
-		if gasPrice != nil {
-			// 优先使用gasUsed，如果没有则使用gasLimit
-			var gasForFee uint64
-			if gasUsed, ok := tx["gasUsed"].(uint64); ok {
-				gasForFee = gasUsed
-			} else if gasLimit, ok := tx["gasLimit"].(uint64); ok {
-				gasForFee = gasLimit
-			} else {
-				continue // 跳过这笔交易
-			}
-
-			// 计算这笔交易的费用：gasUsed * effectiveGasPrice
-			txFee := new(big.Int).Mul(big.NewInt(int64(gasForFee)), gasPrice)
-			totalFee.Add(totalFee, txFee)
-		}
-
 		// 获取交易价值
 		if valueStr, ok := tx["value"].(string); ok {
 			if value, ok := new(big.Int).SetString(valueStr, 10); ok {
@@ -524,6 +570,7 @@ func (es *EthereumScanner) CalculateBlockStats(block *models.Block, transactions
 			}
 		}
 	}
+
 	// 验证我们累加的 totalGasUsed 与区块实际 gasUsed 是否一致
 	actualGasUsed := block.StrippedSize // 在 parseBlock 中我们把 block.GasUsed() 存到了 StrippedSize
 	if totalGasUsed != actualGasUsed {
@@ -531,15 +578,65 @@ func (es *EthereumScanner) CalculateBlockStats(block *models.Block, transactions
 			block.Height, totalGasUsed, actualGasUsed)
 	}
 
-	// 计算矿工小费与燃烧（注意：不包含发行奖励）
-	if block.BaseFee != nil && block.BaseFee.Sign() > 0 { // London 之后有 base fee 与燃烧
-		// 燃烧费 = baseFee * 区块实际gasUsed（这是协议规定的）
+	// 重新计算真实的总费用 - 从交易回执中获取
+	totalFee = big.NewInt(0)
+	for _, tx := range transactions {
+		// 从交易回执中获取真实的gas使用量和gas价格
+		if receipt, ok := tx["receipt"].(*types.Receipt); ok && receipt != nil {
+			// 获取真实使用的gas
+			gasUsed := receipt.GasUsed
+
+			// 获取真实的gas价格 - 优先使用回执中的EffectiveGasPrice
+			var gasPrice *big.Int
+			if receipt.EffectiveGasPrice != nil {
+				// 优先使用回执中的EffectiveGasPrice（这是真实的价格）
+				gasPrice = receipt.EffectiveGasPrice
+			} else {
+				// 回退到交易中的价格
+				if txType, _ := tx["type"].(uint8); txType == 2 {
+					// EIP-1559交易，使用effectiveGasPrice
+					if effectiveGasPriceStr, ok := tx["effectiveGasPrice"].(string); ok && effectiveGasPriceStr != "" {
+						if price, ok := new(big.Int).SetString(effectiveGasPriceStr, 10); ok {
+							gasPrice = price
+						}
+					}
+				} else {
+					// Legacy交易，使用gasPrice
+					if gasPriceStr, ok := tx["gasPrice"].(string); ok {
+						if price, ok := new(big.Int).SetString(gasPriceStr, 10); ok {
+							gasPrice = price
+						}
+					}
+				}
+			}
+
+			if gasPrice != nil {
+				// 计算这笔交易的费用：gasUsed * gasPrice
+				txFee := new(big.Int).Mul(big.NewInt(int64(gasUsed)), gasPrice)
+				totalFee.Add(totalFee, txFee)
+
+				// 记录每笔交易的费用信息
+				// fmt.Printf("[ETH Scanner] Block %d Tx %s: GasUsed=%d, GasPrice=%s wei, Fee=%s wei\n",
+				// 	block.Height, tx["hash"], gasUsed, gasPrice.String(), txFee.String())
+			}
+		}
+	}
+
+	// 计算矿工小费与燃烧 - 修正逻辑
+	// 关键修正：只要区块有BaseFee，所有交易都会燃烧，不管交易类型
+	if block.BaseFee != nil && block.BaseFee.Sign() > 0 {
+		// 燃烧费 = baseFee * 区块实际gasUsed（这是协议规定的，对所有交易都适用）
 		burnedWei := new(big.Int).Mul(new(big.Int).SetUint64(actualGasUsed), block.BaseFee)
+
 		// 矿工小费 = 总费用 - 燃烧费
 		minerTipWei := new(big.Int).Sub(totalFee, burnedWei)
 		if minerTipWei.Sign() < 0 {
+			// 如果小费不够，矿工可能亏损，但不会为负
 			minerTipWei.SetInt64(0)
+			fmt.Printf("[ETH Scanner] Warning: Block %d miner tip is negative, setting to 0\n", block.Height)
 		}
+
+		// 转换为ETH单位
 		block.BurnedEth = new(big.Float).Quo(new(big.Float).SetInt(burnedWei), new(big.Float).SetInt(big.NewInt(1e18)))
 		block.MinerTipEth = new(big.Float).Quo(new(big.Float).SetInt(minerTipWei), new(big.Float).SetInt(big.NewInt(1e18)))
 
@@ -549,7 +646,8 @@ func (es *EthereumScanner) CalculateBlockStats(block *models.Block, transactions
 			block.Height, burnedWei.String(), minerTipWei.String(),
 			block.BurnedEth.Text('f', 18), block.MinerTipEth.Text('f', 18))
 	} else {
-		// EIP-1559 之前没有燃烧，或者 BaseFee 为 0，全部费用归矿工
+
+		// 没有燃烧，全部费用归矿工
 		block.BurnedEth = new(big.Float).SetInt(big.NewInt(0))
 		block.MinerTipEth = new(big.Float).Quo(new(big.Float).SetInt(totalFee), new(big.Float).SetInt(big.NewInt(1e18)))
 
@@ -566,4 +664,32 @@ func (es *EthereumScanner) CalculateBlockStats(block *models.Block, transactions
 	block.Fee, _ = ethFee.Float64()
 	block.Confirmations = 1
 
+	fmt.Printf("[ETH Scanner] Block %d: Legacy TXs=%d, EIP-1559 TXs=%d, Total Value=%s ETH, Total Fee=%s ETH\n",
+		block.Height, legacyTxCount, eip1559TxCount, ethValue.Text('f', 18), ethFee.Text('f', 18))
+}
+
+// isL2Chain 检查是否为L2信太链
+func (es *EthereumScanner) isL2Chain() bool {
+	if es.chainID == nil {
+		return false
+	}
+
+	// 常见的L2链ID
+	l2ChainIDs := map[int64]string{
+		137:   "Polygon",       // Polygon Mainnet
+		80001: "Polygon Test",  // Polygon Mumbai
+		42161: "Arbitrum One",  // Arbitrum One
+		42170: "Arbitrum Nova", // Arbitrum Nova
+		10:    "Optimism",      // Optimism
+		8453:  "Base",          // Base
+		1101:  "Polygon zkEVM", // Polygon zkEVM
+		324:   "zkSync Era",    // zkSync Era
+	}
+
+	if chainName, exists := l2ChainIDs[es.chainID.Int64()]; exists {
+		fmt.Printf("[ETH Scanner] Detected L2 chain: %s (ChainID: %d)\n", chainName, es.chainID.Int64())
+		return true
+	}
+
+	return false
 }

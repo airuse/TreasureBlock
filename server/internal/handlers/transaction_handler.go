@@ -242,9 +242,20 @@ func (h *TransactionHandler) CreateTransaction(c *gin.Context) {
 				receiptData["status"] = *v
 			}
 		}
-		if req.Receipt.CumulativeGasUsed != nil {
-			if v := convertToUint64(req.Receipt.CumulativeGasUsed); v != nil {
-				receiptData["cumulative_gas_used"] = *v
+		// 处理新增字段：EffectiveGasPrice, BlobGasUsed, BlobGasPrice
+		if req.Receipt.EffectiveGasPrice != nil {
+			if v, ok := req.Receipt.EffectiveGasPrice.(string); ok {
+				receiptData["effective_gas_price"] = v
+			}
+		}
+		if req.Receipt.BlobGasUsed != nil {
+			if v := convertToUint64(req.Receipt.BlobGasUsed); v != nil {
+				receiptData["blob_gas_used"] = *v
+			}
+		}
+		if req.Receipt.BlobGasPrice != nil {
+			if v, ok := req.Receipt.BlobGasPrice.(string); ok {
+				receiptData["blob_gas_price"] = v
 			}
 		}
 		if req.Receipt.LogsBloom != nil {

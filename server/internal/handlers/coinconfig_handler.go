@@ -1,128 +1,426 @@
 package handlers
 
 import (
-	"blockChainBrowser/server/internal/dto"
-	"blockChainBrowser/server/internal/services"
-	"blockChainBrowser/server/internal/utils"
 	"net/http"
+	"strconv"
+
+	"blockChainBrowser/server/internal/dto"
+	"blockChainBrowser/server/internal/models"
+	"blockChainBrowser/server/internal/services"
 
 	"github.com/gin-gonic/gin"
 )
 
+// CoinConfigHandler 币种配置处理器
 type CoinConfigHandler struct {
 	coinConfigService services.CoinConfigService
 }
 
-/*
-创建币种配置处理器
-@param coinConfigService services.CoinConfigService
-@return *CoinConfigHandler
-*/
+// NewCoinConfigHandler 创建币种配置处理器
 func NewCoinConfigHandler(coinConfigService services.CoinConfigService) *CoinConfigHandler {
 	return &CoinConfigHandler{
 		coinConfigService: coinConfigService,
 	}
 }
 
-/*
-创建币种配置
-@param c *gin.Context
-@return
-*/
+// CreateCoinConfig 创建币种配置
 func (h *CoinConfigHandler) CreateCoinConfig(c *gin.Context) {
-	// 1. 从URL路径获取符号参数
-	symbol := c.Param("symbol")
-	if symbol == "" {
+	var req dto.CreateCoinConfigRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
-			"error":   "symbol parameter is required",
+			"error":   "请求参数错误",
+			"details": err.Error(),
 		})
 		return
 	}
 
-	// 2. 从请求体获取币种配置信息并验证
-	var req dto.CreateCoinConfigRequest
-	if err := utils.ValidateAndBind(c, &req); err != nil {
-		utils.HandleValidationError(c, err)
-		return
-	}
-
-	// 3. 将DTO转换为模型
-	coinConfig := req.ToModel(symbol)
-
-	// 4. 调用服务层处理业务逻辑
+	coinConfig := req.ToModel()
 	err := h.coinConfigService.CreateCoinConfig(c.Request.Context(), coinConfig)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
-			"error":   err.Error(),
+			"error":   "创建币种配置失败",
+			"details": err.Error(),
 		})
 		return
 	}
 
-	// 5. 返回响应DTO
-	response := dto.NewCoinConfigResponse(coinConfig)
-	c.JSON(http.StatusCreated, gin.H{
+	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"data":    response,
-		"message": "coin config created successfully",
+		"message": "币种配置创建成功",
+		"data":    dto.NewCoinConfigResponse(coinConfig),
 	})
 }
 
-/*
-根据符号获取币种配置
-@param c *gin.Context
-@return
-*/
+// GetCoinConfigByID 根据ID获取币种配置
+func (h *CoinConfigHandler) GetCoinConfigByID(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "无效的ID参数",
+		})
+		return
+	}
+
+	coinConfig, err := h.coinConfigService.GetCoinConfigByID(c.Request.Context(), uint(id))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"success": false,
+			"error":   "币种配置不存在",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    dto.NewCoinConfigResponse(coinConfig),
+	})
+}
+
+// GetCoinConfigBySymbol 根据符号获取币种配置
 func (h *CoinConfigHandler) GetCoinConfigBySymbol(c *gin.Context) {
 	symbol := c.Param("symbol")
 	if symbol == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
-			"error":   "symbol parameter is required",
+			"error":   "币种符号不能为空",
 		})
 		return
 	}
+
 	coinConfig, err := h.coinConfigService.GetCoinConfigBySymbol(c.Request.Context(), symbol)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"success": false,
+			"error":   "币种配置不存在",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    dto.NewCoinConfigResponse(coinConfig),
+	})
+}
+
+// GetCoinConfigByContractAddress 根据合约地址获取币种配置
+func (h *CoinConfigHandler) GetCoinConfigByContractAddress(c *gin.Context) {
+	contractAddr := c.Param("contractAddress")
+	if contractAddr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "合约地址不能为空",
+		})
+		return
+	}
+
+	coinConfig, err := h.coinConfigService.GetCoinConfigByContractAddress(c.Request.Context(), contractAddr)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"success": false,
+			"error":   "币种配置不存在",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    dto.NewCoinConfigResponse(coinConfig),
+	})
+}
+
+// GetCoinConfigsByChain 根据链名称获取币种配置列表
+func (h *CoinConfigHandler) GetCoinConfigsByChain(c *gin.Context) {
+	chain := c.Param("chain")
+	if chain == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "链名称不能为空",
+		})
+		return
+	}
+
+	coinConfigs, err := h.coinConfigService.GetCoinConfigsByChain(c.Request.Context(), chain)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
-			"error":   err.Error(),
+			"error":   "获取币种配置失败",
+			"details": err.Error(),
 		})
 		return
 	}
-	response := dto.NewCoinConfigResponse(coinConfig)
+
+	responses := make([]*dto.CoinConfigResponse, len(coinConfigs))
+	for i, coinConfig := range coinConfigs {
+		responses[i] = dto.NewCoinConfigResponse(coinConfig)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": gin.H{
+			"chain_name":   chain,
+			"coin_configs": responses,
+			"total_count":  len(responses),
+		},
+	})
+}
+
+// GetStablecoins 获取指定链的稳定币列表
+func (h *CoinConfigHandler) GetStablecoins(c *gin.Context) {
+	chain := c.Param("chain")
+	if chain == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "链名称不能为空",
+		})
+		return
+	}
+
+	coinConfigs, err := h.coinConfigService.GetStablecoins(c.Request.Context(), chain)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "获取稳定币列表失败",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	responses := make([]*dto.CoinConfigResponse, len(coinConfigs))
+	for i, coinConfig := range coinConfigs {
+		responses[i] = dto.NewCoinConfigResponse(coinConfig)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": gin.H{
+			"chain_name":  chain,
+			"stablecoins": responses,
+			"total_count": len(responses),
+		},
+	})
+}
+
+// GetVerifiedTokens 获取指定链的已验证代币列表
+func (h *CoinConfigHandler) GetVerifiedTokens(c *gin.Context) {
+	chain := c.Param("chain")
+	if chain == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "链名称不能为空",
+		})
+		return
+	}
+
+	coinConfigs, err := h.coinConfigService.GetVerifiedTokens(c.Request.Context(), chain)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "获取已验证代币列表失败",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	responses := make([]*dto.CoinConfigResponse, len(coinConfigs))
+	for i, coinConfig := range coinConfigs {
+		responses[i] = dto.NewCoinConfigResponse(coinConfig)
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": gin.H{
+			"chain_name":      chain,
+			"verified_tokens": responses,
+			"total_count":     len(responses),
+		},
+	})
+}
+
+// ListCoinConfigs 分页获取币种配置列表
+func (h *CoinConfigHandler) ListCoinConfigs(c *gin.Context) {
+	pageStr := c.DefaultQuery("page", "1")
+	pageSizeStr := c.DefaultQuery("page_size", "20")
+	chain := c.Query("chain")
+
+	page, err := strconv.Atoi(pageStr)
+	if err != nil || page < 1 {
+		page = 1
+	}
+
+	pageSize, err := strconv.Atoi(pageSizeStr)
+	if err != nil || pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+
+	coinConfigs, total, err := h.coinConfigService.ListCoinConfigs(c.Request.Context(), page, pageSize, chain)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "获取币种配置列表失败",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	response := dto.NewCoinConfigListResponse(coinConfigs, total, page, pageSize)
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"data":    response,
 	})
 }
 
-/*
-获取所有币种配置
-@param c *gin.Context
-@return
-*/
+// UpdateCoinConfig 更新币种配置
+func (h *CoinConfigHandler) UpdateCoinConfig(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "无效的ID参数",
+		})
+		return
+	}
+
+	var req dto.UpdateCoinConfigRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "请求参数错误",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	coinConfig, err := h.coinConfigService.GetCoinConfigByID(c.Request.Context(), uint(id))
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"success": false,
+			"error":   "币种配置不存在",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	req.ApplyToModel(coinConfig)
+	err = h.coinConfigService.UpdateCoinConfig(c.Request.Context(), coinConfig)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "更新币种配置失败",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "币种配置更新成功",
+		"data":    dto.NewCoinConfigResponse(coinConfig),
+	})
+}
+
+// DeleteCoinConfig 删除币种配置
+func (h *CoinConfigHandler) DeleteCoinConfig(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "无效的ID参数",
+		})
+		return
+	}
+
+	err = h.coinConfigService.DeleteCoinConfig(c.Request.Context(), uint(id))
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "删除币种配置失败",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"message": "币种配置删除成功",
+	})
+}
+
+// GetAllCoinConfigs 获取所有币种配置
 func (h *CoinConfigHandler) GetAllCoinConfigs(c *gin.Context) {
 	coinConfigs, err := h.coinConfigService.GetAllCoinConfigs(c.Request.Context())
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,
-			"error":   err.Error(),
+			"error":   "获取所有币种配置失败",
+			"details": err.Error(),
 		})
 		return
 	}
 
-	// 转换为响应DTO
-	var responses []dto.GetAllCoinConfigsResponse
-	for _, config := range coinConfigs {
-		response := dto.NewGetAllCoinConfigsResponse(config)
-		responses = append(responses, *response)
+	responses := make([]*dto.CoinConfigResponse, len(coinConfigs))
+	for i, coinConfig := range coinConfigs {
+		responses[i] = dto.NewCoinConfigResponse(coinConfig)
 	}
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"data":    responses,
-		"message": "coin configs retrieved successfully",
+		"data": gin.H{
+			"coin_configs": responses,
+			"total_count":  len(responses),
+		},
+	})
+}
+
+// GetCoinConfigsForScanner 获取币种配置（扫块程序专用，简化版本）
+func (h *CoinConfigHandler) GetCoinConfigsForScanner(c *gin.Context) {
+	chain := c.Query("chain") // 可选参数，支持按链筛选
+
+	var coinConfigs []*models.CoinConfig
+	var err error
+
+	if chain != "" {
+		coinConfigs, err = h.coinConfigService.GetCoinConfigsByChain(c.Request.Context(), chain)
+	} else {
+		coinConfigs, err = h.coinConfigService.GetAllCoinConfigs(c.Request.Context())
+	}
+
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "获取币种配置失败",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	// 转换为扫块程序需要的简化格式
+	scannerData := make([]gin.H, len(coinConfigs))
+	for i, config := range coinConfigs {
+		scannerData[i] = gin.H{
+			"id":            config.ID,
+			"chain_name":    config.ChainName,
+			"symbol":        config.Symbol,
+			"coin_type":     config.CoinType,
+			"contract_addr": config.ContractAddr,
+			"precision":     config.Precision,
+			"decimals":      config.Decimals,
+			"name":          config.Name,
+			"status":        config.Status,
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    scannerData,
+		"message": "获取币种配置成功",
 	})
 }

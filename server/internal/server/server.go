@@ -47,7 +47,7 @@ func New() *Server {
 
 	// 创建服务
 	blockService := services.NewBlockService(blockRepo)
-	txService := services.NewTransactionService(txRepo)
+	txService := services.NewTransactionService(txRepo, coinConfigRepo)
 	addressService := services.NewAddressService(addressRepo)
 	assetService := services.NewAssetService(assetRepo)
 	baseConfigService := services.NewBaseConfigService(baseConfigRepo)

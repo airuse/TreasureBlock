@@ -3,8 +3,8 @@
 server:
   host: "0.0.0.0"
   port: 8080
-  tls_enabled: false
-  tls_port: 0
+  tls_enabled: true
+  tls_port: 8443
   cert_file: "./certs/localhost.crt"
   key_file: "./certs/localhost.key"
   read_timeout: 30s

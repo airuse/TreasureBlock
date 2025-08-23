@@ -62,8 +62,15 @@ func (s *transactionReceiptService) CreateTransactionReceipt(ctx context.Context
 	if status, ok := receiptData["status"].(uint64); ok {
 		receipt.Status = status
 	}
-	if cumulativeGasUsed, ok := receiptData["cumulative_gas_used"].(uint64); ok {
-		receipt.CumulativeGasUsed = cumulativeGasUsed
+	// 处理新增字段：EffectiveGasPrice, BlobGasUsed, BlobGasPrice
+	if effectiveGasPrice, ok := receiptData["effective_gas_price"].(string); ok {
+		receipt.EffectiveGasPrice = effectiveGasPrice
+	}
+	if blobGasUsed, ok := receiptData["blob_gas_used"].(uint64); ok {
+		receipt.BlobGasUsed = blobGasUsed
+	}
+	if blobGasPrice, ok := receiptData["blob_gas_price"].(string); ok {
+		receipt.BlobGasPrice = blobGasPrice
 	}
 	if bloom, ok := receiptData["bloom"].(string); ok {
 		receipt.Bloom = bloom

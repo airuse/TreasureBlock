@@ -1,14 +1,13 @@
 package services
 
 import (
-	"context"
-	"fmt"
-
 	"blockChainBrowser/server/internal/models"
 	"blockChainBrowser/server/internal/repository"
+	"context"
+	"fmt"
+	"strings"
 )
 
-// TransactionService 交易服务接口
 type TransactionService interface {
 	GetTransactionByHash(ctx context.Context, hash string) (*models.Transaction, error)
 	GetTransactionsByAddress(ctx context.Context, address string, page, pageSize int) ([]*models.Transaction, int64, error)
@@ -20,15 +19,15 @@ type TransactionService interface {
 	DeleteTransaction(ctx context.Context, hash string) error
 }
 
-// transactionService 交易服务实现
 type transactionService struct {
-	txRepo repository.TransactionRepository
+	txRepo         repository.TransactionRepository
+	coinConfigRepo repository.CoinConfigRepository
 }
 
-// NewTransactionService 创建交易服务实例
-func NewTransactionService(txRepo repository.TransactionRepository) TransactionService {
+func NewTransactionService(txRepo repository.TransactionRepository, coinConfigRepo repository.CoinConfigRepository) TransactionService {
 	return &transactionService{
-		txRepo: txRepo,
+		txRepo:         txRepo,
+		coinConfigRepo: coinConfigRepo,
 	}
 }
 
@@ -97,6 +96,18 @@ func (s *transactionService) GetTransactionsByBlockHeight(ctx context.Context, b
 		return nil, 0, fmt.Errorf("failed to get transactions by block height: %w", err)
 	}
 
+	// 获取代币地址列表，用于判断交易是否为代币交易
+	tokenMap, err := s.getTokenAddresses(ctx, chain)
+	if err != nil {
+		// 如果获取代币地址失败，记录错误但不影响交易列表返回
+		fmt.Printf("Warning: Failed to get token addresses for chain %s: %v\n", chain, err)
+	}
+
+	// 为每个交易添加代币标识
+	for _, tx := range txs {
+		tx.IsToken = s.isTokenTransaction(tx, tokenMap)
+	}
+
 	return txs, total, nil
 }
 
@@ -113,6 +124,18 @@ func (s *transactionService) ListTransactions(ctx context.Context, page, pageSiz
 	txs, total, err := s.txRepo.List(ctx, offset, pageSize, chain)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to list transactions: %w", err)
+	}
+
+	// 获取代币地址列表，用于判断交易是否为代币交易
+	tokenMap, err := s.getTokenAddresses(ctx, chain)
+	if err != nil {
+		// 如果获取代币地址失败，记录错误但不影响交易列表返回
+		fmt.Printf("Warning: Failed to get token addresses for chain %s: %v\n", chain, err)
+	}
+
+	// 为每个交易添加代币标识
+	for _, tx := range txs {
+		tx.IsToken = s.isTokenTransaction(tx, tokenMap)
 	}
 
 	return txs, total, nil
@@ -159,4 +182,53 @@ func (s *transactionService) DeleteTransaction(ctx context.Context, hash string)
 	}
 
 	return nil
+}
+
+// getTokenAddresses 获取指定链的代币配置信息
+func (s *transactionService) getTokenAddresses(ctx context.Context, chain string) (map[string]*models.CoinConfig, error) {
+	coinConfigs, err := s.coinConfigRepo.GetByChain(ctx, chain)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get coin configs for chain %s: %w", chain, err)
+	}
+
+	// 返回地址到代币配置的映射
+	tokenMap := make(map[string]*models.CoinConfig)
+	for _, config := range coinConfigs {
+		if config.Status == 1 && config.ContractAddr != "" { // 只获取启用的代币
+			address := strings.ToLower(config.ContractAddr)
+			tokenMap[address] = config // 保存完整的代币配置
+		}
+	}
+
+	return tokenMap, nil
+}
+
+// isTokenTransaction 判断交易是否为代币交易，并设置代币名称和合约地址
+func (s *transactionService) isTokenTransaction(tx *models.Transaction, tokenMap map[string]*models.CoinConfig) bool {
+	if len(tokenMap) == 0 {
+		return false
+	}
+
+	// 检查交易的to地址是否在代币地址列表中
+	txToAddress := strings.ToLower(tx.AddressTo)
+	if config, exists := tokenMap[txToAddress]; exists {
+		tx.IsToken = true
+		tx.TokenName = config.Name                // 设置代币名称
+		tx.TokenSymbol = config.Symbol            // 设置代币符号
+		tx.TokenDecimals = uint8(config.Decimals) // 设置代币精度
+		tx.TokenDescription = config.Description  // 设置代币描述
+		tx.TokenWebsite = config.WebsiteURL       // 设置代币官网
+		tx.TokenExplorer = config.ExplorerURL     // 设置代币浏览器链接
+		tx.TokenLogo = config.LogoURL             // 设置代币Logo
+		tx.TokenMarketCapRank = func() *int {
+			rank := int(config.MarketCapRank)
+			return &rank
+		}() // 设置市值排名
+		tx.TokenIsStablecoin = config.IsStablecoin // 设置是否为稳定币
+		tx.TokenIsVerified = config.IsVerified     // 设置是否已验证
+		tx.ContractAddr = txToAddress              // 设置合约地址
+		return true
+	}
+
+	return false
 }

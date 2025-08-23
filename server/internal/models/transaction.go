@@ -36,6 +36,11 @@ type Transaction struct {
 	GasPrice string `json:"gas_price" gorm:"type:decimal(65,0) unsigned;not null;column:gas_price;comment:燃油价格"`
 	GasUsed  uint   `json:"gas_used" gorm:"type:int(11) unsigned;not null;column:gas_used;comment:实际使用燃油价格"`
 
+	// EIP-1559 相关字段（ETH特有）
+	MaxFeePerGas         string `json:"max_fee_per_gas" gorm:"type:varchar(100);column:max_fee_per_gas;comment:最高费用(MaxFee)"`
+	MaxPriorityFeePerGas string `json:"max_priority_fee_per_gas" gorm:"type:varchar(100);column:max_priority_fee_per_gas;comment:最高小费(MaxPriorityFee)"`
+	EffectiveGasPrice    string `json:"effective_gas_price" gorm:"type:varchar(100);column:effective_gas_price;comment:有效Gas价格"`
+
 	// 手续费字段
 	Fee     string  `json:"fee" gorm:"type:decimal(36,18) unsigned;not null;default:0.000000000000000000;column:fee;comment:预留手续费"`
 	UsedFee *string `json:"used_fee" gorm:"type:decimal(36,18);column:used_fee;comment:真实手续费"`
@@ -46,6 +51,19 @@ type Transaction struct {
 
 	// 日志数据字段
 	Logs string `json:"logs" gorm:"type:longtext;column:logs;comment:交易日志数据(JSON格式)"`
+
+	// 代币标识字段（非数据库字段，仅用于API响应）
+	IsToken            bool   `json:"is_token" gorm:"-"`
+	TokenName          string `json:"token_name,omitempty" gorm:"-"`            // 代币全名（非数据库字段）
+	TokenSymbol        string `json:"token_symbol,omitempty" gorm:"-"`          // 代币符号（非数据库字段）
+	TokenDecimals      uint8  `json:"token_decimals,omitempty" gorm:"-"`        // 代币精度（非数据库字段）
+	TokenDescription   string `json:"token_description,omitempty" gorm:"-"`     // 代币描述（非数据库字段）
+	TokenWebsite       string `json:"token_website,omitempty" gorm:"-"`         // 代币官网（非数据库字段）
+	TokenExplorer      string `json:"token_explorer,omitempty" gorm:"-"`        // 代币浏览器链接（非数据库字段）
+	TokenLogo          string `json:"token_logo,omitempty" gorm:"-"`            // 代币Logo（非数据库字段）
+	TokenMarketCapRank *int   `json:"token_market_cap_rank,omitempty" gorm:"-"` // 市值排名（非数据库字段）
+	TokenIsStablecoin  bool   `json:"token_is_stablecoin,omitempty" gorm:"-"`   // 是否为稳定币（非数据库字段）
+	TokenIsVerified    bool   `json:"token_is_verified,omitempty" gorm:"-"`     // 是否已验证（非数据库字段）
 
 	// 时间字段
 	Ctime     time.Time      `json:"ctime" gorm:"type:timestamp;not null;default:CURRENT_TIMESTAMP;column:ctime;comment:入库时间"`

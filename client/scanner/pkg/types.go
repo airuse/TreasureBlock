@@ -119,29 +119,41 @@ type BlockResponse struct {
 
 // CoinConfigData 币种配置数据结构
 type CoinConfigData struct {
-	Symbol       string `json:"symbol"`
-	ChainName    string `json:"chain_name"`
-	ContractAddr string `json:"contract_addr"`
-	Status       int8   `json:"status"`
+	ID            uint   `json:"id"`
+	ChainName     string `json:"chain_name"`
+	Symbol        string `json:"symbol"`
+	CoinType      uint8  `json:"coin_type"`
+	ContractAddr  string `json:"contract_addr"`
+	Precision     uint   `json:"precision"`
+	Decimals      uint   `json:"decimals"`
+	Name          string `json:"name"`
+	LogoURL       string `json:"logo_url"`
+	WebsiteURL    string `json:"website_url"`
+	ExplorerURL   string `json:"explorer_url"`
+	Description   string `json:"description"`
+	MarketCapRank uint   `json:"market_cap_rank"`
+	IsStablecoin  bool   `json:"is_stablecoin"`
+	IsVerified    bool   `json:"is_verified"`
+	Status        int8   `json:"status"`
 }
 
 // CreateCoinConfigRequest 创建币种配置请求
 type CreateCoinConfigRequest struct {
-	ChainName        string  `json:"chain_name"`
-	CoinType         uint8   `json:"coin_type"`
-	ContractAddr     string  `json:"contract_addr"`
-	Precision        uint    `json:"precision"`
-	ColdAddress      string  `json:"cold_address"`
-	ColdAddressHash  string  `json:"cold_address_hash"`
-	MaxStock         float64 `json:"max_stock"`
-	MaxBalance       float64 `json:"max_balance"`
-	MinBalance       float64 `json:"min_balance"`
-	CollectLimit     float64 `json:"collect_limit"`
-	CollectLeft      float64 `json:"collect_left"`
-	InternalGasLimit uint    `json:"internal_gas_limit"`
-	OnceMinFee       float64 `json:"once_min_fee"`
-	SymbolID         string  `json:"symbol_id"`
-	Status           int8    `json:"status"`
+	ChainName     string `json:"chain_name"`
+	Symbol        string `json:"symbol"`
+	CoinType      uint8  `json:"coin_type"`
+	ContractAddr  string `json:"contract_addr"`
+	Precision     uint   `json:"precision"`
+	Decimals      uint   `json:"decimals"`
+	Name          string `json:"name"`
+	LogoURL       string `json:"logo_url"`
+	WebsiteURL    string `json:"website_url"`
+	ExplorerURL   string `json:"explorer_url"`
+	Description   string `json:"description"`
+	MarketCapRank uint   `json:"market_cap_rank"`
+	IsStablecoin  bool   `json:"is_stablecoin"`
+	IsVerified    bool   `json:"is_verified"`
+	Status        int8   `json:"status"`
 }
 
 // ContractInfo 合约信息

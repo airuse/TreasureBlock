@@ -33,11 +33,11 @@
     </div>
 
     <!-- 区块信息 -->
-    <div v-else-if="block" class="space-y-6">
+    <div v-else-if="block" class="space-y-3">
       <!-- 区块基本信息 -->
       <div class="card">
-        <h2 class="text-lg font-medium text-gray-900 mb-4">区块信息</h2>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
+        <h2 class="text-lg font-medium text-gray-900 mb-2">区块信息</h2>
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
           <div>
             <label class="block text-sm font-medium text-gray-500">区块高度</label>
             <p class="mt-1 text-sm text-gray-900">#{{ block.height?.toLocaleString() }}</p>
@@ -65,19 +65,20 @@
             </p>
           </div>
           <div>
-            <label class="block text-sm font-medium text-gray-500">区块奖励</label>
-            <p class="mt-1 text-sm text-gray-900">{{ formatAmount(block.reward) }} ETH</p>
-          </div>
-          <div>
-            <label class="block text-sm font-medium text-gray-500">难度</label>
-            <p class="mt-1 text-sm text-gray-900">{{ block.difficulty?.toLocaleString() || 'N/A' }}</p>
+            <span class="text-gray-500">区块奖励</span>
+            <p class="mt-1 text-sm text-gray-900">
+              <span class="font-medium">{{ formatMinerTip(block.miner_tip_eth) }} ETH</span>
+              <span v-if="block.burned_eth && parseFloat(block.burned_eth) > 0" class="text-sm text-gray-500 ml-2">
+                (燃烧: {{ formatBurnedEth(block.burned_eth) }} ETH)
+              </span>
+            </p>
           </div>
         </div>
       </div>
 
       <!-- 交易列表 -->
       <div class="card">
-        <div class="flex justify-between items-center mb-4">
+        <div class="flex justify-between items-center mb-2">
           <h2 class="text-lg font-medium text-gray-900">交易列表</h2>
           <div class="text-sm text-gray-500">
             共 {{ totalCount }} 笔交易 (第 {{ currentPage }}/{{ totalPages }} 页)
@@ -85,9 +86,9 @@
         </div>
 
         <!-- 交易范围说明 -->
-        <div v-if="transactions.length > 0" class="mb-4 p-3 bg-blue-50 border border-blue-200 rounded-md">
+        <div v-if="transactions.length > 0" class="mb-2 p-1 bg-blue-50 border border-blue-200 rounded-md">
           <div class="flex items-center">
-            <svg class="w-5 h-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+            <svg class="w-4 h-4 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
             </svg>
             <span class="text-sm text-blue-800">
@@ -109,12 +110,12 @@
         </div>
 
         <!-- 交易列表 -->
-        <div v-else-if="transactions.length > 0" class="space-y-3">
-          <div v-for="tx in transactions" :key="tx.id" class="bg-gray-50 p-4 rounded-lg">
+        <div v-else-if="transactions.length > 0" class="space-y-1">
+          <div v-for="tx in transactions" :key="tx.id" class="bg-gray-50 p-2 rounded-lg">
             <!-- 交易基本信息 -->
             <div class="flex items-center justify-between">
               <div class="flex-1">
-                <div class="flex items-center space-x-4 mb-2">
+                <div class="flex items-center space-x-3 mb-1">
                   <span class="font-mono text-sm text-gray-600 cursor-pointer hover:text-blue-600" title="点击复制" @click="copyToClipboard(tx.tx_id || tx.hash, $event)">
                     {{ tx.tx_id || tx.hash || 'N/A' }}
                   </span>
@@ -132,6 +133,7 @@
                     <span class="font-mono text-blue-600 cursor-pointer hover:text-blue-800" title="点击复制" @click="copyToClipboard(tx.address_to || tx.to, $event)">
                       {{ tx.address_to || tx.to || 'N/A' }}
                     </span>
+                    <span v-if="tx.is_token && tx.token_name" class="text-sm text-blue-600 ml-1">({{ tx.token_name }})</span>
                   </div>
                   <div>
                     <span class="text-gray-500">金额: </span>
@@ -162,14 +164,14 @@
             </div>
 
             <!-- 展开的交易凭证信息 -->
-            <div v-if="expandedTransactions[tx.tx_id || tx.hash]" class="mt-4 pt-4 border-t border-gray-200">
+            <div v-if="expandedTransactions[tx.tx_id || tx.hash]" class="mt-2 pt-2 border-t border-gray-200">
               <!-- 未登录用户提示 -->
-              <div v-if="!authStore.isAuthenticated" class="text-center py-4 text-gray-500">
+              <div v-if="!authStore.isAuthenticated" class="text-center py-3 text-gray-500">
                 请登录后查看交易凭证信息
               </div>
               
               <!-- 已登录用户显示凭证信息 -->
-              <div v-else-if="loadingReceipts[tx.tx_id || tx.hash]" class="text-center py-4">
+              <div v-else-if="loadingReceipts[tx.tx_id || tx.hash]" class="text-center py-3">
                 <div class="inline-flex items-center px-4 py-2 text-sm text-gray-600">
                   <svg class="animate-spin -ml-1 mr-3 h-4 w-4 text-blue-600" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
                     <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
@@ -179,11 +181,11 @@
                 </div>
               </div>
               
-              <div v-else-if="transactionReceipts[tx.tx_id || tx.hash]" class="space-y-4">
+              <div v-else-if="transactionReceipts[tx.tx_id || tx.hash]" class="space-y-2">
                 <h4 class="text-sm font-medium text-gray-900 border-b border-gray-200 pb-2">交易详情</h4>
                 
                 <!-- 交易状态和区块信息 -->
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-4 text-sm">
+                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
                   <div>
                     <span class="text-gray-500">状态: </span>
                     <span :class="getReceiptStatusClass(transactionReceipts[tx.tx_id || tx.hash].status)" class="inline-flex px-2 py-1 text-xs font-semibold rounded-full ml-2">
@@ -204,58 +206,167 @@
                   </div>
                 </div>
 
-                <!-- Gas 费用信息 -->
-                <div class="bg-gray-50 p-4 rounded-lg">
-                  <h5 class="text-sm font-medium text-gray-900 mb-3">Gas 费用信息</h5>
-                  <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                <!-- 交易费用详情 - 像 Etherscan.io 一样完整 -->
+                <div class="bg-gray-50 p-2 rounded-lg">
+                  <h5 class="text-sm font-medium text-gray-900 mb-1">交易费用详情</h5>
+                  
+                  <!-- 主要费用信息 -->
+                  <div class="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm mb-3">
                     <div>
-                      <span class="text-gray-500">Gas 使用: </span>
-                      <span class="text-gray-600">{{ transactionReceipts[tx.tx_id || tx.hash].gas_used?.toLocaleString() || 'N/A' }}</span>
-                    </div>
-                    <div>
-                      <span class="text-gray-500">累计 Gas: </span>
-                      <span class="text-gray-600">{{ transactionReceipts[tx.tx_id || tx.hash].cumulative_gas_used?.toLocaleString() || 'N/A' }}</span>
+                      <span class="text-gray-500">交易手续费: </span>
+                      <span class="text-gray-900 font-medium">{{ formatTransactionFeeFromReceipt(transactionReceipts[tx.tx_id || tx.hash]) }}</span>
                     </div>
                     <div>
                       <span class="text-gray-500">Gas 价格: </span>
-                      <span class="text-gray-600">{{ formatGasPrice(tx.gas_price || tx.gasPrice) }}</span>
+                      <span class="text-gray-900 font-medium">{{ formatGasPriceFromReceipt(transactionReceipts[tx.tx_id || tx.hash]) }}</span>
                     </div>
                     <div>
-                      <span class="text-gray-500">交易费用: </span>
-                      <span class="text-gray-600">{{ formatTransactionFee(tx.gas_price || tx.gasPrice, transactionReceipts[tx.tx_id || tx.hash].gas_used) }}</span>
+                      <span class="text-gray-500">Gas Limit & Gas 使用: </span>
+                      <span class="text-gray-600">{{ tx.gas_limit || tx.gasLimit || 'N/A' }} | {{ transactionReceipts[tx.tx_id || tx.hash].gas_used || 'N/A' }} ({{ tx.gas_limit && transactionReceipts[tx.tx_id || tx.hash].gas_used ? ((transactionReceipts[tx.tx_id || tx.hash].gas_used / tx.gas_limit) * 100).toFixed(2) : 'N/A' }}%)</span>
+                    </div>
+                  </div>
+
+                  <!-- Gas 使用 - 已合并到上面，这里移除 -->
+
+                  <!-- EIP-1559 费用详情 -->
+                  <div v-if="(tx.type || tx.tx_type) === 2" class="border-t border-gray-200 pt-2">
+                    <h6 class="text-sm font-medium text-gray-700 mb-2">EIP-1559 费用详情</h6>
+                    <div class="grid grid-cols-1 md:grid-cols-3 gap-2 text-sm">
+                      <div>
+                        <span class="text-gray-500">基础费: </span>
+                        <span class="text-gray-600">{{ formatBaseFee(block.base_fee) }}</span>
+                      </div>
+                      <div>
+                        <span class="text-gray-500">最高费用: </span>
+                        <span class="text-gray-600">{{ formatGasPrice(tx.max_fee_per_gas || tx.maxFeePerGas) }}</span>
+                      </div>
+                      <div>
+                        <span class="text-gray-500">最高小费: </span>
+                        <span class="text-gray-600">{{ formatGasPrice(tx.max_priority_fee_per_gas || tx.maxPriorityFeePerGas) }}</span>
+                      </div>
+                    </div>
+                  </div>
+
+                  <!-- 燃烧和节省费用 -->
+                  <div v-if="block.base_fee" class="border-t border-gray-200 pt-2">
+                    <h6 class="text-sm font-medium text-gray-700 mb-2">燃烧和节省费用</h6>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <span class="text-gray-500">燃烧费: </span>
+                        <span class="text-red-600 font-medium">{{ formatBurnedFee(block.base_fee, transactionReceipts[tx.tx_id || tx.hash].gas_used) }}</span>
+                      </div>
+                      <div>
+                        <span class="text-gray-500">节省费用: </span>
+                        <span class="text-green-600 font-medium">{{ formatSavedFee(tx, block.base_fee, transactionReceipts[tx.tx_id || tx.hash].gas_used) }}</span>
+                      </div>
                     </div>
                   </div>
                 </div>
 
-                <!-- 交易属性 -->
-                <div class="bg-gray-50 p-4 rounded-lg">
-                  <h5 class="text-sm font-medium text-gray-900 mb-3">交易属性</h5>
-                  <div class="grid grid-cols-1 md:grid-cols-2 gap-3 text-sm">
+                <!-- 交易属性 - 更详细的信息 -->
+                <div class="bg-gray-50 p-2 rounded-lg border-t border-gray-200">
+                  <h5 class="text-sm font-medium text-gray-900 mb-1">交易属性</h5>
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
                     <div>
                       <span class="text-gray-500">交易类型: </span>
                       <span class="text-gray-600">{{ getTransactionTypeText(tx.type || tx.tx_type) }}</span>
                     </div>
                     <div>
                       <span class="text-gray-500">Nonce: </span>
-                      <span class="text-gray-600">{{ tx.nonce || 'N/A' }}</span>
+                      <span class="text-gray-600">{{ tx.nonce !== undefined && tx.nonce !== null ? tx.nonce : 'N/A' }}</span>
                     </div>
-                    <div>
-                      <span class="text-gray-500">输入数据: </span>
-                      <span class="text-gray-600">{{ formatInputData(tx.input || tx.data) }}</span>
+                  </div>
+                  
+                  <!-- 合约相关信息 -->
+                  <div v-if="tx.is_token" class="border-t border-gray-200 pt-1 mt-1">
+                    <h6 class="text-sm font-medium text-gray-700 mb-1">合约信息</h6>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                      <div>
+                        <span class="text-gray-500">代币交易: </span>
+                        <span class="text-green-600 font-medium">{{ getTokenTransactionType(tx.hex || tx.input || tx.data) }}</span>
+                      </div>
+                      <div v-if="tx.contract_addr && tx.contract_addr !== '0x0000000000000000000000000000000000000000'">
+                        <span class="text-gray-500">合约地址: </span>
+                        <span class="font-mono text-blue-600 cursor-pointer hover:text-blue-800" @click="copyToClipboard(tx.contract_addr, $event)">
+                          {{ tx.contract_addr }}
+                        </span>
+                      </div>
+                      <div v-if="tx.token_name">
+                        <span class="text-gray-500">代币名称: </span>
+                        <span class="text-blue-600 font-medium">{{ tx.token_name }}</span>
+                      </div>
+                      <div v-if="tx.token_symbol">
+                        <span class="text-gray-500">代币符号: </span>
+                        <span class="text-gray-900 font-medium">{{ tx.token_symbol }}</span>
+                      </div>
+                      <div v-if="tx.token_decimals">
+                        <span class="text-gray-500">代币精度: </span>
+                        <span class="text-gray-900 font-medium">{{ tx.token_decimals }} 位小数</span>
+                      </div>
+                      <div v-if="tx.token_market_cap_rank">
+                        <span class="text-gray-500">市值排名: </span>
+                        <span class="text-gray-900 font-medium">#{{ tx.token_market_cap_rank }}</span>
+                      </div>
+                      <div v-if="tx.token_is_stablecoin">
+                        <span class="text-gray-500">代币类型: </span>
+                        <span class="text-green-600 font-medium">稳定币</span>
+                      </div>
+                      <div v-if="tx.token_is_verified">
+                        <span class="text-gray-500">验证状态: </span>
+                        <span class="text-green-600 font-medium">已验证</span>
+                      </div>
+                      <div v-if="tx.address_from">
+                        <span class="text-gray-500">From: </span>
+                        <span class="font-mono text-blue-600 cursor-pointer hover:text-blue-800" @click="copyToClipboard(tx.address_from, $event)">
+                          {{ tx.address_from }}
+                        </span>
+                      </div>
+                      <div v-if="tx.address_to">
+                        <span class="text-gray-500">To: </span>
+                        <span class="font-mono text-blue-600 cursor-pointer hover:text-blue-800" @click="copyToClipboard(tx.address_to, $event)">
+                          {{ tx.address_to }}
+                        </span>
+                      </div>
+                      <div class="md:col-span-2">
+                        <div class="grid grid-cols-2 gap-4">
+                          <div v-if="tx.token_description">
+                            <span class="text-gray-500">代币描述: </span>
+                            <span class="text-gray-900">{{ tx.token_description }}</span>
+                          </div>
+                          <div v-if="tx.amount || tx.value">
+                            <span class="text-gray-500">Amount: </span>
+                            <span class="text-gray-900 font-medium">{{ formatAmount(tx.amount || tx.value) }} {{ tx.token_symbol || 'ETH' }}</span>
+                          </div>
+                        </div>
+                      </div>
+                      <div v-if="tx.token_website">
+                        <span class="text-gray-500">官方网站: </span>
+                        <a :href="tx.token_website" target="_blank" class="text-blue-600 hover:text-blue-800 underline">
+                          {{ tx.token_website }}
+                        </a>
+                      </div>
+                      <div v-if="tx.token_explorer">
+                        <span class="text-gray-500">浏览器链接: </span>
+                        <a :href="tx.token_explorer" target="_blank" class="text-blue-600 hover:text-blue-800 underline">
+                          {{ tx.token_explorer }}
+                        </a>
+                      </div>
                     </div>
-                    <div v-if="transactionReceipts[tx.tx_id || tx.hash].contract_address">
-                      <span class="text-gray-500">合约地址: </span>
-                      <span class="font-mono text-blue-600 cursor-pointer hover:text-blue-800" @click="copyToClipboard(transactionReceipts[tx.tx_id || tx.hash].contract_address, $event)">
-                        {{ transactionReceipts[tx.tx_id || tx.hash].contract_address }}
-                      </span>
+                  </div>
+
+                  <!-- 输入数据 -->
+                  <div class="border-t border-gray-200 pt-1 mt-1">
+                    <h6 class="text-sm font-medium text-gray-700 mb-1">输入数据</h6>
+                    <div class="bg-white p-1 rounded border overflow-x-auto max-w-full">
+                      <pre class="text-xs text-gray-700 whitespace-pre-wrap break-all max-w-full">{{ formatInputData(tx.hex || tx.input || tx.data) }}</pre>
                     </div>
                   </div>
                 </div>
 
                 <!-- 交易日志 -->
-                <div v-if="transactionReceipts[tx.tx_id || tx.hash].logs_data" class="bg-gray-50 p-4 rounded-lg">
-                  <h5 class="text-sm font-medium text-gray-900 mb-3">交易日志</h5>
-                  <div class="bg-white p-3 rounded border overflow-x-auto max-w-full">
+                <div v-if="transactionReceipts[tx.tx_id || tx.hash].logs_data" class="bg-gray-50 p-2 rounded-lg">
+                  <h5 class="text-sm font-medium text-gray-900 mb-1">交易日志</h5>
+                  <div class="bg-white p-1 rounded border overflow-x-auto max-w-full">
                     <pre class="text-xs text-gray-700 whitespace-pre-wrap break-all max-w-full">{{ formatLogsData(transactionReceipts[tx.tx_id || tx.hash].logs_data) }}</pre>
                   </div>
                 </div>
@@ -337,6 +448,7 @@ import { useRoute } from 'vue-router'
 import { useAuthStore } from '@/stores/auth'
 import { blocks as blocksApi } from '@/api'
 import { transactions as transactionsApi } from '@/api'
+import BigNumber from 'bignumber.js'
 
 // 路由参数
 const route = useRoute()
@@ -398,6 +510,109 @@ const visiblePages = computed(() => {
   return pages
 })
 
+// 统一的数字格式化工具 - 使用BigNumber确保精确计算
+const formatNumber = {
+  // 格式化ETH金额（18位精度，去掉末尾0）
+  eth: (value: string | number | undefined): string => {
+    if (value === undefined || value === null) return '0'
+    
+    try {
+      // 使用BigNumber确保精确计算
+      const eth = new BigNumber(value)
+      if (eth.isZero()) return '0'
+      
+      // 使用BigNumber的toFixed确保18位精度，然后去掉末尾的0
+      let result = eth.toFixed(18)
+      result = result.replace(/0+$/, '') // 只去掉末尾的0
+      if (result.endsWith('.')) {
+        result = result.slice(0, -1) // 去掉末尾的小数点
+      }
+      
+      return result
+    } catch (error) {
+      console.error('ETH格式化错误:', error, value)
+      return '0'
+    }
+  },
+  
+  // 格式化Gwei金额（9位精度，去掉末尾0）
+  gwei: (value: string | number | undefined): string => {
+    if (value === undefined || value === null) return '0'
+    
+    try {
+      // 使用BigNumber确保精确计算
+      const wei = new BigNumber(value)
+      if (wei.isZero()) return '0'
+      
+      // 转换为Gwei单位：wei / 10^9
+      const gwei = wei.dividedBy(new BigNumber(10).pow(9))
+      
+      // 使用BigNumber的toFixed确保9位精度，然后去掉末尾的0
+      let result = gwei.toFixed(9)
+      result = result.replace(/0+$/, '') // 只去掉末尾的0
+      if (result.endsWith('.')) {
+        result = result.slice(0, -1) // 去掉末尾的小数点
+      }
+      
+      return result
+    } catch (error) {
+      console.error('Gwei格式化错误:', error, value)
+      return '0'
+    }
+  },
+  
+  // 格式化Wei金额（保持原始精度，去掉末尾0）
+  wei: (value: string | number | undefined): string => {
+    if (value === undefined || value === null) return '0'
+    
+    try {
+      // 使用BigNumber确保精确计算
+      const wei = new BigNumber(value)
+      if (wei.isZero()) return '0'
+      
+      // 直接转换为字符串，然后去掉末尾的0
+      let result = wei.toString()
+      if (result.includes('.')) {
+        result = result.replace(/0+$/, '') // 只去掉末尾的0
+        if (result.endsWith('.')) {
+          result = result.slice(0, -1) // 去掉末尾的小数点
+        }
+      }
+      
+      return result
+    } catch (error) {
+      console.error('Wei格式化错误:', error, value)
+      return '0'
+    }
+  },
+  
+  // 从Wei转换为ETH（用于交易金额）
+  weiToEth: (value: string | number | undefined): string => {
+    if (value === undefined || value === null) return '0'
+    
+    try {
+      // 使用BigNumber确保精确计算
+      const wei = new BigNumber(value)
+      if (wei.isZero()) return '0'
+      
+      // 转换为ETH单位：wei / 10^18
+      const eth = wei.dividedBy(new BigNumber(10).pow(18))
+      
+      // 使用BigNumber的toFixed确保18位精度，然后去掉末尾的0
+      let result = eth.toFixed(18)
+      result = result.replace(/0+$/, '') // 只去掉末尾的0
+      if (result.endsWith('.')) {
+        result = result.slice(0, -1) // 去掉末尾的小数点
+      }
+      
+      return result
+    } catch (error) {
+      console.error('Wei到ETH转换错误:', error, value)
+      return '0'
+    }
+  }
+}
+
 // 格式化函数
 const formatTimestamp = (timestamp: string | number) => {
   if (!timestamp) return 'N/A'
@@ -419,6 +634,16 @@ const formatTimestamp = (timestamp: string | number) => {
   return date.toLocaleString()
 }
 
+// 格式化矿工奖励（MinerTipEth）- 使用统一格式化工具
+const formatMinerTip = (minerTip: string | number | undefined): string => {
+  return formatNumber.eth(minerTip)
+}
+
+// 格式化燃烧费用 - 使用统一格式化工具
+const formatBurnedEth = (burnedEth: string | number | undefined): string => {
+  return formatNumber.eth(burnedEth)
+}
+
 const formatAddress = (address: string) => {
   if (!address) return 'N/A'
   return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`
@@ -429,18 +654,31 @@ const formatBytes = (bytes: number) => {
   const k = 1024
   const sizes = ['B', 'KB', 'MB', 'GB']
   const i = Math.floor(Math.log(bytes) / Math.log(k))
-  return parseFloat((bytes / Math.pow(k, i)).toFixed(2)) + ' ' + sizes[i]
+  return (bytes / Math.pow(k, i)).toString() + ' ' + sizes[i]
 }
 
 const formatGas = (used: number, limit: number) => {
   if (!used || !limit) return 'N/A'
-  const percentage = ((used / limit) * 100).toFixed(1)
+  const percentage = ((used / limit) * 100).toString()
   return `${used.toLocaleString()} / ${limit.toLocaleString()} (${percentage}%)`
 }
 
-const formatAmount = (amount: number) => {
+// 格式化交易金额 - 使用统一格式化工具
+const formatAmount = (amount: number | string) => {
   if (!amount) return '0'
-  return (amount / 1e18).toFixed(6)
+  
+  // 如果amount是字符串，先转换为数字
+  let num: number
+  if (typeof amount === 'string') {
+    num = parseFloat(amount)
+  } else {
+    num = amount
+  }
+  
+  if (isNaN(num) || num === 0) return '0'
+  
+  // 交易金额是Wei，需要转换为ETH
+  return formatNumber.weiToEth(num)
 }
 
 const formatHash = (hash: string) => {
@@ -739,37 +977,29 @@ const formatLogsData = (logsData: string) => {
   }
 }
 
-// 格式化Gas价格
+// 格式化Gas价格 - 使用统一格式化工具
 const formatGasPrice = (gasPrice: number | string) => {
   if (!gasPrice) return 'N/A'
   
-  const price = typeof gasPrice === 'string' ? parseInt(gasPrice, 16) : gasPrice
-  if (price === 0) return '0 Gwei'
-  
-  const gwei = price / 1e9
-  if (gwei >= 1) {
-    return `${gwei.toFixed(2)} Gwei`
+  let price: number
+  if (typeof gasPrice === 'string') {
+    // 智能检测：如果以0x开头，按十六进制解析；否则按十进制解析
+    if (gasPrice.startsWith('0x')) {
+      price = parseInt(gasPrice, 16)
+    } else {
+      price = parseInt(gasPrice, 10)
+    }
   } else {
-    return `${(gwei * 1000).toFixed(2)} Mwei`
+    price = gasPrice
   }
+  
+  if (isNaN(price) || price === 0) return '0 Gwei'
+  
+  // 使用统一格式化工具，转换为Gwei并添加单位
+  return `${formatNumber.gwei(price)} Gwei`
 }
 
-// 格式化交易费用
-const formatTransactionFee = (gasPrice: number | string, gasUsed: number) => {
-  if (!gasPrice || !gasUsed) return 'N/A'
-  
-  const price = typeof gasPrice === 'string' ? parseInt(gasPrice, 16) : gasPrice
-  const fee = price * gasUsed
-  
-  if (fee === 0) return '0 ETH'
-  
-  const eth = fee / 1e18
-  if (eth < 0.001) {
-    return `${(eth * 1000).toFixed(6)} mETH`
-  } else {
-    return `${eth.toFixed(6)} ETH`
-  }
-}
+
 
 // 获取交易类型文本
 const getTransactionTypeText = (type: number | string) => {
@@ -781,13 +1011,13 @@ const getTransactionTypeText = (type: number | string) => {
     case 0:
       return 'Legacy'
     case 1:
-      return 'EIP-2930'
+      return '1(EIP-2930)'
     case 2:
-      return 'EIP-1559'
+      return '2(EIP-1559)'
     case 3:
-      return 'EIP-4844'
+      return '3(EIP-4844)'
     default:
-      return `Type ${txType}`
+      return `${txType}(Type ${txType})`
   }
 }
 
@@ -795,11 +1025,325 @@ const getTransactionTypeText = (type: number | string) => {
 const formatInputData = (input: string) => {
   if (!input || input === '0x') return '0x (No input data)'
   
-  if (input.length <= 66) {
-    return input
+  // 如果是标准的0x前缀hex字符串，尝试解析ERC-20方法
+  if (input.startsWith('0x') && input.length >= 74) {
+    // 检查是否为ERC-20 transfer函数 (0xa9059cbb)
+    if (input.startsWith('0xa9059cbb')) {
+      try {
+        // 解析接收地址和金额
+        const toAddress = '0x' + input.substring(34, 74)
+        const amountHex = input.substring(74)
+        const amount = parseInt(amountHex, 16)
+        
+        return `0x (ERC-20 Transfer)
+To: ${toAddress}
+Amount: ${amount.toLocaleString()}
+Raw Data: ${input}`
+      } catch (error) {
+        console.error('Failed to parse ERC-20 transfer:', error)
+      }
+    }
+    
+    // 检查是否为ERC-20 transferFrom函数 (0x23b872dd)
+    if (input.startsWith('0x23b872dd')) {
+      try {
+        // 解析from地址、to地址和金额
+        const fromAddress = '0x' + input.substring(34, 74)
+        const toAddress = '0x' + input.substring(98, 138)
+        const amountHex = input.substring(138)
+        const amount = parseInt(amountHex, 16)
+        
+        return `0x (ERC-20 TransferFrom)
+From: ${fromAddress}
+To: ${toAddress}
+Amount: ${amount.toLocaleString()}
+Raw Data: ${input}`
+      } catch (error) {
+        console.error('Failed to parse ERC-20 transferFrom:', error)
+      }
+    }
+    
+    // 检查是否为ERC-20 approve函数 (0x095ea7b3)
+    if (input.startsWith('0x095ea7b3')) {
+      try {
+        // 解析授权地址和金额
+        const spenderAddress = '0x' + input.substring(34, 74)
+        const amountHex = input.substring(74)
+        const amount = parseInt(amountHex, 16)
+        
+        return `0x (ERC-20 Approve)
+Spender: ${spenderAddress}
+Amount: ${amount.toLocaleString()}
+Raw Data: ${input}`
+      } catch (error) {
+        console.error('Failed to parse ERC-20 approve:', error)
+      }
+    }
+    
+    // 检查是否为ERC-20 balanceOf函数 (0x70a08231)
+    if (input.startsWith('0x70a08231')) {
+      try {
+        // 解析查询地址
+        const address = '0x' + input.substring(34, 74)
+        
+        return `0x (ERC-20 BalanceOf)
+Address: ${address}
+Raw Data: ${input}`
+      } catch (error) {
+        console.error('Failed to parse ERC-20 balanceOf:', error)
+      }
+    }
+    
+    // 检查是否为ERC-20 allowance函数 (0xdd62ed3e)
+    if (input.startsWith('0xdd62ed3e')) {
+      try {
+        // 解析owner地址和spender地址
+        const ownerAddress = '0x' + input.substring(34, 74)
+        const spenderAddress = '0x' + input.substring(98, 138)
+        
+        return `0x (ERC-20 Allowance)
+Owner: ${ownerAddress}
+Spender: ${spenderAddress}
+Raw Data: ${input}`
+      } catch (error) {
+        console.error('Failed to parse ERC-20 allowance:', error)
+      }
+    }
   }
   
-  return `${input.substring(0, 32)}...${input.substring(input.length - 32)}`
+  // 显示完整的输入数据，不截断
+  return input
+}
+
+// 获取代币交易类型文本
+const getTokenTransactionType = (inputData: string) => {
+  if (!inputData || inputData === '0x') return 'ERC-20 代币交易'
+  
+  if (inputData.startsWith('0x') && inputData.length >= 74) {
+    // 检查是否为ERC-20 transfer函数 (0xa9059cbb)
+    if (inputData.startsWith('0xa9059cbb')) {
+      return 'ERC-20 代币转账'
+    }
+    
+    // 检查是否为ERC-20 transferFrom函数 (0x23b872dd)
+    if (inputData.startsWith('0x23b872dd')) {
+      return 'ERC-20 授权转账'
+    }
+    
+    // 检查是否为ERC-20 approve函数 (0x095ea7b3)
+    if (inputData.startsWith('0x095ea7b3')) {
+      return 'ERC-20 代币授权'
+    }
+    
+    // 检查是否为ERC-20 balanceOf函数 (0x70a08231)
+    if (inputData.startsWith('0x70a08231')) {
+      return 'ERC-20 余额查询'
+    }
+    
+    // 检查是否为ERC-20 allowance函数 (0xdd62ed3e)
+    if (inputData.startsWith('0xdd62ed3e')) {
+      return 'ERC-20 授权额度查询'
+    }
+  }
+  
+  return 'ERC-20 代币交易'
+}
+
+// 格式化Base Fee - 使用统一格式化工具
+const formatBaseFee = (baseFee: string | number | undefined): string => {
+  if (!baseFee) return 'N/A'
+  
+  let fee: number
+  if (typeof baseFee === 'string') {
+    // 智能检测：如果以0x开头，按十六进制解析；否则按十进制解析
+    if (baseFee.startsWith('0x')) {
+      fee = parseInt(baseFee, 16)
+    } else {
+      fee = parseInt(baseFee, 10)
+    }
+  } else {
+    fee = baseFee
+  }
+  
+  if (isNaN(fee) || fee === 0) return '0 Gwei'
+  
+  // 使用统一格式化工具，转换为Gwei并添加单位
+  return `${formatNumber.gwei(fee)} Gwei`
+}
+
+// 格式化燃烧费用 - 使用BigNumber确保精确计算
+const formatBurnedFee = (baseFee: string | number | undefined, gasUsed: number): string => {
+  if (!baseFee || !gasUsed) return '0 ETH'
+  
+  try {
+    // 使用BigNumber确保精确计算
+    let baseFeeBN: BigNumber
+    if (typeof baseFee === 'string') {
+      // 智能检测：如果以0x开头，按十六进制解析；否则按十进制解析
+      if (baseFee.startsWith('0x')) {
+        baseFeeBN = new BigNumber(parseInt(baseFee, 16))
+      } else {
+        baseFeeBN = new BigNumber(baseFee)
+      }
+    } else {
+      baseFeeBN = new BigNumber(baseFee)
+    }
+    
+    // 燃烧费用 = Base Fee * Gas Used
+    const burnedWei = baseFeeBN.times(gasUsed)
+    
+    // 使用统一格式化工具，转换为ETH并添加单位
+    return `${formatNumber.weiToEth(burnedWei.toString())} ETH`
+  } catch (error) {
+    console.error('燃烧费用计算错误:', error)
+    return '0 ETH'
+  }
+}
+
+// 格式化节省费用 - 使用BigNumber确保精确计算
+const formatSavedFee = (tx: any, baseFee: string | number | undefined, gasUsed: number): string => {
+  if (!baseFee || !gasUsed) return '0 ETH'
+  
+  try {
+    // 使用BigNumber确保精确计算
+    let baseFeeBN: BigNumber
+    if (typeof baseFee === 'string') {
+      // 智能检测：如果以0x开头，按十六进制解析；否则按十进制解析
+      if (baseFee.startsWith('0x')) {
+        baseFeeBN = new BigNumber(parseInt(baseFee, 16))
+      } else {
+        baseFeeBN = new BigNumber(baseFee)
+      }
+    } else {
+      baseFeeBN = new BigNumber(baseFee)
+    }
+    
+    const maxFee = tx.max_fee_per_gas || tx.maxFeePerGas
+    let maxFeeBN: BigNumber
+    if (typeof maxFee === 'string') {
+      // 智能检测：如果以0x开头，按十六进制解析；否则按十进制解析
+      if (maxFee.startsWith('0x')) {
+        maxFeeBN = new BigNumber(maxFee)
+      } else {
+        maxFeeBN = new BigNumber(maxFee)
+      }
+    } else {
+      maxFeeBN = new BigNumber(maxFee)
+    }
+    
+    // 获取Effective Gas Price（从交易回执）
+    const receipt = transactionReceipts.value[tx.tx_id || tx.hash]
+    if (!receipt?.effective_gas_price) {
+      // 如果没有回执，使用Base Fee + Priority Fee作为Effective Gas Price
+      const priorityFee = tx.max_priority_fee_per_gas || tx.maxPriorityFeePerGas || 0
+      const priorityFeeBN = new BigNumber(priorityFee)
+      const effectiveGasPriceBN = baseFeeBN.plus(priorityFeeBN)
+      
+      // 节省费用 = (Max Fee - Effective Gas Price) * Gas Used
+      const savedWei = maxFeeBN.minus(effectiveGasPriceBN).times(gasUsed)
+      
+      // 调试信息
+      console.log('节省费用计算(无回执):', {
+        txHash: tx.tx_id || tx.hash,
+        maxFee: maxFeeBN.toString(),
+        baseFee: baseFeeBN.toString(),
+        priorityFee: priorityFeeBN.toString(),
+        effectiveGasPrice: effectiveGasPriceBN.toString(),
+        gasUsed,
+        savedWei: savedWei.toString(),
+        savedEth: formatNumber.weiToEth(savedWei.toString())
+      })
+      
+      if (savedWei.isLessThan(0)) {
+        return '0 ETH'
+      }
+      
+      return `${formatNumber.weiToEth(savedWei.toString())} ETH`
+    }
+    
+    // 使用回执中的Effective Gas Price
+    let effectiveGasPriceBN: BigNumber
+    if (typeof receipt.effective_gas_price === 'string') {
+      if (receipt.effective_gas_price.startsWith('0x')) {
+        effectiveGasPriceBN = new BigNumber(parseInt(receipt.effective_gas_price, 16))
+      } else {
+        effectiveGasPriceBN = new BigNumber(receipt.effective_gas_price)
+      }
+    } else {
+      effectiveGasPriceBN = new BigNumber(receipt.effective_gas_price)
+    }
+    
+    // 节省费用 = (Max Fee - Effective Gas Price) * Gas Used
+    const savedWei = maxFeeBN.minus(effectiveGasPriceBN).times(gasUsed)
+    
+    // 调试信息
+    console.log('节省费用计算(有回执):', {
+      txHash: tx.tx_id || tx.hash,
+      maxFee: maxFeeBN.toString(),
+      effectiveGasPrice: effectiveGasPriceBN.toString(),
+      gasUsed,
+      savedWei: savedWei.toString(),
+      savedEth: formatNumber.weiToEth(savedWei.toString())
+    })
+    
+    if (savedWei.isLessThan(0)) {
+      return '0 ETH'
+    }
+    
+    return `${formatNumber.weiToEth(savedWei.toString())} ETH`
+  } catch (error) {
+    console.error('节省费用计算错误:', error)
+    return '0 ETH'
+  }
+}
+
+
+
+// 从交易回执获取Gas价格 - 使用统一格式化工具
+const formatGasPriceFromReceipt = (receipt: any): string => {
+  if (!receipt?.effective_gas_price) return 'N/A'
+  
+  let price: number
+  if (typeof receipt.effective_gas_price === 'string') {
+    // 智能检测：如果以0x开头，按十六进制解析；否则按十进制解析
+    if (receipt.effective_gas_price.startsWith('0x')) {
+      price = parseInt(receipt.effective_gas_price, 16)
+    } else {
+      price = parseInt(receipt.effective_gas_price, 10)
+    }
+  } else {
+    price = receipt.effective_gas_price
+  }
+  
+  if (isNaN(price) || price === 0) return '0 Gwei'
+  
+  // 使用统一格式化工具，转换为Gwei并添加单位
+  return `${formatNumber.gwei(price)} Gwei`
+}
+
+// 从交易回执计算交易手续费 - 使用统一格式化工具
+const formatTransactionFeeFromReceipt = (receipt: any): string => {
+  if (!receipt?.effective_gas_price || !receipt?.gas_used) return 'N/A'
+  
+  let price: number
+  if (typeof receipt.effective_gas_price === 'string') {
+    // 智能检测：如果以0x开头，按十六进制解析；否则按十进制解析
+    if (receipt.effective_gas_price.startsWith('0x')) {
+      price = parseInt(receipt.effective_gas_price, 16)
+    } else {
+      price = parseInt(receipt.effective_gas_price, 10)
+    }
+  } else {
+    price = receipt.effective_gas_price
+  }
+  
+  const gasUsed = receipt.gas_used
+  const fee = price * gasUsed
+  
+  if (fee === 0) return '0 ETH'
+  
+  // 使用统一格式化工具，转换为ETH并添加单位
+  return `${formatNumber.weiToEth(fee)} ETH`
 }
 
 // 监听路由参数变化
@@ -813,6 +1357,6 @@ onMounted(async () => {
 
 <style scoped>
 .card {
-  @apply bg-white shadow-sm rounded-lg border border-gray-200 p-6;
+  @apply bg-white shadow-sm rounded-lg border border-gray-200 p-4;
 }
 </style>

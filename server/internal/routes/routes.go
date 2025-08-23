@@ -152,8 +152,18 @@ func SetupRoutes(
 		// 币种配置相关路由
 		coinConfigs := v1.Group("/coin-configs")
 		{
-			coinConfigs.POST("/:symbol", coinConfigHandler.CreateCoinConfig)
-			coinConfigs.GET("/:symbol", coinConfigHandler.GetCoinConfigBySymbol)
+			coinConfigs.POST("", coinConfigHandler.CreateCoinConfig)                                        // 创建币种配置
+			coinConfigs.GET("", coinConfigHandler.ListCoinConfigs)                                          // 分页获取币种配置列表
+			coinConfigs.GET("/all", coinConfigHandler.GetAllCoinConfigs)                                    // 获取所有币种配置
+			coinConfigs.GET("/scanner", coinConfigHandler.GetCoinConfigsForScanner)                         // 扫块程序专用接口（兼容性）
+			coinConfigs.GET("/id/:id", coinConfigHandler.GetCoinConfigByID)                                 // 根据ID获取币种配置
+			coinConfigs.GET("/symbol/:symbol", coinConfigHandler.GetCoinConfigBySymbol)                     // 根据符号获取币种配置
+			coinConfigs.GET("/contract/:contractAddress", coinConfigHandler.GetCoinConfigByContractAddress) // 根据合约地址获取币种配置
+			coinConfigs.GET("/chain/:chain", coinConfigHandler.GetCoinConfigsByChain)                       // 根据链名称获取币种配置
+			coinConfigs.GET("/chain/:chain/stablecoins", coinConfigHandler.GetStablecoins)                  // 获取指定链的稳定币
+			coinConfigs.GET("/chain/:chain/verified", coinConfigHandler.GetVerifiedTokens)                  // 获取指定链的已验证代币
+			coinConfigs.PUT("/:id", coinConfigHandler.UpdateCoinConfig)                                     // 更新币种配置
+			coinConfigs.DELETE("/:id", coinConfigHandler.DeleteCoinConfig)                                  // 删除币种配置
 		}
 
 		// 合约相关路由

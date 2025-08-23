@@ -391,31 +391,53 @@ func (bs *BlockScanner) submitTransactionsToServer(chainName string, block *mode
 
 		// 构建交易请求数据
 		txRequest := map[string]interface{}{
-			"tx_id":         tx["hash"],
-			"tx_type":       0,   // 默认类型
-			"confirm":       1,   // 默认确认数
-			"status":        1,   // 成功状态
-			"send_status":   1,   // 已广播
-			"balance":       "0", // 暂时设为0
-			"amount":        tx["value"],
-			"trans_id":      0, // 暂时设为0
-			"chain":         chainName,
-			"symbol":        chainName,
-			"address_from":  fromAddress,
-			"address_to":    toAddress,
-			"gas_limit":     tx["gasLimit"],
-			"gas_price":     tx["gasPrice"],
-			"gas_used":      tx["gasUsed"],
-			"fee":           "0", // 暂时设为0，后续计算
-			"used_fee":      nil,
-			"height":        block.Height,
-			"contract_addr": "", // 暂时设为空
-			"hex":           nil,
-			"tx_scene":      "blockchain_scan",
-			"remark":        "Scanned from blockchain",
-			"block_index":   tx["block_index"],
-			"logs":          tx["logs"],
-			"receipt":       tx["receipt"],
+			"tx_id": tx["hash"],
+			"tx_type": func() uint8 {
+				if txType, ok := tx["type"].(uint8); ok {
+					return txType
+				}
+				return 0
+			}(), // 使用实际的交易类型
+			"confirm":      1,   // 默认确认数
+			"status":       1,   // 成功状态
+			"send_status":  1,   // 已广播
+			"balance":      "0", // 暂时设为0
+			"amount":       tx["value"],
+			"trans_id":     0, // 暂时设为0
+			"chain":        chainName,
+			"symbol":       chainName,
+			"address_from": fromAddress,
+			"address_to":   toAddress,
+			"gas_limit":    tx["gasLimit"],
+			"gas_price":    tx["gasPrice"],
+			"gas_used":     tx["gasUsed"],
+			"fee":          "0", // 暂时设为0，后续计算
+			"used_fee":     nil,
+			"height":       block.Height,
+			"contract_addr": func() string {
+				if contractAddr, ok := tx["contract_address"].(string); ok {
+					return contractAddr
+				}
+				return ""
+			}(), // 从扫描器获取合约地址
+			"hex":         tx["data"], // 保存Input data到hex字段
+			"tx_scene":    "blockchain_scan",
+			"remark":      "Scanned from blockchain",
+			"block_index": tx["block_index"],
+			"nonce":       tx["nonce"],
+			"logs":        tx["logs"],
+			"receipt":     tx["receipt"],
+		}
+
+		// 添加EIP-1559相关字段（如果存在）
+		if maxFeePerGas, ok := tx["maxFeePerGas"]; ok {
+			txRequest["max_fee_per_gas"] = maxFeePerGas
+		}
+		if maxPriorityFeePerGas, ok := tx["maxPriorityFeePerGas"]; ok {
+			txRequest["max_priority_fee_per_gas"] = maxPriorityFeePerGas
+		}
+		if effectiveGasPrice, ok := tx["effectiveGasPrice"]; ok {
+			txRequest["effective_gas_price"] = effectiveGasPrice
 		}
 
 		// 上传交易
