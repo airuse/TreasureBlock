@@ -20,6 +20,7 @@ func SetupRoutes(
 	assetHandler *handlers.AssetHandler,
 	coinConfigHandler *handlers.CoinConfigHandler,
 	contractHandler *handlers.ContractHandler,
+	parserConfigHandler *handlers.ParserConfigHandler,
 	scannerHandler *handlers.ScannerHandler,
 	authHandler *handlers.AuthHandler,
 	userAddressHandler *handlers.UserAddressHandler,
@@ -156,12 +157,13 @@ func SetupRoutes(
 			coinConfigs.GET("", coinConfigHandler.ListCoinConfigs)                                          // 分页获取币种配置列表
 			coinConfigs.GET("/all", coinConfigHandler.GetAllCoinConfigs)                                    // 获取所有币种配置
 			coinConfigs.GET("/scanner", coinConfigHandler.GetCoinConfigsForScanner)                         // 扫块程序专用接口（兼容性）
-			coinConfigs.GET("/id/:id", coinConfigHandler.GetCoinConfigByID)                                 // 根据ID获取币种配置
-			coinConfigs.GET("/symbol/:symbol", coinConfigHandler.GetCoinConfigBySymbol)                     // 根据符号获取币种配置
+			coinConfigs.GET("/maintenance/:contractAddress", coinConfigHandler.GetCoinConfigForMaintenance) // 获取币种配置信息（维护用，包含解析配置）
 			coinConfigs.GET("/contract/:contractAddress", coinConfigHandler.GetCoinConfigByContractAddress) // 根据合约地址获取币种配置
 			coinConfigs.GET("/chain/:chain", coinConfigHandler.GetCoinConfigsByChain)                       // 根据链名称获取币种配置
 			coinConfigs.GET("/chain/:chain/stablecoins", coinConfigHandler.GetStablecoins)                  // 获取指定链的稳定币
 			coinConfigs.GET("/chain/:chain/verified", coinConfigHandler.GetVerifiedTokens)                  // 获取指定链的已验证代币
+			coinConfigs.GET("/id/:id", coinConfigHandler.GetCoinConfigByID)                                 // 根据ID获取币种配置
+			coinConfigs.GET("/symbol/:symbol", coinConfigHandler.GetCoinConfigBySymbol)                     // 根据符号获取币种配置
 			coinConfigs.PUT("/:id", coinConfigHandler.UpdateCoinConfig)                                     // 更新币种配置
 			coinConfigs.DELETE("/:id", coinConfigHandler.DeleteCoinConfig)                                  // 删除币种配置
 		}
@@ -170,14 +172,28 @@ func SetupRoutes(
 		contracts := v1.Group("/contracts")
 		{
 			contracts.POST("", contractHandler.CreateOrUpdateContract)                      // 创建或更新合约
-			contracts.GET("/address/:address", contractHandler.GetContractByAddress)        // 根据地址获取合约
 			contracts.GET("/chain/:chainName", contractHandler.GetContractsByChain)         // 根据链名称获取合约列表
 			contracts.GET("/type/:type", contractHandler.GetContractsByType)                // 根据合约类型获取合约列表
 			contracts.GET("/erc20", contractHandler.GetERC20Tokens)                         // 获取所有ERC-20代币合约
 			contracts.GET("", contractHandler.GetAllContracts)                              // 获取所有合约
+			contracts.GET("/address/:address", contractHandler.GetContractByAddress)        // 根据地址获取合约
 			contracts.PUT("/:address/status/:status", contractHandler.UpdateContractStatus) // 更新合约状态
 			contracts.PUT("/:address/verify", contractHandler.VerifyContract)               // 验证合约
 			contracts.DELETE("/:address", contractHandler.DeleteContract)                   // 删除合约
+		}
+
+		// 解析配置相关路由
+		parserConfigs := v1.Group("/parser-configs")
+		{
+			parserConfigs.POST("", parserConfigHandler.CreateParserConfig)                                                       // 创建解析配置
+			parserConfigs.GET("", parserConfigHandler.ListParserConfigs)                                                         // 分页获取解析配置列表
+			parserConfigs.GET("/:id", parserConfigHandler.GetParserConfigByID)                                                   // 根据ID获取解析配置
+			parserConfigs.GET("/contract/:contractAddress", parserConfigHandler.GetParserConfigsByContract)                      // 根据合约地址获取解析配置
+			parserConfigs.GET("/contract/:contractAddress/signature/:signature", parserConfigHandler.GetParserConfigBySignature) // 根据合约地址和签名获取解析配置
+			parserConfigs.GET("/contract/:contractAddress/info", parserConfigHandler.GetContractParserInfo)                      // 获取合约完整解析信息（三表联查）
+			parserConfigs.POST("/contract/:contractAddress/parse", parserConfigHandler.ParseInputData)                           // 解析交易输入数据
+			parserConfigs.PUT("/:id", parserConfigHandler.UpdateParserConfig)                                                    // 更新解析配置
+			parserConfigs.DELETE("/:id", parserConfigHandler.DeleteParserConfig)                                                 // 删除解析配置
 		}
 
 		// 扫描器相关路由

@@ -5,6 +5,7 @@ import * as addresses from './addresses'
 import * as stats from './stats'
 import * as auth from './auth'
 import * as user from './user'
+import * as coinconfig from './coinconfig'
 
 // 统一导出所有API模块
 export {
@@ -13,7 +14,8 @@ export {
   addresses,
   stats,
   auth,
-  user
+  user,
+  coinconfig
 }
 
 // 默认导出所有模块
@@ -23,5 +25,6 @@ export default {
   addresses,
   stats,
   auth,
-  user
+  user,
+  coinconfig
 }

@@ -1,0 +1,513 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Contracts API",
+    "version": "1.0.0",
+    "description": "系统合约管理API"
+  },
+  "paths": {
+    "/contracts": {
+      "get": {
+        "summary": "获取所有合约",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 1
+            },
+            "description": "页码"
+          },
+          {
+            "name": "pageSize",
+            "in": "query",
+            "schema": {
+              "type": "integer",
+              "default": 25
+            },
+            "description": "每页数量"
+          },
+          {
+            "name": "chainName",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "链名称"
+          },
+          {
+            "name": "contractType",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "合约类型"
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "状态"
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "schema": {
+              "type": "string"
+            },
+            "description": "搜索关键词"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "获取成功",
+                  "data": [
+                    {
+                      "id": 1,
+                      "chain_name": "eth",
+                      "contract_address": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+                      "contract_name": "Tether USD",
+                      "contract_symbol": "USDT",
+                      "contract_type": "ERC20",
+                      "decimals": 6,
+                      "description": "Tether USD是一种与美元挂钩的稳定币，由Tether Limited发行",
+                      "logo_url": "https://cryptologos.cc/logos/tether-usdt-logo.png",
+                      "website_url": "https://tether.to",
+                      "explorer_url": "https://etherscan.io/token/0xdac17f958d2ee523a2206206994597c13d831ec7",
+                      "is_verified": true,
+                      "status": "active",
+                      "created_at": "2024-01-01T00:00:00Z",
+                      "updated_at": "2024-01-01T00:00:00Z"
+                    },
+                    {
+                      "id": 2,
+                      "chain_name": "eth",
+                      "contract_address": "0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48",
+                      "contract_name": "USD Coin",
+                      "contract_symbol": "USDC",
+                      "contract_type": "ERC20",
+                      "decimals": 6,
+                      "description": "USD Coin是由Circle和Coinbase共同发行的与美元挂钩的稳定币",
+                      "logo_url": "https://cryptologos.cc/logos/usd-coin-usdc-logo.png",
+                      "website_url": "https://www.circle.com/en/usdc",
+                      "explorer_url": "https://etherscan.io/token/0xa0b86991c6218b36c1d19d4a2e9eb0ce3606eb48",
+                      "is_verified": true,
+                      "status": "active",
+                      "created_at": "2024-01-01T00:00:00Z",
+                      "updated_at": "2024-01-01T00:00:00Z"
+                    },
+                    {
+                      "id": 3,
+                      "chain_name": "eth",
+                      "contract_address": "0x6B175474E89094C44Da98b954EedeAC495271d0F",
+                      "contract_name": "Dai Stablecoin",
+                      "contract_symbol": "DAI",
+                      "contract_type": "ERC20",
+                      "decimals": 18,
+                      "description": "Dai是由MakerDAO发行的去中心化稳定币，通过超额抵押机制维持与美元的挂钩",
+                      "logo_url": "https://cryptologos.cc/logos/multi-collateral-dai-dai-logo.png",
+                      "website_url": "https://makerdao.com",
+                      "explorer_url": "https://etherscan.io/token/0x6b175474e89094c44da98b954eedeac495271d0f",
+                      "is_verified": true,
+                      "status": "active",
+                      "created_at": "2024-01-01T00:00:00Z",
+                      "updated_at": "2024-01-01T00:00:00Z"
+                    }
+                  ],
+                  "pagination": {
+                    "page": 1,
+                    "page_size": 25,
+                    "total": 30
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "post": {
+        "summary": "创建或更新合约",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "example": {
+                "chain_name": "eth",
+                "contract_address": "0x1234567890123456789012345678901234567890",
+                "contract_name": "Test Token",
+                "contract_symbol": "TEST",
+                "contract_type": "ERC20",
+                "decimals": 18,
+                "description": "测试代币",
+                "logo_url": "https://example.com/logo.png",
+                "website_url": "https://example.com",
+                "explorer_url": "https://etherscan.io/token/0x1234567890123456789012345678901234567890"
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "创建成功",
+                  "data": {
+                    "id": 31,
+                    "chain_name": "eth",
+                    "contract_address": "0x1234567890123456789012345678901234567890",
+                    "contract_name": "Test Token",
+                    "contract_symbol": "TEST",
+                    "contract_type": "ERC20",
+                    "decimals": 18,
+                    "description": "测试代币",
+                    "logo_url": "https://example.com/logo.png",
+                    "website_url": "https://example.com",
+                    "explorer_url": "https://etherscan.io/token/0x1234567890123456789012345678901234567890",
+                    "is_verified": false,
+                    "status": "active",
+                    "created_at": "2024-01-01T00:00:00Z",
+                    "updated_at": "2024-01-01T00:00:00Z"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/contracts/address/{address}": {
+      "get": {
+        "summary": "根据地址获取合约",
+        "parameters": [
+          {
+            "name": "address",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "合约地址"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "获取成功",
+                  "data": {
+                    "id": 1,
+                    "chain_name": "eth",
+                    "contract_address": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+                    "contract_name": "Tether USD",
+                    "contract_symbol": "USDT",
+                    "contract_type": "ERC20",
+                    "decimals": 6,
+                    "description": "Tether USD是一种与美元挂钩的稳定币，由Tether Limited发行",
+                    "logo_url": "https://cryptologos.cc/logos/tether-usdt-logo.png",
+                    "website_url": "https://tether.to",
+                    "explorer_url": "https://etherscan.io/token/0xdac17f958d2ee523a2206206994597c13d831ec7",
+                    "is_verified": true,
+                    "status": "active",
+                    "created_at": "2024-01-01T00:00:00Z",
+                    "updated_at": "2024-01-01T00:00:00Z"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/contracts/chain/{chainName}": {
+      "get": {
+        "summary": "根据链名称获取合约",
+        "parameters": [
+          {
+            "name": "chainName",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "链名称"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "获取成功",
+                  "data": [
+                    {
+                      "id": 1,
+                      "chain_name": "eth",
+                      "contract_address": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+                      "contract_name": "Tether USD",
+                      "contract_symbol": "USDT",
+                      "contract_type": "ERC20",
+                      "decimals": 6,
+                      "description": "Tether USD是一种与美元挂钩的稳定币，由Tether Limited发行",
+                      "logo_url": "https://cryptologos.cc/logos/tether-usdt-logo.png",
+                      "website_url": "https://tether.to",
+                      "explorer_url": "https://etherscan.io/token/0xdac17f958d2ee523a2206206994597c13d831ec7",
+                      "is_verified": true,
+                      "status": "active",
+                      "created_at": "2024-01-01T00:00:00Z",
+                      "updated_at": "2024-01-01T00:00:00Z"
+                    }
+                  ],
+                  "pagination": {
+                    "page": 1,
+                    "page_size": 25,
+                    "total": 30
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/contracts/type/{type}": {
+      "get": {
+        "summary": "根据合约类型获取合约",
+        "parameters": [
+          {
+            "name": "type",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "合约类型"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "获取成功",
+                  "data": [
+                    {
+                      "id": 1,
+                      "chain_name": "eth",
+                      "contract_address": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+                      "contract_name": "Tether USD",
+                      "contract_symbol": "USDT",
+                      "contract_type": "ERC20",
+                      "decimals": 6,
+                      "description": "Tether USD是一种与美元挂钩的稳定币，由Tether Limited发行",
+                      "logo_url": "https://cryptologos.cc/logos/tether-usdt-logo.png",
+                      "website_url": "https://tether.to",
+                      "explorer_url": "https://etherscan.io/token/0xdac17f958d2ee523a2206206994597c13d831ec7",
+                      "is_verified": true,
+                      "status": "active",
+                      "created_at": "2024-01-01T00:00:00Z",
+                      "updated_at": "2024-01-01T00:00:00Z"
+                    }
+                  ],
+                  "pagination": {
+                    "page": 1,
+                    "page_size": 25,
+                    "total": 30
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/contracts/erc20": {
+      "get": {
+        "summary": "获取所有ERC-20代币合约",
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "获取成功",
+                  "data": [
+                    {
+                      "id": 1,
+                      "chain_name": "eth",
+                      "contract_address": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+                      "contract_name": "Tether USD",
+                      "contract_symbol": "USDT",
+                      "contract_type": "ERC20",
+                      "decimals": 6,
+                      "description": "Tether USD是一种与美元挂钩的稳定币，由Tether Limited发行",
+                      "logo_url": "https://cryptologos.cc/logos/tether-usdt-logo.png",
+                      "website_url": "https://tether.to",
+                      "explorer_url": "https://etherscan.io/token/0xdac17f958d2ee523a2206206994597c13d831ec7",
+                      "is_verified": true,
+                      "status": "active",
+                      "created_at": "2024-01-01T00:00:00Z",
+                      "updated_at": "2024-01-01T00:00:00Z"
+                    }
+                  ],
+                  "pagination": {
+                    "page": 1,
+                    "page_size": 25,
+                    "total": 30
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/contracts/{address}/status/{status}": {
+      "put": {
+        "summary": "更新合约状态",
+        "parameters": [
+          {
+            "name": "address",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "合约地址"
+          },
+          {
+            "name": "status",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "新状态"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "状态更新成功",
+                  "data": {
+                    "id": 1,
+                    "chain_name": "eth",
+                    "contract_address": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+                    "contract_name": "Tether USD",
+                    "contract_symbol": "USDT",
+                    "contract_type": "ERC20",
+                    "decimals": 6,
+                    "description": "Tether USD是一种与美元挂钩的稳定币，由Tether Limited发行",
+                    "logo_url": "https://cryptologos.cc/logos/tether-usdt-logo.png",
+                    "website_url": "https://tether.to",
+                    "explorer_url": "https://etherscan.io/token/0xdac17f958d2ee523a2206206994597c13d831ec7",
+                    "is_verified": true,
+                    "status": "inactive",
+                    "created_at": "2024-01-01T00:00:00Z",
+                    "updated_at": "2024-01-01T00:00:00Z"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/contracts/{address}/verify": {
+      "put": {
+        "summary": "验证合约",
+        "parameters": [
+          {
+            "name": "address",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "合约地址"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "合约验证成功",
+                  "data": {
+                    "id": 1,
+                    "chain_name": "eth",
+                    "contract_address": "0xdAC17F958D2ee523a2206206994597C13D831ec7",
+                    "contract_name": "Tether USD",
+                    "contract_symbol": "USDT",
+                    "contract_type": "ERC20",
+                    "decimals": 6,
+                    "description": "Tether USD是一种与美元挂钩的稳定币，由Tether Limited发行",
+                    "logo_url": "https://cryptologos.cc/logos/tether-usdt-logo.png",
+                    "website_url": "https://tether.to",
+                    "explorer_url": "https://etherscan.io/token/0xdac17f958d2ee523a2206206994597c13d831ec7",
+                    "is_verified": true,
+                    "status": "active",
+                    "created_at": "2024-01-01T00:00:00Z",
+                    "updated_at": "2024-01-01T00:00:00Z"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/contracts/{address}": {
+      "delete": {
+        "summary": "删除合约",
+        "parameters": [
+          {
+            "name": "address",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "string"
+            },
+            "description": "合约地址"
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "删除成功"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

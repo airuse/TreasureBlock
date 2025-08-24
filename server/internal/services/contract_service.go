@@ -20,19 +20,22 @@ type ContractService interface {
 	UpdateContractStatus(ctx context.Context, address string, status int8) error
 	VerifyContract(ctx context.Context, address string) error
 	GetAllContracts(ctx context.Context) ([]*models.Contract, error)
+	GetContractsWithFilters(ctx context.Context, filters map[string]interface{}, page, pageSize int) ([]*models.Contract, int64, error)
 	DeleteContract(ctx context.Context, address string) error
 }
 
 // contractService 合约服务实现
 type contractService struct {
-	contractRepo repository.ContractRepository
+	contractRepo   repository.ContractRepository
+	coinConfigRepo repository.CoinConfigRepository
 }
 
 // NewContractService 创建合约服务
-func NewContractService(contractRepo repository.ContractRepository) ContractService {
+func NewContractService(contractRepo repository.ContractRepository, coinConfigRepo repository.CoinConfigRepository) ContractService {
 
 	return &contractService{
-		contractRepo: contractRepo,
+		contractRepo:   contractRepo,
+		coinConfigRepo: coinConfigRepo,
 	}
 }
 
@@ -52,18 +55,22 @@ func (s *contractService) CreateOrUpdateContract(ctx context.Context, contractIn
 // createNewContract 创建新合约
 func (s *contractService) createNewContract(ctx context.Context, contractInfo *models.Contract) (*models.Contract, error) {
 	contract := &models.Contract{
-		Address:      contractInfo.Address,
-		ChainName:    contractInfo.ChainName,
-		ContractType: contractInfo.ContractType,
-		Name:         contractInfo.Name,
-		Symbol:       contractInfo.Symbol,
-		Decimals:     contractInfo.Decimals,
-		TotalSupply:  contractInfo.TotalSupply,
-		IsERC20:      contractInfo.IsERC20,
-		Status:       models.ContractStatusEnabled,
-		Verified:     false,
-		CTime:        time.Now(),
-		MTime:        time.Now(),
+		Address:       contractInfo.Address,
+		ChainName:     contractInfo.ChainName,
+		ContractType:  contractInfo.ContractType,
+		Name:          contractInfo.Name,
+		Symbol:        contractInfo.Symbol,
+		Decimals:      contractInfo.Decimals,
+		TotalSupply:   contractInfo.TotalSupply,
+		IsERC20:       contractInfo.IsERC20,
+		Status:        contractInfo.Status,        // 使用传入的状态，而不是硬编码
+		Verified:      contractInfo.Verified,      // 使用传入的验证状态
+		Creator:       contractInfo.Creator,       // 设置创建者地址
+		CreationTx:    contractInfo.CreationTx,    // 设置创建交易哈希
+		CreationBlock: contractInfo.CreationBlock, // 设置创建区块
+		ContractLogo:  contractInfo.ContractLogo,  // 设置合约Logo
+		CTime:         time.Now(),
+		MTime:         time.Now(),
 	}
 
 	// 设置JSON字段
@@ -76,18 +83,32 @@ func (s *contractService) createNewContract(ctx context.Context, contractInfo *m
 		return nil, fmt.Errorf("failed to create contract: %w", err)
 	}
 
+	// 如果是ERC-20合约，自动创建币种配置
+	if contract.IsERC20 {
+		if err := s.createCoinConfigForERC20(ctx, contract); err != nil {
+			// 记录错误但不影响合约创建
+			fmt.Printf("Warning: Failed to create coin config for ERC-20 contract %s: %v\n", contract.Address, err)
+		}
+	}
+
 	return contract, nil
 }
 
 // updateExistingContract 更新现有合约
 func (s *contractService) updateExistingContract(ctx context.Context, existing *models.Contract, contractInfo *models.Contract) (*models.Contract, error) {
-	// 更新基本信息
+	// 更新所有基本信息字段
 	existing.Name = contractInfo.Name
 	existing.Symbol = contractInfo.Symbol
 	existing.Decimals = contractInfo.Decimals
 	existing.TotalSupply = contractInfo.TotalSupply
 	existing.IsERC20 = contractInfo.IsERC20
 	existing.ContractType = contractInfo.ContractType
+	existing.Status = contractInfo.Status
+	existing.Verified = contractInfo.Verified
+	existing.Creator = contractInfo.Creator
+	existing.CreationTx = contractInfo.CreationTx
+	existing.CreationBlock = contractInfo.CreationBlock
+	existing.ContractLogo = contractInfo.ContractLogo
 	existing.MTime = time.Now()
 
 	// 更新JSON字段
@@ -105,43 +126,83 @@ func (s *contractService) updateExistingContract(ctx context.Context, existing *
 
 // setJSONFields 设置JSON字段
 func (s *contractService) setJSONFields(contract *models.Contract, contractInfo *models.Contract) error {
-	// 设置接口信息
-	if len(contractInfo.Interfaces) > 0 {
+	// 设置接口信息 - 即使为空也要设置，避免保留旧数据
+	if contractInfo.Interfaces != "" {
 		interfacesData, err := json.Marshal(contractInfo.Interfaces)
 		if err != nil {
 			return fmt.Errorf("failed to marshal interfaces: %w", err)
 		}
 		contract.Interfaces = string(interfacesData)
+	} else {
+		contract.Interfaces = "" // 清空字段
 	}
 
 	// 设置方法信息
-	if len(contractInfo.Methods) > 0 {
+	if contractInfo.Methods != "" {
 		methodsData, err := json.Marshal(contractInfo.Methods)
 		if err != nil {
 			return fmt.Errorf("failed to marshal methods: %w", err)
 		}
 		contract.Methods = string(methodsData)
+	} else {
+		contract.Methods = "" // 清空字段
 	}
 
 	// 设置事件信息
-	if len(contractInfo.Events) > 0 {
+	if contractInfo.Events != "" {
 		eventsData, err := json.Marshal(contractInfo.Events)
 		if err != nil {
 			return fmt.Errorf("failed to marshal events: %w", err)
 		}
 		contract.Events = string(eventsData)
+	} else {
+		contract.Events = "" // 清空字段
 	}
 
 	// 设置元数据
-	if len(contractInfo.Metadata) > 0 {
+	if contractInfo.Metadata != "" {
 		metadataData, err := json.Marshal(contractInfo.Metadata)
 		if err != nil {
 			return fmt.Errorf("failed to marshal metadata: %w", err)
 		}
 		contract.Metadata = string(metadataData)
+	} else {
+		contract.Metadata = "" // 清空字段
 	}
 
 	return nil
+}
+
+// GetContractsWithFilters 根据过滤条件获取合约列表
+func (s *contractService) GetContractsWithFilters(ctx context.Context, filters map[string]interface{}, page, pageSize int) ([]*models.Contract, int64, error) {
+	return s.contractRepo.GetWithFilters(ctx, filters, page, pageSize)
+}
+
+// createCoinConfigForERC20 为ERC-20合约创建币种配置
+func (s *contractService) createCoinConfigForERC20(ctx context.Context, contract *models.Contract) error {
+	// 检查是否已存在币种配置
+	existingCoin, err := s.coinConfigRepo.GetByContractAddress(ctx, contract.Address)
+	if err == nil && existingCoin != nil {
+		// 币种配置已存在，跳过创建
+		return nil
+	}
+
+	// 创建新的币种配置
+	coinConfig := &models.CoinConfig{
+		ChainName:    contract.ChainName,
+		Symbol:       contract.Symbol,
+		CoinType:     1, // ERC-20
+		ContractAddr: contract.Address,
+		Precision:    uint(contract.Decimals),
+		Decimals:     uint(contract.Decimals),
+		Name:         contract.Name,
+		LogoURL:      contract.ContractLogo,
+		IsVerified:   contract.Verified,
+		Status:       1, // 启用状态
+	}
+
+	// 保存币种配置
+	return s.coinConfigRepo.Create(ctx, coinConfig)
 }
 
 // GetContractByAddress 根据地址获取合约

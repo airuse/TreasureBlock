@@ -4,6 +4,7 @@ import { createRouter, createWebHistory } from 'vue-router'
 import ETHHomeView from '../views/eth/HomeView.vue'
 import ETHBlocksView from '../views/eth/BlocksView.vue'
 import ETHBlockDetailView from '../views/eth/detail/BlockDetailView.vue'
+import ETHContractDetailView from '../views/eth/detail/ContractDetailView.vue'
 import ETHAddressesView from '../views/eth/AddressesView.vue'
 import ETHStatisticsView from '../views/eth/StatisticsView.vue'
 import ETHSettingsView from '../views/eth/SettingsView.vue'
@@ -43,6 +44,11 @@ const router = createRouter({
       path: '/eth/addresses',
       name: 'eth-addresses',
       component: ETHAddressesView
+    },
+    {
+      path: '/eth/addresses/:address',
+      name: 'eth-contract-detail',
+      component: ETHContractDetailView
     },
     {
       path: '/eth/statistics',

@@ -24,6 +24,7 @@ type Contract struct {
 	Creator       string    `json:"creator" gorm:"type:varchar(42)"`                      // 创建者地址
 	CreationTx    string    `json:"creation_tx" gorm:"type:varchar(66)"`                  // 创建交易哈希
 	CreationBlock uint64    `json:"creation_block" gorm:"default:0"`                      // 创建区块高度
+	ContractLogo  string    `json:"contract_logo" gorm:"type:longtext"`                   // 合约Logo图片(Base64编码)
 	CTime         time.Time `json:"ctime" gorm:"autoCreateTime"`                          // 创建时间
 	MTime         time.Time `json:"mtime" gorm:"autoUpdateTime"`                          // 更新时间
 }

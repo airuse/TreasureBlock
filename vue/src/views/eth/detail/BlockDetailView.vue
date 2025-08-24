@@ -85,18 +85,6 @@
           </div>
         </div>
 
-        <!-- 交易范围说明 -->
-        <div v-if="transactions.length > 0" class="mb-2 p-1 bg-blue-50 border border-blue-200 rounded-md">
-          <div class="flex items-center">
-            <svg class="w-4 h-4 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
-            </svg>
-            <span class="text-sm text-blue-800">
-              <span v-if="isFilteredByBlock">显示区块 #{{ blockHeight }} 的交易</span>
-              <span v-else>显示所有交易（后端暂不支持按区块筛选）</span>
-            </span>
-          </div>
-        </div>
 
         <!-- 交易加载状态 -->
         <div v-if="loadingTransactions" class="text-center py-8">
@@ -281,10 +269,10 @@
                   <div v-if="tx.is_token" class="border-t border-gray-200 pt-1 mt-1">
                     <h6 class="text-sm font-medium text-gray-700 mb-1">合约信息</h6>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                      <div>
+                                          <div>
                         <span class="text-gray-500">代币交易: </span>
-                        <span class="text-green-600 font-medium">{{ getTokenTransactionType(tx.hex || tx.input || tx.data) }}</span>
-                      </div>
+                        <span class="text-green-600 font-medium">ERC-20</span>
+                    </div>
                       <div v-if="tx.contract_addr && tx.contract_addr !== '0x0000000000000000000000000000000000000000'">
                         <span class="text-gray-500">合约地址: </span>
                         <span class="font-mono text-blue-600 cursor-pointer hover:text-blue-800" @click="copyToClipboard(tx.contract_addr, $event)">
@@ -315,29 +303,9 @@
                         <span class="text-gray-500">验证状态: </span>
                         <span class="text-green-600 font-medium">已验证</span>
                       </div>
-                      <div v-if="tx.address_from">
-                        <span class="text-gray-500">From: </span>
-                        <span class="font-mono text-blue-600 cursor-pointer hover:text-blue-800" @click="copyToClipboard(tx.address_from, $event)">
-                          {{ tx.address_from }}
-                        </span>
-                      </div>
-                      <div v-if="tx.address_to">
-                        <span class="text-gray-500">To: </span>
-                        <span class="font-mono text-blue-600 cursor-pointer hover:text-blue-800" @click="copyToClipboard(tx.address_to, $event)">
-                          {{ tx.address_to }}
-                        </span>
-                      </div>
-                      <div class="md:col-span-2">
-                        <div class="grid grid-cols-2 gap-4">
-                          <div v-if="tx.token_description">
-                            <span class="text-gray-500">代币描述: </span>
-                            <span class="text-gray-900">{{ tx.token_description }}</span>
-                          </div>
-                          <div v-if="tx.amount || tx.value">
-                            <span class="text-gray-500">Amount: </span>
-                            <span class="text-gray-900 font-medium">{{ formatAmount(tx.amount || tx.value) }} {{ tx.token_symbol || 'ETH' }}</span>
-                          </div>
-                        </div>
+                      <div v-if="tx.token_description">
+                        <span class="text-gray-500">代币描述: </span>
+                        <span class="text-gray-900">{{ tx.token_description }}</span>
                       </div>
                       <div v-if="tx.token_website">
                         <span class="text-gray-500">官方网站: </span>
@@ -354,17 +322,40 @@
                     </div>
                   </div>
 
+                  <!-- 解析合约转账 -->
+                  <div v-if="tx.is_token && (getParsedFromAddress(tx.tx_id || tx.hash) || getParsedToAddress(tx.tx_id || tx.hash) || getParsedAmount(tx.tx_id || tx.hash))" class="border-t border-gray-200 pt-1 mt-1">
+                    <h6 class="text-sm font-medium text-gray-700 mb-1">解析合约</h6>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                      <div v-if="getParsedFromAddress(tx.tx_id || tx.hash)">
+                        <span class="text-gray-500">From: </span>
+                        <span class="font-mono text-blue-600 cursor-pointer hover:text-blue-800" @click="copyToClipboard(getParsedFromAddress(tx.tx_id || tx.hash) || '', $event)">
+                          {{ getParsedFromAddress(tx.tx_id || tx.hash) }}
+                        </span>
+                      </div>
+                      <div v-if="getParsedToAddress(tx.tx_id || tx.hash)">
+                        <span class="text-gray-500">To: </span>
+                        <span class="font-mono text-blue-600 cursor-pointer hover:text-blue-800" @click="copyToClipboard(getParsedToAddress(tx.tx_id || tx.hash) || '', $event)">
+                          {{ getParsedToAddress(tx.tx_id || tx.hash) }}
+                        </span>
+                      </div>
+                      <div v-if="getParsedAmount(tx.tx_id || tx.hash)" class="md:col-span-2">
+                        <span class="text-gray-500">Amount: </span>
+                        <span class="text-gray-900 font-medium">{{ getParsedAmount(tx.tx_id || tx.hash) }} {{ tx.token_symbol || 'ETH' }}</span>
+                      </div>
+                    </div>
+                  </div>
+
                   <!-- 输入数据 -->
                   <div class="border-t border-gray-200 pt-1 mt-1">
                     <h6 class="text-sm font-medium text-gray-700 mb-1">输入数据</h6>
                     <div class="bg-white p-1 rounded border overflow-x-auto max-w-full">
-                      <pre class="text-xs text-gray-700 whitespace-pre-wrap break-all max-w-full">{{ formatInputData(tx.hex || tx.input || tx.data) }}</pre>
+                      <pre class="text-xs text-gray-700 whitespace-pre-wrap break-all max-w-full">{{ parseInputDataWithConfig(transactionReceipts[tx.tx_id || tx.hash]?.input_data || tx.hex || tx.input || tx.data, tx.tx_id || tx.hash) }}</pre>
                     </div>
                   </div>
                 </div>
 
                 <!-- 交易日志 -->
-                <div v-if="transactionReceipts[tx.tx_id || tx.hash].logs_data" class="bg-gray-50 p-2 rounded-lg">
+                <div v-if="transactionReceipts[tx.tx_id || tx.hash]?.logs_data" class="bg-gray-50 p-2 rounded-lg">
                   <h5 class="text-sm font-medium text-gray-900 mb-1">交易日志</h5>
                   <div class="bg-white p-1 rounded border overflow-x-auto max-w-full">
                     <pre class="text-xs text-gray-700 whitespace-pre-wrap break-all max-w-full">{{ formatLogsData(transactionReceipts[tx.tx_id || tx.hash].logs_data) }}</pre>
@@ -1021,132 +1012,410 @@ const getTransactionTypeText = (type: number | string) => {
   }
 }
 
-// 格式化输入数据
-const formatInputData = (input: string) => {
-  if (!input || input === '0x') return '0x (No input data)'
+
+// 解析交易输入数据（使用parser_configs）
+const parseInputDataWithConfig = (inputData: string, txHash?: string) => {
+  if (!inputData || inputData === '0x') return '0x (No input data)'
   
-  // 如果是标准的0x前缀hex字符串，尝试解析ERC-20方法
-  if (input.startsWith('0x') && input.length >= 74) {
-    // 检查是否为ERC-20 transfer函数 (0xa9059cbb)
-    if (input.startsWith('0xa9059cbb')) {
-      try {
-        // 解析接收地址和金额
-        const toAddress = '0x' + input.substring(34, 74)
-        const amountHex = input.substring(74)
-        const amount = parseInt(amountHex, 16)
-        
-        return `0x (ERC-20 Transfer)
-To: ${toAddress}
-Amount: ${amount.toLocaleString()}
-Raw Data: ${input}`
-      } catch (error) {
-        console.error('Failed to parse ERC-20 transfer:', error)
-      }
-    }
+  // 优先使用后端返回的解析配置
+  if (txHash && transactionReceipts.value[txHash]?.parser_configs) {
+    const receipt = transactionReceipts.value[txHash]
+    const signature = inputData.substring(0, 10)
     
-    // 检查是否为ERC-20 transferFrom函数 (0x23b872dd)
-    if (input.startsWith('0x23b872dd')) {
-      try {
-        // 解析from地址、to地址和金额
-        const fromAddress = '0x' + input.substring(34, 74)
-        const toAddress = '0x' + input.substring(98, 138)
-        const amountHex = input.substring(138)
-        const amount = parseInt(amountHex, 16)
-        
-        return `0x (ERC-20 TransferFrom)
-From: ${fromAddress}
-To: ${toAddress}
-Amount: ${amount.toLocaleString()}
-Raw Data: ${input}`
-      } catch (error) {
-        console.error('Failed to parse ERC-20 transferFrom:', error)
-      }
-    }
+    // 查找匹配的解析配置
+    const matchedConfig = receipt.parser_configs.find((config: any) => 
+      config.function_signature === signature
+    )
     
-    // 检查是否为ERC-20 approve函数 (0x095ea7b3)
-    if (input.startsWith('0x095ea7b3')) {
-      try {
-        // 解析授权地址和金额
-        const spenderAddress = '0x' + input.substring(34, 74)
-        const amountHex = input.substring(74)
-        const amount = parseInt(amountHex, 16)
-        
-        return `0x (ERC-20 Approve)
-Spender: ${spenderAddress}
-Amount: ${amount.toLocaleString()}
-Raw Data: ${input}`
-      } catch (error) {
-        console.error('Failed to parse ERC-20 approve:', error)
+    if (matchedConfig) {
+      let result = `方法名：${signature}(${matchedConfig.function_description})\n`
+      
+      // 如果有参数配置，解析参数
+      if (matchedConfig.param_config && matchedConfig.param_config.length > 0) {
+        for (const param of matchedConfig.param_config) {
+          if (param.offset !== undefined && param.length) {
+            // 偏移量是以字节为单位，需要转换为十六进制字符位置
+            // 每个字节 = 2个十六进制字符
+            const startPos = param.offset * 2
+            const endPos = startPos + param.length * 2
+            
+            console.log(`🔍 解析参数 ${param.name}:`, {
+              offset: param.offset,
+              length: param.length,
+              startPos,
+              endPos,
+              inputDataLength: inputData.length
+            })
+            
+            const paramValue = inputData.substring(startPos, endPos)
+            console.log(`🔍 参数 ${param.name} 值:`, paramValue)
+            
+            // 根据参数类型格式化显示
+            if (param.type === 'address') {
+              // 地址类型：添加0x前缀
+              result += `${param.name}: 0x${paramValue}\n`
+            } else {
+              // 数值类型：不添加0x前缀
+              result += `${param.name}: ${paramValue}\n`
+            }
+          }
+        }
       }
-    }
-    
-    // 检查是否为ERC-20 balanceOf函数 (0x70a08231)
-    if (input.startsWith('0x70a08231')) {
-      try {
-        // 解析查询地址
-        const address = '0x' + input.substring(34, 74)
-        
-        return `0x (ERC-20 BalanceOf)
-Address: ${address}
-Raw Data: ${input}`
-      } catch (error) {
-        console.error('Failed to parse ERC-20 balanceOf:', error)
-      }
-    }
-    
-    // 检查是否为ERC-20 allowance函数 (0xdd62ed3e)
-    if (input.startsWith('0xdd62ed3e')) {
-      try {
-        // 解析owner地址和spender地址
-        const ownerAddress = '0x' + input.substring(34, 74)
-        const spenderAddress = '0x' + input.substring(98, 138)
-        
-        return `0x (ERC-20 Allowance)
-Owner: ${ownerAddress}
-Spender: ${spenderAddress}
-Raw Data: ${input}`
-      } catch (error) {
-        console.error('Failed to parse ERC-20 allowance:', error)
-      }
+      
+      result += `Raw Data: ${inputData}`
+      return result
     }
   }
-  
-  // 显示完整的输入数据，不截断
-  return input
 }
 
-// 获取代币交易类型文本
-const getTokenTransactionType = (inputData: string) => {
-  if (!inputData || inputData === '0x') return 'ERC-20 代币交易'
+// 解析交易日志（使用parser_configs）
+const parseLogsDataWithConfig = (logsData: string, txHash?: string) => {
+  if (!logsData) return 'No logs data'
   
-  if (inputData.startsWith('0x') && inputData.length >= 74) {
-    // 检查是否为ERC-20 transfer函数 (0xa9059cbb)
-    if (inputData.startsWith('0xa9059cbb')) {
-      return 'ERC-20 代币转账'
+  try {
+    const logs = JSON.parse(logsData)
+    
+    // 优先使用后端返回的解析配置
+    if (txHash && transactionReceipts.value[txHash]?.parser_configs) {
+      const receipt = transactionReceipts.value[txHash]
+      
+      // 查找event_log类型的解析配置
+      const eventConfigs = receipt.parser_configs.filter((config: any) => 
+        config.parser_type === 'event_log'
+      )
+      
+      if (eventConfigs.length > 0) {
+        let result = 'Parsed Logs:\n'
+        
+        for (const log of logs) {
+          if (log.topics && log.topics.length > 0) {
+            const eventSignature = log.topics[0]
+            
+            // 查找匹配的事件配置
+            const matchedEvent = eventConfigs.find((config: any) => 
+              config.function_signature === eventSignature
+            )
+            
+            if (matchedEvent) {
+              result += `Event: ${matchedEvent.display_format || matchedEvent.function_description}\n`
+              result += `Address: ${log.address}\n`
+              result += `Data: ${log.data}\n`
+              result += `Topics: ${log.topics.join(', ')}\n\n`
+            } else {
+              result += `Unknown Event: ${eventSignature}\n`
+              result += `Address: ${log.address}\n`
+              result += `Data: ${log.data}\n\n`
+            }
+          }
+        }
+        
+        return result
+      }
     }
     
-    // 检查是否为ERC-20 transferFrom函数 (0x23b872dd)
-    if (inputData.startsWith('0x23b872dd')) {
-      return 'ERC-20 授权转账'
-    }
-    
-    // 检查是否为ERC-20 approve函数 (0x095ea7b3)
-    if (inputData.startsWith('0x095ea7b3')) {
-      return 'ERC-20 代币授权'
-    }
-    
-    // 检查是否为ERC-20 balanceOf函数 (0x70a08231)
-    if (inputData.startsWith('0x70a08231')) {
-      return 'ERC-20 余额查询'
-    }
-    
-    // 检查是否为ERC-20 allowance函数 (0xdd62ed3e)
-    if (inputData.startsWith('0xdd62ed3e')) {
-      return 'ERC-20 授权额度查询'
+    // 降级到原来的格式化
+    return formatLogsData(logsData)
+  } catch (error) {
+    return formatLogsData(logsData)
+  }
+}
+
+// 从解析配置中获取From地址（基于日志数据）
+const getParsedFromAddress = (txHash?: string): string | null => {
+  if (!txHash || !transactionReceipts.value[txHash]?.parser_configs) return null
+  
+  const receipt = transactionReceipts.value[txHash]
+  const logsData = receipt.logs_data
+  
+  if (!logsData) return null
+  
+  // 查找匹配的解析配置（优先查找有日志解析配置的）
+  const matchedConfig = receipt.parser_configs.find((config: any) => 
+    config.logs_parser_type && config.logs_parser_rules?.extract_from_address
+  )
+  
+  if (matchedConfig?.logs_parser_rules?.extract_from_address) {
+    try {
+      const logs = JSON.parse(logsData)
+      if (Array.isArray(logs) && logs.length > 0) {
+        const log = logs[0] // 取第一个日志
+        const rule = matchedConfig.logs_parser_rules.extract_from_address
+        
+        if (rule === 'topics[1]' && log.topics && log.topics.length > 1) {
+          // 从topics[1]提取from地址
+          return log.topics[1]
+        } else if (rule === 'data[0]' && log.data && log.data !== '0x') {
+          // 从data[0]提取from地址
+          return '0x' + log.data.substring(2, 42)
+        }
+      }
+    } catch (error) {
+      console.error('❌ 解析日志数据失败:', error)
     }
   }
   
-  return 'ERC-20 代币交易'
+  // 如果没有日志解析配置，尝试从输入数据解析
+  const inputData = receipt.input_data
+  if (inputData && inputData !== '0x') {
+    const signature = inputData.substring(0, 10)
+    const matchedConfig = receipt.parser_configs.find((config: any) => 
+      config.function_signature === signature
+    )
+    
+    if (matchedConfig?.parser_rules?.extract_from_address) {
+      const rule = matchedConfig.parser_rules.extract_from_address
+      if (rule === 'transaction.from') {
+        const tx = transactions.value.find(t => (t.tx_id || t.hash) === txHash)
+        return tx?.address_from || tx?.from || null
+      }
+    }
+  }
+  
+  // 默认从交易信息中获取
+  const tx = transactions.value.find(t => (t.tx_id || t.hash) === txHash)
+  return tx?.address_from || tx?.from || null
+}
+
+// 从解析配置中获取To地址（基于日志数据）
+const getParsedToAddress = (txHash?: string): string | null => {
+  if (!txHash || !transactionReceipts.value[txHash]?.parser_configs) return null
+  
+  const receipt = transactionReceipts.value[txHash]
+  const logsData = receipt.logs_data
+  
+  if (!logsData) return null
+  
+  // 查找匹配的解析配置（优先查找有日志解析配置的）
+  const matchedConfig = receipt.parser_configs.find((config: any) => 
+    config.logs_parser_type && config.logs_parser_rules?.extract_to_address
+  )
+  
+  if (matchedConfig?.logs_parser_rules?.extract_to_address) {
+    try {
+      const logs = JSON.parse(logsData)
+      if (Array.isArray(logs) && logs.length > 0) {
+        const log = logs[0] // 取第一个日志
+        const rule = matchedConfig.logs_parser_rules.extract_to_address
+        
+        if (rule === 'topics[2]' && log.topics && log.topics.length > 2) {
+          // 从topics[2]提取to地址
+          return log.topics[2]
+        } else if (rule === 'data[1]' && log.data && log.data !== '0x') {
+          // 从data[1]提取to地址
+          return '0x' + log.data.substring(66, 106)
+        }
+      }
+    } catch (error) {
+      console.error('❌ 解析日志数据失败:', error)
+    }
+  }
+  
+  // 如果没有日志解析配置，尝试从输入数据解析
+  const inputData = receipt.input_data
+  if (inputData && inputData !== '0x') {
+    const signature = inputData.substring(0, 10)
+    const matchedConfig = receipt.parser_configs.find((config: any) => 
+      config.function_signature === signature
+    )
+    
+    if (matchedConfig?.parser_rules?.extract_to_address) {
+      const rule = matchedConfig.parser_rules.extract_to_address
+      if (rule === 'params.to') {
+        // 从输入数据中提取To地址（通常是第2个参数，偏移量34-74）
+        if (inputData.length >= 74) {
+          return '0x' + inputData.substring(34, 74)
+        }
+      }
+    }
+  }
+  
+  // 默认从交易信息中获取
+  const tx = transactions.value.find(t => (t.tx_id || t.hash) === txHash)
+  return tx?.address_to || tx?.to || null
+}
+
+// 从解析配置中获取Amount（基于日志数据）
+const getParsedAmount = (txHash?: string): string | null => {
+  if (!txHash || !transactionReceipts.value[txHash]?.parser_configs) return null
+  
+  const receipt = transactionReceipts.value[txHash]
+  const logsData = receipt.logs_data
+  
+  if (!logsData) return null
+  
+  // 查找匹配的解析配置（优先查找有日志解析配置的）
+  const matchedConfig = receipt.parser_configs.find((config: any) => 
+    config.logs_parser_type && config.logs_parser_rules?.extract_amount
+  )
+  
+  if (matchedConfig?.logs_parser_rules?.extract_amount) {
+    try {
+      const logs = JSON.parse(logsData)
+      if (Array.isArray(logs) && logs.length > 0) {
+        const log = logs[0] // 取第一个日志
+        const rule = matchedConfig.logs_parser_rules.extract_amount
+        let amountUnit = matchedConfig.logs_parser_rules.amount_unit || '18'
+        
+        console.log('🔍 解析Amount调试信息 (日志):', {
+          txHash,
+          rule,
+          amountUnit,
+          logsData,
+          matchedConfig
+        })
+        
+        // 如果amountUnit是"token_decimals"，需要从合约信息获取实际精度
+        if (amountUnit === 'token_decimals') {
+          const tx = transactions.value.find(t => (t.tx_id || t.hash) === txHash)
+          if (tx?.token_decimals) {
+            amountUnit = tx.token_decimals.toString()
+            console.log('🔍 从合约信息获取精度:', amountUnit)
+          } else {
+            console.log('❌ 无法获取代币精度，使用默认值18')
+            amountUnit = '18'
+          }
+        }
+        
+        if (rule === 'data[0]' && log.data && log.data !== '0x') {
+          // 从data[0]提取amount（通常是前32字节）
+          if (log.data.length >= 66) {
+            const amountHex = log.data.substring(2, 66)
+            console.log('🔍 提取的amount hex (data[0]):', amountHex)
+            
+            try {
+              const amountWei = new BigNumber('0x' + amountHex, 16)
+              console.log('🔍 转换后的amount wei:', amountWei.toString())
+              
+              // 根据精度转换为对应单位
+              const decimals = parseInt(amountUnit)
+              if (!isNaN(decimals)) {
+                const amount = amountWei.dividedBy(new BigNumber(10).pow(decimals))
+                const result = formatNumber.wei(amount.toString())
+                console.log('🔍 最终结果 (精度', decimals, '):', result)
+                return result
+              } else {
+                console.log('❌ 无效的精度值:', amountUnit)
+              }
+            } catch (error) {
+              console.error('❌ Amount解析错误:', error)
+            }
+          } else {
+            console.log('❌ 日志数据长度不足 (data[0]):', log.data.length)
+          }
+        }
+      }
+    } catch (error) {
+      console.error('❌ 解析日志数据失败:', error)
+    }
+  }
+  
+  // 如果没有日志解析配置，尝试从输入数据解析
+  const inputData = receipt.input_data
+  if (inputData && inputData !== '0x') {
+    const signature = inputData.substring(0, 10)
+    const matchedConfig = receipt.parser_configs.find((config: any) => 
+      config.function_signature === signature
+    )
+    
+    if (matchedConfig?.parser_rules?.extract_amount) {
+      const rule = matchedConfig.parser_rules.extract_amount
+      let amountUnit = matchedConfig.parser_rules.amount_unit || '18'
+      
+      console.log('🔍 解析Amount调试信息 (输入数据):', {
+        txHash,
+        signature,
+        rule,
+        amountUnit,
+        inputData,
+        matchedConfig
+      })
+      
+      // 如果amountUnit是"token_decimals"，需要从合约信息获取实际精度
+      if (amountUnit === 'token_decimals') {
+        const tx = transactions.value.find(t => (t.tx_id || t.hash) === txHash)
+        if (tx?.token_decimals) {
+          amountUnit = tx.token_decimals.toString()
+          console.log('🔍 从合约信息获取精度:', amountUnit)
+        } else {
+          console.log('❌ 无法获取代币精度，使用默认值18')
+          amountUnit = '18'
+        }
+      }
+      
+      if (rule === 'params.wad') {
+        // wad参数通常是第1个参数，偏移量10-42
+        if (inputData.length >= 42) {
+          const amountHex = inputData.substring(10, 42)
+          console.log('🔍 提取的amount hex (wad):', amountHex)
+          
+          try {
+            const amountWei = new BigNumber('0x' + amountHex, 16)
+            console.log('🔍 转换后的amount wei:', amountWei.toString())
+            
+            // 根据精度转换为对应单位
+            const decimals = parseInt(amountUnit)
+            if (!isNaN(decimals)) {
+              const amount = amountWei.dividedBy(new BigNumber(10).pow(decimals))
+              const result = formatNumber.wei(amount.toString())
+              console.log('🔍 最终结果 (精度', decimals, '):', result)
+              return result
+            } else {
+              console.log('❌ 无效的精度值:', amountUnit)
+            }
+          } catch (error) {
+            console.error('❌ Amount解析错误:', error)
+          }
+        } else {
+          console.log('❌ 输入数据长度不足 (wad):', inputData.length)
+        }
+      } else if (rule === 'params.value') {
+        // value参数通常是第2个参数，偏移量42-74
+        if (inputData.length >= 74) {
+          const amountHex = inputData.substring(42, 74)
+          console.log('🔍 提取的amount hex (value):', amountHex)
+          
+          try {
+            const amountWei = new BigNumber('0x' + amountHex, 16)
+            console.log('🔍 转换后的amount wei:', amountWei.toString())
+            
+            // 根据精度转换为对应单位
+            const decimals = parseInt(amountUnit)
+            if (!isNaN(decimals)) {
+              const amount = amountWei.dividedBy(new BigNumber(10).pow(decimals))
+              const result = formatNumber.wei(amount.toString())
+              console.log('🔍 最终结果 (精度', decimals, '):', result)
+              return result
+            } else {
+              console.log('❌ 无效的精度值:', amountUnit)
+            }
+          } catch (error) {
+            console.error('❌ Amount解析错误:', error)
+          }
+        } else {
+          console.log('❌ 输入数据长度不足 (value):', inputData.length)
+        }
+      } else if (rule === 'transaction.value') {
+        // 从交易信息中获取
+        const tx = transactions.value.find(t => (t.tx_id || t.hash) === txHash)
+        if (tx?.amount || tx?.value) {
+          const result = formatNumber.weiToEth(tx.amount || tx.value)
+          console.log('🔍 从交易信息获取amount:', result)
+          return result
+        }
+      }
+    }
+  }
+  
+  // 如果没有配置规则，尝试从交易信息中获取
+  const tx = transactions.value.find(t => (t.tx_id || t.hash) === txHash)
+  if (tx?.amount || tx?.value) {
+    const result = formatNumber.weiToEth(tx.amount || tx.value)
+    console.log('🔍 降级从交易信息获取amount:', result)
+    return result
+  }
+  
+  console.log('❌ 无法解析amount，所有方法都失败')
+  return null
 }
 
 // 格式化Base Fee - 使用统一格式化工具

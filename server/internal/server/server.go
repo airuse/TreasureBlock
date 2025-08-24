@@ -44,6 +44,10 @@ func New() *Server {
 	apiKeyRepo := repository.NewAPIKeyRepository(database.GetDB())
 	requestLogRepo := repository.NewRequestLogRepository(database.GetDB())
 	userAddressRepo := repository.NewUserAddressRepository(database.GetDB())
+	parserConfigRepo := repository.NewParserConfigRepository(database.GetDB())
+
+	// 创建解析配置服务
+	parserConfigService := services.NewParserConfigService(parserConfigRepo)
 
 	// 创建服务
 	blockService := services.NewBlockService(blockRepo)
@@ -52,7 +56,7 @@ func New() *Server {
 	assetService := services.NewAssetService(assetRepo)
 	baseConfigService := services.NewBaseConfigService(baseConfigRepo)
 	coinConfigService := services.NewCoinConfigService(coinConfigRepo)
-	contractService := services.NewContractService(contractRepo)
+	contractService := services.NewContractService(contractRepo, coinConfigRepo)
 	authService := services.NewAuthService(
 		userRepo,
 		apiKeyRepo,
@@ -67,17 +71,18 @@ func New() *Server {
 	transactionReceiptService := services.NewTransactionReceiptService(transactionReceiptRepo)
 
 	// 创建处理器
-	txHandler := handlers.NewTransactionHandler(txService, transactionReceiptService)
+	txHandler := handlers.NewTransactionHandler(txService, transactionReceiptService, parserConfigRepo)
 	wsHandler := handlers.NewWebSocketHandler()
 	blockHandler := handlers.NewBlockHandler(blockService, wsHandler)
 	addressHandler := handlers.NewAddressHandler(addressService)
 	assetHandler := handlers.NewAssetHandler(assetService)
-	coinConfigHandler := handlers.NewCoinConfigHandler(coinConfigService)
+	coinConfigHandler := handlers.NewCoinConfigHandler(coinConfigService, parserConfigService)
 	contractHandler := handlers.NewContractHandler(contractService)
 	scannerHandler := handlers.NewScannerHandler(baseConfigService)
 	authHandler := handlers.NewAuthHandler(authService)
 	userAddressHandler := handlers.NewUserAddressHandler(userAddressService)
 	baseConfigHandler := handlers.NewBaseConfigHandler(baseConfigService)
+	parserConfigHandler := handlers.NewParserConfigHandler(parserConfigService)
 
 	// 启动WebSocket处理器
 	wsHandler.Start()
@@ -91,6 +96,7 @@ func New() *Server {
 		assetHandler,
 		coinConfigHandler,
 		contractHandler,
+		parserConfigHandler,
 		scannerHandler,
 		authHandler,
 		userAddressHandler,

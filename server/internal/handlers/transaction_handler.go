@@ -2,10 +2,13 @@ package handlers
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"strconv"
 
 	"blockChainBrowser/server/internal/dto"
+	"blockChainBrowser/server/internal/models"
+	"blockChainBrowser/server/internal/repository"
 	"blockChainBrowser/server/internal/services"
 
 	"github.com/gin-gonic/gin"
@@ -13,15 +16,17 @@ import (
 
 // TransactionHandler 交易处理器
 type TransactionHandler struct {
-	txService      services.TransactionService
-	receiptService services.TransactionReceiptService
+	txService        services.TransactionService
+	receiptService   services.TransactionReceiptService
+	parserConfigRepo repository.ParserConfigRepository
 }
 
 // NewTransactionHandler 创建交易处理器
-func NewTransactionHandler(txService services.TransactionService, receiptService services.TransactionReceiptService) *TransactionHandler {
+func NewTransactionHandler(txService services.TransactionService, receiptService services.TransactionReceiptService, parserConfigRepo repository.ParserConfigRepository) *TransactionHandler {
 	return &TransactionHandler{
-		txService:      txService,
-		receiptService: receiptService,
+		txService:        txService,
+		receiptService:   receiptService,
+		parserConfigRepo: parserConfigRepo,
 	}
 }
 
@@ -480,6 +485,7 @@ func (h *TransactionHandler) GetTransactionReceiptByHash(c *gin.Context) {
 		return
 	}
 
+	// 获取交易凭证
 	receipt, err := h.receiptService.GetTransactionReceiptByHash(c.Request.Context(), Hash)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -489,9 +495,43 @@ func (h *TransactionHandler) GetTransactionReceiptByHash(c *gin.Context) {
 		return
 	}
 
+	// 获取关联的交易信息（用于获取输入数据）
+	var tx *models.Transaction
+	var parserConfigs []*models.ParserConfig
+	if receipt != nil {
+		tx, err = h.txService.GetTransactionByHash(c.Request.Context(), Hash)
+		if err != nil {
+			// 如果获取交易失败，记录警告但不影响凭证返回
+			fmt.Printf("Warning: Failed to get transaction for hash %s: %v\n", Hash, err)
+		}
+
+		// 如果获取到交易信息，尝试获取解析配置
+		if tx != nil && tx.AddressTo != "" {
+			// 直接使用parserConfigRepo查找解析配置
+			configs, err := h.parserConfigRepo.GetParserConfigsByContract(c.Request.Context(), tx.AddressTo)
+			if err != nil {
+				// 如果获取解析配置失败，记录警告但不影响返回
+				fmt.Printf("Warning: Failed to get parser configs for contract %s: %v\n", tx.ContractAddr, err)
+			} else {
+				if len(configs) > 0 {
+					parserConfigs = configs
+				} else {
+					configs, err = h.parserConfigRepo.GetParserConfigsByContract(c.Request.Context(), "*")
+					if err != nil {
+						fmt.Printf("Warning: Failed to get parser configs for contract %s: %v\n", tx.AddressFrom, err)
+					} else {
+						parserConfigs = configs
+					}
+				}
+			}
+		}
+	}
+
+	// 使用新的DTO返回完整信息
+	response := dto.NewTransactionReceiptResponse(receipt, tx, parserConfigs)
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
-		"data":    receipt,
+		"data":    response,
 	})
 }
 

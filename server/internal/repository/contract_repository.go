@@ -22,6 +22,7 @@ type ContractRepository interface {
 	GetAll(ctx context.Context) ([]*models.Contract, error)
 	GetVerifiedContracts(ctx context.Context) ([]*models.Contract, error)
 	GetContractsByStatus(ctx context.Context, status int8) ([]*models.Contract, error)
+	GetWithFilters(ctx context.Context, filters map[string]interface{}, page, pageSize int) ([]*models.Contract, int64, error)
 }
 
 // contractRepository 合约仓库实现
@@ -143,4 +144,57 @@ func (r *contractRepository) SetMetadata(contract *models.Contract, metadata map
 	}
 	contract.Metadata = string(data)
 	return nil
+}
+
+// GetWithFilters 根据过滤条件获取合约列表
+func (r *contractRepository) GetWithFilters(ctx context.Context, filters map[string]interface{}, page, pageSize int) ([]*models.Contract, int64, error) {
+	var contracts []*models.Contract
+	var total int64
+
+	// 构建查询
+	query := r.db.WithContext(ctx).Model(&models.Contract{})
+
+	// 应用过滤条件
+	if chainName, ok := filters["chainName"].(string); ok && chainName != "" {
+		query = query.Where("chain_name = ?", chainName)
+	}
+
+	if contractType, ok := filters["contractType"].(string); ok && contractType != "" {
+		query = query.Where("contract_type = ?", contractType)
+	}
+
+	if status, ok := filters["status"].(string); ok && status != "" {
+		// 转换状态字符串为数字
+		var statusNum int8
+		switch status {
+		case "active":
+			statusNum = 1
+		case "inactive":
+			statusNum = 0
+		case "paused":
+			statusNum = 2
+		default:
+			statusNum = 1 // 默认显示活跃状态
+		}
+		query = query.Where("status = ?", statusNum)
+	}
+
+	if search, ok := filters["search"].(string); ok && search != "" {
+		// 搜索合约地址、名称、符号
+		query = query.Where(
+			"address LIKE ? OR name LIKE ? OR symbol LIKE ?",
+			"%"+search+"%", "%"+search+"%", "%"+search+"%",
+		)
+	}
+
+	// 获取总数
+	if err := query.Count(&total).Error; err != nil {
+		return nil, 0, err
+	}
+
+	// 分页查询
+	offset := (page - 1) * pageSize
+	err := query.Offset(offset).Limit(pageSize).Order("id DESC").Find(&contracts).Error
+
+	return contracts, total, err
 }

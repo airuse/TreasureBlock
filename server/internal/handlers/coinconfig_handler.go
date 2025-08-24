@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -13,13 +14,15 @@ import (
 
 // CoinConfigHandler 币种配置处理器
 type CoinConfigHandler struct {
-	coinConfigService services.CoinConfigService
+	coinConfigService   services.CoinConfigService
+	parserConfigService services.ParserConfigService
 }
 
 // NewCoinConfigHandler 创建币种配置处理器
-func NewCoinConfigHandler(coinConfigService services.CoinConfigService) *CoinConfigHandler {
+func NewCoinConfigHandler(coinConfigService services.CoinConfigService, parserConfigService services.ParserConfigService) *CoinConfigHandler {
 	return &CoinConfigHandler{
-		coinConfigService: coinConfigService,
+		coinConfigService:   coinConfigService,
+		parserConfigService: parserConfigService,
 	}
 }
 
@@ -422,5 +425,82 @@ func (h *CoinConfigHandler) GetCoinConfigsForScanner(c *gin.Context) {
 		"success": true,
 		"data":    scannerData,
 		"message": "获取币种配置成功",
+	})
+}
+
+// GetCoinConfigForMaintenance 获取币种配置信息（维护用，包含解析配置）
+func (h *CoinConfigHandler) GetCoinConfigForMaintenance(c *gin.Context) {
+	// 添加调试日志
+	fmt.Printf("GetCoinConfigForMaintenance called with contract_address: %s\n", c.Param("contractAddress"))
+
+	contractAddress := c.Param("contractAddress")
+	if contractAddress == "" {
+		fmt.Println("Error: contract_address is empty")
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "合约地址不能为空",
+		})
+		return
+	}
+
+	// 获取币种配置
+	fmt.Printf("Getting coin config for contract: %s\n", contractAddress)
+	coinConfig, err := h.coinConfigService.GetCoinConfigByContractAddress(c.Request.Context(), contractAddress)
+	if err != nil {
+		fmt.Printf("No coin config found for contract %s: %v\n", contractAddress, err)
+		// 如果不存在，返回空数据供创建
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"data": gin.H{
+				"coin_config":      nil,
+				"parser_configs":   []gin.H{},
+				"contract_address": contractAddress,
+			},
+		})
+		return
+	}
+
+	// 获取解析配置
+	parserConfigs, err := h.parserConfigService.GetParserConfigsByContract(c.Request.Context(), contractAddress)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "获取解析配置失败",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	// 转换为响应格式
+	parserConfigResponses := make([]gin.H, len(parserConfigs))
+	for i, config := range parserConfigs {
+		parserConfigResponses[i] = gin.H{
+			"id":                   config.ID,
+			"function_name":        config.FunctionName,
+			"function_signature":   config.FunctionSignature,
+			"function_description": config.FunctionDescription,
+			"display_format":       config.DisplayFormat,
+			"param_config":         config.ParamConfig,
+			"parser_rules":         config.ParserRules,
+			"priority":             config.Priority,
+			"is_active":            config.IsActive,
+			// 新增日志解析配置字段
+			"logs_parser_type":    config.LogsParserType,
+			"event_signature":     config.EventSignature,
+			"event_name":          config.EventName,
+			"event_description":   config.EventDescription,
+			"logs_param_config":   config.LogsParamConfig,
+			"logs_parser_rules":   config.LogsParserRules,
+			"logs_display_format": config.LogsDisplayFormat,
+		}
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": gin.H{
+			"coin_config":      dto.NewCoinConfigResponse(coinConfig),
+			"parser_configs":   parserConfigResponses,
+			"contract_address": contractAddress,
+		},
 	})
 }

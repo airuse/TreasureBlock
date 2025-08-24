@@ -40,7 +40,7 @@ func (r *transactionRepository) Create(ctx context.Context, tx *models.Transacti
 // GetByHash 根据哈希获取交易
 func (r *transactionRepository) GetByHash(ctx context.Context, hash string) (*models.Transaction, error) {
 	var tx models.Transaction
-	err := r.db.WithContext(ctx).Where("hash = ?", hash).First(&tx).Error
+	err := r.db.WithContext(ctx).Where("`tx_id` = ?", hash).First(&tx).Error
 	if err != nil {
 		return nil, err
 	}

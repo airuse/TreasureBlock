@@ -35,3 +35,5 @@ export interface SearchRequest {
   page?: number
   page_size?: number
 }
+
+

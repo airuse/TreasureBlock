@@ -88,6 +88,8 @@ func autoMigrate() error {
 		&models.BaseConfig{},
 		&models.CoinConfig{},
 		&models.TransactionReceipt{},
+		&models.ParserConfig{},
+		&models.Contract{},
 	)
 }
 
