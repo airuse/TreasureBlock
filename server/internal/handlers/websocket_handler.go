@@ -101,6 +101,10 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 		CheckOrigin: func(r *http.Request) bool {
 			return true // 允许所有来源，生产环境应该限制
 		},
+		// 添加更多配置选项
+		EnableCompression: true,
+		ReadBufferSize:    1024,
+		WriteBufferSize:   1024,
 	}
 
 	conn, err := upgrader.Upgrade(c.Writer, c.Request, nil)
@@ -109,12 +113,22 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 		return
 	}
 
+	// 设置连接参数
+	conn.SetReadLimit(512 * 1024)                          // 限制消息大小为512KB
+	conn.SetReadDeadline(time.Now().Add(60 * time.Second)) // 设置读取超时
+	conn.SetPongHandler(func(string) error {
+		conn.SetReadDeadline(time.Now().Add(60 * time.Second)) // 重置读取超时
+		return nil
+	})
+
 	// 创建客户端
 	client := &Client{
 		conn:       conn,
 		subscribed: make(map[string]bool),
 		send:       make(chan []byte, 256),
 	}
+
+	log.Printf("New WebSocket client connected from %s", conn.RemoteAddr().String())
 
 	// 注册客户端
 	h.register <- client
@@ -126,6 +140,7 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 // handleMessages 处理WebSocket消息
 func (h *WebSocketHandler) handleMessages(client *Client) {
 	defer func() {
+		log.Printf("WebSocket client disconnected from %s", client.conn.RemoteAddr().String())
 		h.unregister <- client
 		client.conn.Close()
 		close(client.send)
@@ -137,14 +152,30 @@ func (h *WebSocketHandler) handleMessages(client *Client) {
 	for {
 		_, message, err := client.conn.ReadMessage()
 		if err != nil {
-			log.Printf("WebSocket read error: %v", err)
+			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+				log.Printf("WebSocket unexpected close error: %v", err)
+			} else {
+				log.Printf("WebSocket read error: %v", err)
+			}
 			break
+		}
+
+		// 检查是否为ping消息（特殊处理）
+		messageStr := string(message)
+		if messageStr == "ping" {
+			// 直接响应pong，不需要JSON解析
+			response := map[string]interface{}{
+				"type": "pong",
+				"data": "pong",
+			}
+			h.sendMessage(client, response)
+			continue
 		}
 
 		// 处理接收到的消息
 		var msg SubscribeMessage
 		if err := json.Unmarshal(message, &msg); err != nil {
-			log.Printf("Failed to unmarshal message: %v", err)
+			log.Printf("Failed to unmarshal message: %v, message: %s", err, messageStr)
 			continue
 		}
 
@@ -165,6 +196,7 @@ func (h *WebSocketHandler) writePump(client *Client) {
 		select {
 		case message, ok := <-client.send:
 			if !ok {
+				// 通道已关闭，发送关闭消息
 				client.conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
@@ -176,7 +208,21 @@ func (h *WebSocketHandler) writePump(client *Client) {
 			}
 
 		case <-ticker.C:
-			if err := client.conn.WriteMessage(websocket.TextMessage, []byte("ping")); err != nil {
+			// 发送心跳ping消息
+			pingMessage := map[string]interface{}{
+				"type":      "ping",
+				"data":      "ping",
+				"timestamp": time.Now().UnixMilli(),
+			}
+
+			pingData, err := json.Marshal(pingMessage)
+			if err != nil {
+				log.Printf("Failed to marshal ping message: %v", err)
+				return
+			}
+
+			if err := client.conn.WriteMessage(websocket.TextMessage, pingData); err != nil {
+				log.Printf("Failed to send ping message: %v", err)
 				return
 			}
 		}
@@ -219,14 +265,6 @@ func (h *WebSocketHandler) handleMessage(client *Client, msg SubscribeMessage) {
 
 			h.sendMessage(client, response)
 		}
-
-	case "ping":
-		// 响应ping消息
-		response := map[string]interface{}{
-			"type": "pong",
-			"data": "pong",
-		}
-		h.sendMessage(client, response)
 
 	case "pong":
 		// 忽略pong消息

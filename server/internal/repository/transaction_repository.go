@@ -17,6 +17,8 @@ type TransactionRepository interface {
 	GetByBlockHeight(ctx context.Context, blockHeight uint64, offset, limit int, chain string) ([]*models.Transaction, int64, error)
 	GetByBlockID(ctx context.Context, blockID uint64) ([]*models.Transaction, error)
 	List(ctx context.Context, offset, limit int, chain string) ([]*models.Transaction, int64, error)
+	GetLatestBlockHeight(ctx context.Context, chain string) (uint64, error)
+	GetLatestTransactionsByBlockIndex(ctx context.Context, chain string, blockHeight uint64, limit int) ([]*models.Transaction, error)
 	Update(ctx context.Context, tx *models.Transaction) error
 	Delete(ctx context.Context, hash string) error
 	LogicalDeleteByBlockID(ctx context.Context, blockID uint64) error
@@ -156,4 +158,35 @@ func (r *transactionRepository) LogicalDeleteByBlockID(ctx context.Context, bloc
 		return result.Error
 	}
 	return nil
+}
+
+// GetLatestBlockHeight 获取最新区块高度
+func (r *transactionRepository) GetLatestBlockHeight(ctx context.Context, chain string) (uint64, error) {
+	var block models.Block
+	err := r.db.WithContext(ctx).
+		Where("chain = ? AND is_verified = 1", chain).
+		Order("height DESC").
+		Limit(1).
+		Select("height").
+		First(&block).Error
+
+	if err != nil {
+		return 0, err
+	}
+
+	return block.Height, nil
+}
+
+// GetLatestTransactionsByBlockIndex 获取指定区块高度的前几条交易
+func (r *transactionRepository) GetLatestTransactionsByBlockIndex(ctx context.Context, chain string, blockHeight uint64, limit int) ([]*models.Transaction, error) {
+	var txs []*models.Transaction
+
+	// 使用GORM查询，配合索引提升性能
+	err := r.db.WithContext(ctx).
+		Where("chain = ? AND height = ?", chain, blockHeight).
+		Order("block_index DESC").
+		Limit(limit).
+		Find(&txs).Error
+
+	return txs, err
 }

@@ -111,6 +111,12 @@ type BlockchainConfig struct {
 	Chains                  map[string]ChainConfig `yaml:"chains"`
 	VerificationTimeout     time.Duration          `yaml:"verification_timeout"`      // 全局区块验证超时时间
 	DefaultVerificationTime time.Duration          `yaml:"default_verification_time"` // 默认验证时间（如果未配置）
+	// 动态验证超时配置
+	DynamicVerification     bool          `yaml:"dynamic_verification"`      // 是否启用动态验证超时
+	BalanceTransactionCount int           `yaml:"balance_transaction_count"` // 平衡交易数量（默认200条）
+	BalanceBlockSize        int64         `yaml:"balance_block_size"`        // 平衡区块大小（默认128KB）
+	MinVerificationTime     time.Duration `yaml:"min_verification_time"`     // 最小验证时间
+	MaxVerificationTime     time.Duration `yaml:"max_verification_time"`     // 最大验证时间
 }
 
 // ChainConfig 链配置
@@ -301,6 +307,12 @@ func loadEnvConfig() error {
 		Blockchain: BlockchainConfig{
 			VerificationTimeout:     getEnvAsDuration("BLOCKCHAIN_VERIFICATION_TIMEOUT", 30*time.Second),
 			DefaultVerificationTime: getEnvAsDuration("BLOCKCHAIN_DEFAULT_VERIFICATION_TIME", 10*time.Second),
+			// 动态验证超时默认配置
+			DynamicVerification:     getEnvAsBool("BLOCKCHAIN_DYNAMIC_VERIFICATION", true),
+			BalanceTransactionCount: getEnvAsInt("BLOCKCHAIN_BALANCE_TRANSACTION_COUNT", 200),
+			BalanceBlockSize:        getEnvAsInt64("BLOCKCHAIN_BALANCE_BLOCK_SIZE", 128*1024), // 128KB
+			MinVerificationTime:     getEnvAsDuration("BLOCKCHAIN_MIN_VERIFICATION_TIME", 5*time.Second),
+			MaxVerificationTime:     getEnvAsDuration("BLOCKCHAIN_MAX_VERIFICATION_TIME", 30*time.Second),
 		},
 		Security: SecurityConfig{
 			JWTSecret:     getEnv("JWT_SECRET", "your-secret-key-change-this-in-production"),
@@ -353,6 +365,16 @@ func getEnvAsInt(key string, defaultValue int) int {
 	if value := os.Getenv(key); value != "" {
 		if intValue, err := strconv.Atoi(value); err == nil {
 			return intValue
+		}
+	}
+	return defaultValue
+}
+
+// getEnvAsInt64 获取环境变量并转换为int64
+func getEnvAsInt64(key string, defaultValue int64) int64 {
+	if value := os.Getenv(key); value != "" {
+		if int64Value, err := strconv.ParseInt(value, 10, 64); err == nil {
+			return int64Value
 		}
 	}
 	return defaultValue

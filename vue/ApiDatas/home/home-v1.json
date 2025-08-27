@@ -1,0 +1,134 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "首页API",
+    "version": "v1",
+    "description": "首页统计数据接口"
+  },
+  "paths": {
+    "/api/v1/home/stats": {
+      "get": {
+        "summary": "获取首页统计数据",
+        "description": "获取区块链首页的概览数据、最新区块和最新交易",
+        "parameters": [
+          {
+            "name": "chain",
+            "in": "query",
+            "description": "区块链类型",
+            "required": true,
+            "schema": {
+              "type": "string",
+              "enum": ["eth", "btc"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功获取首页统计数据",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "data": {
+                    "overview": {
+                      "totalBlocks": 18500000,
+                      "totalTransactions": 1250000000,
+                      "baseFee": 15000000000,
+                      "dailyVolume": 1250000.5,
+                      "avgGasPrice": 25000000000,
+                      "avgBlockTime": 12.5
+                    },
+                    "latestBlocks": [
+                      {
+                        "height": 18500000,
+                        "hash": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+                        "timestamp": 1693123456789,
+                        "transactions_count": 156,
+                        "size": 245760,
+                        "miner": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+                        "chain": "eth"
+                      },
+                      {
+                        "height": 18499999,
+                        "hash": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+                        "timestamp": 1693123456789,
+                        "transactions_count": 142,
+                        "size": 234560,
+                        "miner": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+                        "chain": "eth"
+                      },
+                      {
+                        "height": 18499998,
+                        "hash": "0x567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234",
+                        "timestamp": 1693123456789,
+                        "transactions_count": 168,
+                        "size": 256000,
+                        "miner": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+                        "chain": "eth"
+                      }
+                    ],
+                    "latestTransactions": [
+                      {
+                        "hash": "0xabcdef1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+                        "timestamp": 1693123456789,
+                        "amount": 0.5,
+                        "from": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+                        "to": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+                        "gas_price": 25000000000,
+                        "gas_used": 21000,
+                        "chain": "eth"
+                      },
+                      {
+                        "hash": "0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef",
+                        "timestamp": 1693123456789,
+                        "amount": 1.25,
+                        "from": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+                        "to": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+                        "gas_price": 30000000000,
+                        "gas_used": 65000,
+                        "chain": "eth"
+                      },
+                      {
+                        "hash": "0x567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef1234",
+                        "timestamp": 1693123456789,
+                        "amount": 0.025,
+                        "from": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+                        "to": "0x742d35Cc6634C9db96C4b4d8b6",
+                        "gas_price": 20000000000,
+                        "gas_used": 45000,
+                        "chain": "eth"
+                      }
+                    ]
+                  },
+                  "message": "成功获取首页统计数据"
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求参数错误",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": false,
+                  "error": "链类型参数缺失"
+                }
+              }
+            }
+          },
+          "500": {
+            "description": "服务器内部错误",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": false,
+                  "error": "获取统计数据失败"
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -45,6 +45,7 @@ func New() *Server {
 	requestLogRepo := repository.NewRequestLogRepository(database.GetDB())
 	userAddressRepo := repository.NewUserAddressRepository(database.GetDB())
 	parserConfigRepo := repository.NewParserConfigRepository(database.GetDB())
+	statsRepo := repository.NewStatsRepository()
 
 	// 创建解析配置服务
 	parserConfigService := services.NewParserConfigService(parserConfigRepo)
@@ -65,6 +66,7 @@ func New() *Server {
 		config.AppConfig.Security.JWTExpiration,
 	)
 	userAddressService := services.NewUserAddressService(userAddressRepo)
+	statsService := services.NewStatsService(statsRepo)
 
 	// 创建交易凭证相关服务
 	transactionReceiptRepo := repository.NewTransactionReceiptRepository(database.GetDB())
@@ -91,6 +93,7 @@ func New() *Server {
 	userAddressHandler := handlers.NewUserAddressHandler(userAddressService)
 	baseConfigHandler := handlers.NewBaseConfigHandler(baseConfigService)
 	parserConfigHandler := handlers.NewParserConfigHandler(parserConfigService)
+	homeHandler := handlers.NewHomeHandler(blockService, txService, statsService)
 
 	// 启动WebSocket处理器
 	wsHandler.Start()
@@ -109,6 +112,7 @@ func New() *Server {
 		authHandler,
 		userAddressHandler,
 		baseConfigHandler,
+		homeHandler,
 		authService,
 		apiKeyRepo,
 		requestLogRepo,

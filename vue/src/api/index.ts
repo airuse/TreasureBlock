@@ -6,6 +6,9 @@ import * as stats from './stats'
 import * as auth from './auth'
 import * as user from './user'
 import * as coinconfig from './coinconfig'
+import * as contracts from './contracts'
+import * as parserConfigs from './parser-configs'
+import * as home from './home'
 
 // 统一导出所有API模块
 export {
@@ -15,7 +18,10 @@ export {
   stats,
   auth,
   user,
-  coinconfig
+  coinconfig,
+  contracts,
+  parserConfigs,
+  home
 }
 
 // 默认导出所有模块
@@ -26,5 +32,8 @@ export default {
   stats,
   auth,
   user,
-  coinconfig
+  coinconfig,
+  contracts,
+  parserConfigs,
+  home
 }

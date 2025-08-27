@@ -1,39 +1,30 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
-import { useWebSocket } from '@/composables/useWebSocket'
-import type { Block, Transaction, NetworkStats, WebSocketBlockMessage } from '@/types'
+import { getHomeStats } from '@/api/home'
+import type { HomeOverview, HomeBlockSummary, HomeTransactionSummary } from '@/types'
 import { 
   formatTimestamp, 
   formatHash, 
+  formatFullHash,
   formatNumber, 
   formatDifficulty 
 } from '@/utils/formatters'
 
 // 响应式数据
-const stats = ref<NetworkStats>({
-  totalTransactions: 0,
+const stats = ref<HomeOverview>({
   totalBlocks: 0,
-  activeAddresses: 0,
-  networkHashrate: 0,
+  totalTransactions: 0,
+  baseFee: 0,
   dailyVolume: 0,
   avgGasPrice: 0,
-  avgBlockTime: 0,
-  difficulty: 0
+  avgBlockTime: 0
 })
-const latestBlocks = ref<Block[]>([])
-const latestTransactions = ref<Transaction[]>([])
+const latestBlocks = ref<HomeBlockSummary[]>([])
+const latestTransactions = ref<HomeTransactionSummary[]>([])
+const loading = ref(false)
+const error = ref('')
 
-// WebSocket连接
-const { subscribe } = useWebSocket()
-
-// 格式化数字
-const formatHashrate = (hashrate: number) => {
-  if (hashrate >= 1e12) return `${(hashrate / 1e12).toFixed(2)} TH/s`
-  if (hashrate >= 1e9) return `${(hashrate / 1e9).toFixed(2)} GH/s`
-  if (hashrate >= 1e6) return `${(hashrate / 1e6).toFixed(2)} MH/s`
-  if (hashrate >= 1e3) return `${(hashrate / 1e3).toFixed(2)} KH/s`
-  return `${hashrate.toFixed(2)} H/s`
-}
+// 移除WebSocket相关代码
 
 // 格式化字节大小
 const formatBytes = (bytes: number) => {
@@ -45,47 +36,133 @@ const formatBytes = (bytes: number) => {
 }
 
 // 格式化金额
-const formatAmount = (amount: number) => {
-  return amount.toFixed(6)
+const formatAmount = (amount: number | string) => {
+  // 如果amount是字符串，先转换为数字
+  const numAmount = typeof amount === 'string' ? parseFloat(amount) : amount
+  // 检查是否为有效数字
+  if (isNaN(numAmount)) {
+    return '0.000000'
+  }
+  return numAmount.toFixed(6)
 }
 
-// WebSocket事件处理
-const unsubscribeBlocks = subscribe('block', (message: any) => {
-  if (message.data) {
-    latestBlocks.value.unshift(message.data as Block)
-    if (latestBlocks.value.length > 10) {
-      latestBlocks.value = latestBlocks.value.slice(0, 10)
-    }
+// 格式化Gas价格
+const formatGasPrice = (gasPrice: number | string | undefined) => {
+  if (gasPrice === undefined || gasPrice === null) {
+    return '0'
   }
-})
+  // 如果gasPrice是字符串，先转换为数字
+  const numGasPrice = typeof gasPrice === 'string' ? parseFloat(gasPrice) : gasPrice
+  // 检查是否为有效数字
+  if (isNaN(numGasPrice)) {
+    return '0'
+  }
+  // 转换为Gwei (1 Gwei = 10^9 Wei)
+  return (numGasPrice / 1e9).toFixed(2)
+}
 
-const unsubscribeTransactions = subscribe('transaction', (message: any) => {
-  if (message.data) {
-    latestTransactions.value.unshift(message.data as Transaction)
-    if (latestTransactions.value.length > 10) {
-      latestTransactions.value = latestTransactions.value.slice(0, 10)
-    }
+// 格式化大数值，处理科学计数法
+const formatLargeNumber = (value: number | string | undefined) => {
+  if (value === undefined || value === null) {
+    return '0'
   }
-})
+  // 如果value是字符串，先转换为数字
+  const numValue = typeof value === 'string' ? parseFloat(value) : value
+  // 检查是否为有效数字
+  if (isNaN(numValue)) {
+    return '0'
+  }
+  
+  // 处理大数值
+  if (numValue >= 1e18) {
+    return (numValue / 1e18).toFixed(2) + ' ETH'
+  } else if (numValue >= 1e15) {
+    return (numValue / 1e15).toFixed(2) + ' PETH'
+  } else if (numValue >= 1e12) {
+    return (numValue / 1e12).toFixed(2) + ' TETH'
+  } else if (numValue >= 1e9) {
+    return (numValue / 1e9).toFixed(2) + ' GETH'
+  } else if (numValue >= 1e6) {
+    return (numValue / 1e6).toFixed(2) + ' METH'
+  } else if (numValue >= 1e3) {
+    return (numValue / 1e3).toFixed(2) + ' KETH'
+  } else {
+    return numValue.toFixed(6) + ' ETH'
+  }
+}
 
-const unsubscribeStats = subscribe('stats', (message: any) => {
-  if (message.data) {
-    stats.value = message.data as NetworkStats
+// 格式化wei到ETH
+const formatWeiToEth = (wei: number | string | undefined) => {
+  if (wei === undefined || wei === null) {
+    return '0.000000'
   }
-})
+  const numWei = typeof wei === 'string' ? parseFloat(wei) : wei
+  if (isNaN(numWei)) {
+    return '0.000000'
+  }
+  return (numWei / 1e18).toFixed(6)
+}
+
+// 加载首页数据
+const loadHomeData = async () => {
+  loading.value = true
+  error.value = ''
+  
+  try {
+    console.log('🔍 开始加载首页数据...')
+    const response = await getHomeStats({ chain: 'eth' })
+    console.log('📡 API响应:', response)
+    
+    if (response.success && response.data) {
+      console.log('✅ 数据加载成功，开始处理数据...')
+      // 安全地设置数据，确保数组不为null
+      stats.value = response.data.overview || {}
+      latestBlocks.value = response.data.latestBlocks || []
+      latestTransactions.value = response.data.latestTransactions || []
+      console.log('📊 处理后的数据:', {
+        stats: stats.value,
+        blocks: latestBlocks.value,
+        transactions: latestTransactions.value
+      })
+    } else {
+      console.warn('⚠️ API返回失败:', response)
+      error.value = response.message || '获取数据失败'
+    }
+  } catch (err) {
+    console.error('❌ 加载首页数据失败:', err)
+    error.value = '网络错误，请稍后重试'
+  } finally {
+    loading.value = false
+  }
+}
+
+// 移除WebSocket事件处理，改为定时刷新数据
+const refreshInterval = ref<number | null>(null)
+
+// 定时刷新数据（每30秒刷新一次）
+const startAutoRefresh = () => {
+  refreshInterval.value = window.setInterval(() => {
+    loadHomeData()
+  }, 30000) // 30秒
+}
+
+// 停止自动刷新
+const stopAutoRefresh = () => {
+  if (refreshInterval.value) {
+    clearInterval(refreshInterval.value)
+    refreshInterval.value = null
+  }
+}
 
 // 初始化数据
 onMounted(() => {
-  // 初始化空数据，实际数据将通过WebSocket或API获取
-  latestBlocks.value = []
-  latestTransactions.value = []
+  loadHomeData()
+  startAutoRefresh() // 启动自动刷新
 })
 
+// 页面卸载时清理定时器
 onUnmounted(() => {
-  // 清理WebSocket订阅
-  unsubscribeBlocks()
-  unsubscribeTransactions()
-  unsubscribeStats()
+  stopAutoRefresh()
 })
 </script>
 
@@ -94,21 +171,38 @@ onUnmounted(() => {
     <!-- 页面标题 -->
     <div class="flex justify-between items-center">
       <h1 class="text-2xl font-bold text-gray-900">区块链概览</h1>
-      <div class="text-sm text-gray-500">
-        最后更新: {{ new Date().toLocaleString() }}
+      <div class="flex items-center space-x-4">
+        <button 
+          @click="loadHomeData" 
+          :disabled="loading"
+          class="px-4 py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 disabled:opacity-50"
+        >
+          {{ loading ? '加载中...' : '刷新数据' }}
+        </button>
+        <div class="text-sm text-gray-500">
+          最后更新: {{ new Date().toLocaleString() }}
+        </div>
       </div>
     </div>
 
+    <!-- 错误提示 -->
+    <div v-if="error" class="bg-red-100 border border-red-400 text-red-700 px-4 py-3 rounded">
+      <strong class="font-bold">错误:</strong>
+      <span class="block sm:inline">{{ error }}</span>
+    </div>
+
     <!-- 统计卡片 -->
-    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
+    <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
       <div class="card">
         <div class="flex items-center">
           <div class="p-2 bg-blue-100 rounded-lg">
-            <CubeIcon class="h-6 w-6 text-blue-600" />
+            <svg class="h-6 w-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
+            </svg>
           </div>
           <div class="ml-4">
             <p class="text-sm font-medium text-gray-600">总区块数</p>
-            <p class="text-2xl font-bold text-gray-900">{{ formatNumber(stats.totalBlocks) }}</p>
+            <p class="text-2xl font-bold text-gray-900">{{ formatNumber(stats.totalBlocks || 0) }}</p>
           </div>
         </div>
       </div>
@@ -116,11 +210,13 @@ onUnmounted(() => {
       <div class="card">
         <div class="flex items-center">
           <div class="p-2 bg-green-100 rounded-lg">
-            <CurrencyDollarIcon class="h-6 w-6 text-green-600" />
+            <svg class="h-6 w-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
+            </svg>
           </div>
           <div class="ml-4">
             <p class="text-sm font-medium text-gray-600">总交易数</p>
-            <p class="text-2xl font-bold text-gray-900">{{ formatNumber(stats.totalTransactions) }}</p>
+            <p class="text-2xl font-bold text-gray-900">{{ formatNumber(stats.totalTransactions || 0) }}</p>
           </div>
         </div>
       </div>
@@ -128,23 +224,13 @@ onUnmounted(() => {
       <div class="card">
         <div class="flex items-center">
           <div class="p-2 bg-purple-100 rounded-lg">
-            <UserGroupIcon class="h-6 w-6 text-purple-600" />
+            <svg class="h-6 w-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2m0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z"></path>
+            </svg>
           </div>
           <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600">活跃地址</p>
-            <p class="text-2xl font-bold text-gray-900">{{ formatNumber(stats.activeAddresses) }}</p>
-          </div>
-        </div>
-      </div>
-
-      <div class="card">
-        <div class="flex items-center">
-          <div class="p-2 bg-orange-100 rounded-lg">
-            <ChartBarIcon class="h-6 w-6 text-orange-600" />
-          </div>
-          <div class="ml-4">
-            <p class="text-sm font-medium text-gray-600">网络算力</p>
-            <p class="text-2xl font-bold text-gray-900">{{ formatHashrate(stats.networkHashrate) }}</p>
+            <p class="text-sm font-medium text-gray-600">最新区块Base Fee</p>
+            <p class="text-2xl font-bold text-gray-900">{{ formatGasPrice(stats.baseFee) }} Gwei</p>
           </div>
         </div>
       </div>
@@ -156,29 +242,35 @@ onUnmounted(() => {
       <div class="card">
         <div class="flex justify-between items-center mb-4">
           <h2 class="text-lg font-semibold text-gray-900">最新区块</h2>
-          <router-link to="/blocks" class="text-blue-600 hover:text-blue-700 text-sm">
+          <router-link to="eth/blocks" class="text-blue-600 hover:text-blue-700 text-sm">
             查看全部
           </router-link>
         </div>
         <div class="space-y-2">
           <div 
-            v-for="block in latestBlocks" 
+            v-for="block in (latestBlocks || [])" 
             :key="block.height"
             class="flex items-center justify-between py-3 border-b border-gray-100 last:border-b-0"
           >
             <div class="flex items-center space-x-3">
               <div class="w-8 h-8 bg-blue-100 rounded-full flex items-center justify-center">
-                <CubeIcon class="h-4 w-4 text-blue-600" />
+                <svg class="h-4 w-4 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M20 7l-8-4-8 4m16 0l-8 4m8-4v10l-8 4m0-10L4 7m8 4v10M4 7v10l8 4"></path>
+                </svg>
               </div>
               <div>
-                <p class="text-sm font-medium text-gray-900">#{{ (block.height || block.number || 0).toLocaleString() }}</p>
-                <p class="text-sm text-gray-500">{{ formatTimestamp(typeof block.timestamp === 'string' ? parseInt(block.timestamp) : block.timestamp) }}</p>
+                <p class="text-sm font-medium text-gray-900">#{{ (block.height || 0).toLocaleString() }}</p>
+                <p class="text-sm text-gray-500">{{ formatTimestamp(block.timestamp) }}</p>
               </div>
             </div>
             <div class="text-right">
-              <p class="text-sm font-medium text-gray-900">{{ block.transactions_count || block.transactions || 0 }} 交易</p>
-              <p class="text-sm text-gray-500">{{ formatBytes(block.size) }}</p>
+              <p class="text-sm font-medium text-gray-900">{{ block.transactions_count || 0 }} 交易</p>
+              <p class="text-sm text-gray-500">{{ formatBytes(block.size || 0) }}</p>
             </div>
+          </div>
+          <!-- 空数据提示 -->
+          <div v-if="!latestBlocks || latestBlocks.length === 0" class="text-center py-8 text-gray-500">
+            暂无区块数据
           </div>
         </div>
       </div>
@@ -187,29 +279,44 @@ onUnmounted(() => {
       <div class="card">
         <div class="flex justify-between items-center mb-4">
           <h2 class="text-lg font-semibold text-gray-900">最新交易</h2>
-          <router-link to="/transactions" class="text-blue-600 hover:text-blue-700 text-sm">
+          <router-link to="eth/transactions" class="text-blue-600 hover:text-blue-700 text-sm">
             查看全部
           </router-link>
         </div>
         <div class="space-y-2">
           <div 
-            v-for="tx in latestTransactions" 
+            v-for="tx in (latestTransactions || [])" 
             :key="tx.hash"
             class="flex items-center justify-between py-3 border-b border-gray-100 last:border-b-0"
           >
             <div class="flex items-center space-x-3">
               <div class="w-8 h-8 bg-green-100 rounded-full flex items-center justify-center">
-                <CurrencyDollarIcon class="h-4 w-4 text-green-600" />
+                <svg class="h-4 w-4 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8c-1.657 0-3 .895-3 2s1.343 2 3 2 3 .895 3 2-1.343 2-3 2m0-8c1.11 0 2.08.402 2.599 1M12 8V7m0 1v8m0 0v1m0-1c-1.11 0-2.08-.402-2.599-1"></path>
+                </svg>
               </div>
-              <div>
-                <p class="text-sm font-medium text-gray-900">{{ formatHash(tx.hash) }}</p>
-                <p class="text-sm text-gray-500">{{ formatTimestamp(typeof tx.timestamp === 'string' ? parseInt(tx.timestamp) : tx.timestamp) }}</p>
+              <div class="flex-1 min-w-0">
+                <p class="text-sm font-medium text-gray-900 truncate">{{ formatFullHash(tx.hash) }}</p>
+                <p class="text-sm text-gray-500">
+                  {{ formatTimestamp(tx.timestamp) }}
+                  <router-link 
+                    v-if="tx.height" 
+                    :to="`/eth/blocks/${tx.height}`" 
+                    class="ml-2 text-blue-600 hover:text-blue-800 underline"
+                  >
+                    #{{ tx.height.toLocaleString() }}
+                  </router-link>
+                </p>
               </div>
             </div>
-            <div class="text-right">
-              <p class="text-sm font-medium text-gray-900">0.000000 ETH</p>
-              <p class="text-sm text-gray-500">{{ formatAmount(tx.amount || 0) }} ETH</p>
+            <div class="text-right ml-4">
+              <p class="text-sm font-medium text-gray-900">{{ formatGasPrice(tx.gas_price) }} Gwei</p>
+              <p class="text-sm text-gray-500">{{ formatWeiToEth(tx.amount || 0) }} ETH</p>
             </div>
+          </div>
+          <!-- 空数据提示 -->
+          <div v-if="!latestTransactions || latestTransactions.length === 0" class="text-center py-8 text-gray-500">
+            暂无交易数据
           </div>
         </div>
       </div>
@@ -218,22 +325,18 @@ onUnmounted(() => {
     <!-- 网络状态 -->
     <div class="card">
       <h2 class="text-lg font-semibold text-gray-900 mb-4">网络状态</h2>
-      <div class="grid grid-cols-2 md:grid-cols-4 gap-4">
+      <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
         <div class="text-center">
-          <p class="text-sm text-gray-600">平均Gas价格</p>
-          <p class="text-lg font-semibold text-gray-900">{{ (stats.avgGasPrice / 1e9).toFixed(0) }} Gwei</p>
+          <p class="text-sm text-gray-600">十分钟内平均Gas价格</p>
+          <p class="text-lg font-semibold text-gray-900">{{ formatGasPrice(stats.avgGasPrice) }} Gwei</p>
         </div>
         <div class="text-center">
-          <p class="text-sm text-gray-600">平均出块时间</p>
-          <p class="text-lg font-semibold text-gray-900">{{ stats.avgBlockTime.toFixed(1) }} 秒</p>
+          <p class="text-sm text-gray-600">十分钟内平均出块时间</p>
+          <p class="text-lg font-semibold text-gray-900">{{ (stats.avgBlockTime || 0).toFixed(1) }} 秒</p>
         </div>
         <div class="text-center">
-          <p class="text-sm text-gray-600">当前难度</p>
-          <p class="text-lg font-semibold text-gray-900">{{ formatDifficulty(stats.difficulty) }}</p>
-        </div>
-        <div class="text-center">
-          <p class="text-sm text-gray-600">日交易量</p>
-          <p class="text-lg font-semibold text-gray-900">{{ formatAmount(stats.dailyVolume) }} ETH</p>
+          <p class="text-sm text-gray-600">十分钟内交易量</p>
+          <p class="text-lg font-semibold text-gray-900">{{ formatWeiToEth(stats.dailyVolume) }} ETH</p>
         </div>
       </div>
     </div>

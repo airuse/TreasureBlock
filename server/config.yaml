@@ -70,7 +70,14 @@ api:
     burst: 20
 
 blockchain:
-  verification_timeout: 40s    #取平均时间，如果超过这个时间，则认为区块验证失败
+  verification_timeout: 10s    #取平均时间，如果超过这个时间，则认为区块验证失败
+  default_verification_time: 10s  # 基础验证时间（用于动态计算）
+  # 动态验证超时配置
+  dynamic_verification: true       # 启用动态验证超时
+  balance_transaction_count: 200   # 平衡交易数量（200条）
+  balance_block_size: 131072       # 平衡区块大小（128KB = 128 * 1024）
+  min_verification_time: 5s        # 最小验证时间
+  max_verification_time: 20s       # 最大验证时间
   chains:
     btc:
       name: "Bitcoin"

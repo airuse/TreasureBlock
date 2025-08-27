@@ -1,12 +1,29 @@
 // 格式化时间戳
 export const formatTimestamp = (timestamp: number): string => {
-  return new Date(timestamp * 1000).toLocaleString()
+  // 检查时间戳是否为毫秒级（13位数字）
+  const isMilliseconds = timestamp > 1000000000000
+  const date = isMilliseconds ? new Date(timestamp) : new Date(timestamp * 1000)
+  return date.toLocaleString('zh-CN', {
+    year: 'numeric',
+    month: '2-digit',
+    day: '2-digit',
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+    hour12: false
+  })
 }
 
 // 格式化哈希值（显示前8位和后8位）
 export const formatHash = (hash: string): string => {
   if (!hash || hash.length < 16) return hash
   return `${hash.substring(0, 8)}...${hash.substring(hash.length - 8)}`
+}
+
+// 格式化完整哈希值（不截断）
+export const formatFullHash = (hash: string): string => {
+  if (!hash) return ''
+  return hash
 }
 
 // 格式化地址（显示前6位和后4位）

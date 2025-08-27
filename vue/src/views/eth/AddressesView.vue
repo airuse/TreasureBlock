@@ -1388,15 +1388,6 @@
                   >
                     维护币种信息
                   </button>
-                  <button 
-                    @click="toggleAddressStatus(address)"
-                    :class="[
-                      'text-xs',
-                      address.status === 'active' ? 'text-red-600 hover:text-red-800' : 'text-green-600 hover:text-green-800'
-                    ]"
-                  >
-                    {{ address.status === 'active' ? '停用' : '启用' }}
-                  </button>
                 </div>
               </td>
             </tr>

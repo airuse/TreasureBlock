@@ -26,6 +26,7 @@ func SetupRoutes(
 	authHandler *handlers.AuthHandler,
 	userAddressHandler *handlers.UserAddressHandler,
 	baseConfigHandler *handlers.BaseConfigHandler,
+	homeHandler *handlers.HomeHandler,
 	authService services.AuthService,
 	apiKeyRepo repository.APIKeyRepository,
 	requestLogRepo repository.RequestLogRepository,
@@ -127,6 +128,12 @@ func SetupRoutes(
 	v1.Use(rateLimitMiddleware)  // 限流
 	v1.Use(requestLogMiddleware) // 请求日志
 	{
+		// 首页相关路由
+		home := v1.Group("/home")
+		{
+			home.GET("/stats", homeHandler.GetHomeStats) // 获取首页统计数据
+		}
+
 		// 区块相关路由
 		blocks := v1.Group("/blocks")
 		blocks.Use(jwtAuthMiddleware) // Add auth middleware here

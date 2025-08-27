@@ -14,6 +14,7 @@ type TransactionService interface {
 	GetTransactionsByBlockHash(ctx context.Context, blockHash string) ([]*models.Transaction, error)
 	GetTransactionsByBlockHeight(ctx context.Context, blockHeight uint64, page, pageSize int, chain string) ([]*models.Transaction, int64, error)
 	ListTransactions(ctx context.Context, page, pageSize int, chain string) ([]*models.Transaction, int64, error)
+	GetLatestTransactions(ctx context.Context, chain string, limit int) ([]*models.Transaction, error)
 	CreateTransaction(ctx context.Context, tx *models.Transaction) error
 	UpdateTransaction(ctx context.Context, tx *models.Transaction) error
 	DeleteTransaction(ctx context.Context, hash string) error
@@ -139,6 +140,41 @@ func (s *transactionService) ListTransactions(ctx context.Context, page, pageSiz
 	}
 
 	return txs, total, nil
+}
+
+// GetLatestTransactions 获取最新区块的前几条交易
+func (s *transactionService) GetLatestTransactions(ctx context.Context, chain string, limit int) ([]*models.Transaction, error) {
+	if limit <= 0 {
+		limit = 5 // 默认返回5条
+	}
+	if limit > 20 {
+		limit = 20 // 最大限制20条
+	}
+
+	// 获取最新区块高度
+	latestBlock, err := s.txRepo.GetLatestBlockHeight(ctx, chain)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get latest block height: %w", err)
+	}
+
+	// 获取最新区块的前几条交易
+	txs, err := s.txRepo.GetLatestTransactionsByBlockIndex(ctx, chain, latestBlock, limit)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get latest transactions: %w", err)
+	}
+
+	// 为每个交易添加代币标识
+	tokenMap, err := s.getTokenAddresses(ctx, chain)
+	if err != nil {
+		// 如果获取代币配置失败，继续执行，只是不设置代币信息
+		tokenMap = make(map[string]*models.CoinConfig)
+	}
+
+	for _, tx := range txs {
+		tx.IsToken = s.isTokenTransaction(tx, tokenMap)
+	}
+
+	return txs, nil
 }
 
 // CreateTransaction 创建交易

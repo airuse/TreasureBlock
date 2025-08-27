@@ -580,7 +580,7 @@ func (h *BlockHandler) CreateBlock(c *gin.Context) {
 	}
 
 	// 4. 基于数据库实际创建时间设置验证截止时间
-	verificationTimeout := h.getVerificationTimeout(block.Chain)
+	verificationTimeout := h.getVerificationTimeout(block.Chain, block.TransactionCount, int64(block.Size))
 	verificationDeadline := block.CreatedAt.Add(verificationTimeout)
 	block.VerificationDeadline = &verificationDeadline
 
@@ -614,8 +614,13 @@ func (h *BlockHandler) CreateBlock(c *gin.Context) {
 	h.wsHandler.BroadcastBlockEvent(chainType, response)
 }
 
-// getVerificationTimeout 获取全局验证超时时间
-func (h *BlockHandler) getVerificationTimeout(chain string) time.Duration {
+// getVerificationTimeout 获取动态验证超时时间
+func (h *BlockHandler) getVerificationTimeout(chain string, transactionCount int, blockSize int64) time.Duration {
+	// 如果启用了动态验证超时，则使用动态算法
+	if config.AppConfig.Blockchain.DynamicVerification {
+		return h.calculateDynamicVerificationTimeout(transactionCount, blockSize)
+	}
+
 	// 使用全局配置的验证超时时间
 	if config.AppConfig.Blockchain.VerificationTimeout > 0 {
 		return config.AppConfig.Blockchain.VerificationTimeout
@@ -625,6 +630,63 @@ func (h *BlockHandler) getVerificationTimeout(chain string) time.Duration {
 		return config.AppConfig.Blockchain.DefaultVerificationTime
 	}
 
-	// 默认超时时间：5分钟
-	return 5 * time.Minute
+	// 默认超时时间：15秒
+	return 15 * time.Second
+}
+
+// calculateDynamicVerificationTimeout 计算动态验证超时时间
+func (h *BlockHandler) calculateDynamicVerificationTimeout(transactionCount int, blockSize int64) time.Duration {
+	// 获取配置参数
+	balanceTxCount := config.AppConfig.Blockchain.BalanceTransactionCount
+	balanceBlockSize := config.AppConfig.Blockchain.BalanceBlockSize
+	minTime := config.AppConfig.Blockchain.MinVerificationTime
+	maxTime := config.AppConfig.Blockchain.MaxVerificationTime
+	baseTime := config.AppConfig.Blockchain.DefaultVerificationTime
+
+	// 如果基础时间未配置，使用默认值
+	if baseTime == 0 {
+		baseTime = 10 * time.Second
+	}
+
+	// 计算交易数量比例因子
+	txRatio := float64(transactionCount) / float64(balanceTxCount)
+
+	// 交易数量因子：使用对数函数，避免线性增长过快
+	var txFactor float64
+	if txRatio <= 1.0 {
+		// 当交易数量 <= 平衡点时，因子在 0.5 到 1.0 之间
+		txFactor = 0.5 + (txRatio * 0.5)
+	} else {
+		// 当交易数量 > 平衡点时，使用对数函数，因子在 1.0 到 2.0 之间
+		txFactor = 1.0 + (1.0 * (1.0 - 1.0/(1.0+txRatio-1.0)))
+	}
+
+	// 计算区块大小比例因子
+	sizeRatio := float64(blockSize) / float64(balanceBlockSize)
+
+	// 区块大小因子：使用对数函数，避免线性增长过快
+	var sizeFactor float64
+	if sizeRatio <= 1.0 {
+		// 当区块大小 <= 平衡点时，因子在 0.5 到 1.0 之间
+		sizeFactor = 0.5 + (sizeRatio * 0.5)
+	} else {
+		// 当区块大小 > 平衡点时，使用对数函数，因子在 1.0 到 2.0 之间
+		sizeFactor = 1.0 + (1.0 * (1.0 - 1.0/(1.0+sizeRatio-1.0)))
+	}
+
+	// 计算综合因子（交易数量权重70%，区块大小权重30%）
+	combinedFactor := (txFactor * 0.7) + (sizeFactor * 0.3)
+
+	// 计算动态超时时间
+	dynamicTime := time.Duration(float64(baseTime) * combinedFactor)
+
+	// 确保在最小和最大时间范围内
+	if dynamicTime < minTime {
+		dynamicTime = minTime
+	}
+	if dynamicTime > maxTime {
+		dynamicTime = maxTime
+	}
+
+	return dynamicTime
 }
