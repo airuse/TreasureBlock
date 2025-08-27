@@ -29,6 +29,11 @@ type Block struct {
 	BaseFee          *big.Int   `json:"base_fee,omitempty"`
 	BurnedEth        *big.Float `json:"burned_eth,omitempty"`
 	MinerTipEth      *big.Float `json:"miner_tip_eth,omitempty"`
+
+	// ETH状态根字段
+	StateRoot        string `json:"state_root,omitempty"`
+	TransactionsRoot string `json:"transactions_root,omitempty"`
+	ReceiptsRoot     string `json:"receipts_root,omitempty"`
 }
 
 // BlockResponse 区块响应

@@ -3,10 +3,10 @@ server:
   port: 8443
   protocol: "https"
   environment: "development"  # 新增环境标识，当 production 时用的是线上环境 development 是本地环境
-  api_key: "ak_3247cde976e87680970b1a98360d54e2"
-  secret_key: "sk_55ff98cd09d7df039a1726f3521143ca9bcc394a9b6645f40eeee1bc3aea3d20"
-  # api_key: "ak_1ecdcce27a88af7108e78126fe2f40fa"
-  # secret_key: "sk_21855c08bacedd1250abc11520089d3d8655d5accd12090e94f1a2bcc434d0ee"
+  # api_key: "ak_c9da22f76fa7a6870b10b2f074db1b31"
+  # secret_key: "sk_7cad6309637b7c0c374c9974c68a0beeb65ca80093ea4c4bc60a04181eb1f5fa"
+  api_key: "ak_531afe50ef47457b9784916bd12fd93d"
+  secret_key: "sk_70833628875a73e97a96cbe5585530b092d08dcbba0f816956b99428ba79f15f"
   # # HTTPS相关配置
   tls:
     enabled: true
@@ -50,45 +50,48 @@ blockchain:
       enabled: true
       # rpc_url: "http://192.168.1.70:8545"
       explorer_api_urls:
-        - "https://yolo-smart-tree.quiknode.pro/52836b8f979fca7325258c42925d6c245ca45079"
-        - "https://alpha-clean-yard.quiknode.pro/7979488c04b1a36bdc4230b23e3eaac3e9c1c1af"
+        - "https://ethereum-mainnet.core.chainstack.com/5611e99c47d7d01ba133c23ee3064020"
+        - "https://ethereum-mainnet.core.chainstack.com/7ba518d6ccef2034775a9184a898fa3c"
+        - "https://ethereum-mainnet.core.chainstack.com/f128085e44a144c3a63295011a716628"
+        - "https://ethereum-mainnet.core.chainstack.com/7940b16771bdfe19340899e9a975604e"
+        - "https://ethereum-mainnet.core.chainstack.com/9f3263672e76b307af91917e8aea47b1"
+        - "https://ethereum-mainnet.core.chainstack.com/483d27c712e9d3f5adae3ef60246529c"
+        - "https://ethereum-mainnet.core.chainstack.com/1c17a8ff6bcf6cd6371f97c5310963c8"
+        - "https://ethereum-mainnet.core.chainstack.com/34e69fc33d3f9cbbdc1e0cbcf30e8f11"
+        - "https://ethereum-mainnet.core.chainstack.com/f88c0e02c0f9f38c4880701a44fa0133"
+        - "https://ethereum-mainnet.core.chainstack.com/92b0739e8f73e3d79e79f13f46f5f8ec"
+        - "https://ethereum-mainnet.core.chainstack.com/fa00dae894f9dd1b7b4a530d83a83bd7"
+        - "https://ethereum-mainnet.core.chainstack.com/5611e99c47d7d01ba133c23ee3064020"
+        - "https://ethereum-mainnet.core.chainstack.com/7ba518d6ccef2034775a9184a898fa3c"
+        - "https://ethereum-mainnet.core.chainstack.com/f128085e44a144c3a63295011a716628"
+        - "https://ethereum-mainnet.core.chainstack.com/7940b16771bdfe19340899e9a975604e"
+        - "https://ethereum-mainnet.core.chainstack.com/9f3263672e76b307af91917e8aea47b1"
+        - "https://ethereum-mainnet.core.chainstack.com/483d27c712e9d3f5adae3ef60246529c"
+        - "https://ethereum-mainnet.core.chainstack.com/1c17a8ff6bcf6cd6371f97c5310963c8"
+        - "https://ethereum-mainnet.core.chainstack.com/34e69fc33d3f9cbbdc1e0cbcf30e8f11"
+        - "https://ethereum-mainnet.core.chainstack.com/f88c0e02c0f9f38c4880701a44fa0133"
+        - "https://ethereum-mainnet.core.chainstack.com/92b0739e8f73e3d79e79f13f46f5f8ec"
+        - "https://ethereum-mainnet.core.chainstack.com/fa00dae894f9dd1b7b4a530d83a83bd7"
+        - "https://eth-mainnet.g.alchemy.com/v2/9N4BtDqjALaxGX12hcbvC"
+        - "https://eth-mainnet.g.alchemy.com/v2/A8Rr89_Bm2O0RSIxhjJ8a"
+        - "https://lb.drpc.org/ethereum/ApP8VmV0NEYMjrj0PYgtupww_Sq7gh4R8JPvIgaNGuYu"
+        - "https://lb.drpc.org/ethereum/AhSgyzb6VUrWuIkUTrjgi3J2NuwCgh0R8JPuIgaNGuYu"
+        - "https://lb.drpc.org/ethereum/Aqh3uZvhdU5oq84o63-TeYsfZaTxgbgR8JO5IgaNGuYu"
+        - "https://lb.drpc.org/ethereum/AhCf0-Tte050nUVwFHF_1jOCF6QNgh8R8JPxIgaNGuYu"
+        - "https://lb.drpc.org/ethereum/AvPPIhOf-k4jldkwixy1QT3s8w99gisR8JP8IgaNGuYu"
+        - "https://lb.drpc.org/ethereum/AmpXsFj_D07JqDZ-Hv-nsjkUBedLgiAR8JPzIgaNGuYu"
+        - "https://lb.drpc.org/ethereum/AjrnZKmTu0IgpPhzqbPO3unPKlTcgiAR8JP2IgaNGuYu"
+        - "https://lb.drpc.org/ethereum/AnmJBrEnm0lsmXo0LnCNva9dh3zRgiER8JP3IgaNGuYu"
+        - "https://lb.drpc.org/ethereum/AuM84m0TIkfQkaEYg8VtRn_SdzxVgiER8JP4IgaNGuYu"
+        - "https://lb.drpc.org/ethereum/Ao-bi6VwUUYesmsBczwFkxqJJNtrgiIR8JP5IgaNGuYu"
+        - "https://lb.drpc.org/ethereum/AgBSgHwcLEI4quCpnDNHMBeev_UPgiMR8JP6IgaNGuYu"
         - "https://newest-ultra-friday.quiknode.pro/7091d98af3809c189285739c3f4141b94f368fff"
+        - "https://yolo-smart-tree.quiknode.pro/52836b8f979fca7325258c42925d6c245ca45079"
         - "https://thrilling-summer-frost.quiknode.pro/ca8e71700184f645a7935acf1487acd191e429a1"
         - "https://warmhearted-bold-emerald.quiknode.pro/be4e6633f9443a4dd26046d40be1650a810db3a1"
         - "https://empty-hardworking-spree.quiknode.pro/d1cb31945987ed11caa6f3e63c2b8b86b00d41ff"
-        - "https://chaotic-maximum-field.quiknode.pro/86729522e8f604ddcbeb3f6b777bacc447ce5538"
-        - "https://special-frequent-sailboat.quiknode.pro/1bd586fffc3fd32d4a0f16b3a7d80831b2431afd"
-        - "https://newest-holy-spree.quiknode.pro/ff40bb3a1adb4da61a6c21d8d30e8c590aa211dc"
-        - "https://necessary-late-shadow.quiknode.pro/1c50e1c16fecbfd54e4bae3bcebaf639344c3d8e"
-        - "https://omniscient-skilled-moon.quiknode.pro/631e501f8f1a5ba844344cf86a56828117f35aed"
-        - "https://wandering-tiniest-yard.quiknode.pro/f58f57a3bf0974d29db0ab826b91926fe71e3d72"
-        - "https://quaint-multi-valley.quiknode.pro/636044aa729112ea69a2dfc80a0faa3f6a49f86f"
-        - "https://twilight-weathered-dust.quiknode.pro/aaef3e3eff58ac9c8cc92a31733f28f7e8a9f96a"
-        - "https://compatible-boldest-patron.quiknode.pro/f30417525f63f4feea90e053e314f86b1b1d3a1d"
-        - "https://wandering-tame-county.quiknode.pro/a20d01c91e03f4f261cd698a6bcf1dc577e390a2"
-        - "https://rough-old-silence.quiknode.pro/e72a4bfa9b596c4fb3bbffc031570c7ec6971c36"
-        - "https://quick-still-friday.quiknode.pro/12a85d6d6f82fb5dc08bb770c8ec21b0401081a4"
-        - "https://chaotic-powerful-yard.quiknode.pro/50b227887e4c1e0912ce7b9535be33ecb8f056c6"
+        - "https://solemn-purple-river.quiknode.pro/93a62baaa6ed6004344fca98ff7f05f8f0a12ae1"
 
-        # - "https://alpha-clean-yard.ethereum-sepolia.quiknode.pro/7979488c04b1a36bdc4230b23e3eaac3e9c1c1af"
-        # - "https://yolo-smart-tree.ethereum-sepolia.quiknode.pro/52836b8f979fca7325258c42925d6c245ca45079"
-        # - "https://newest-ultra-friday.ethereum-sepolia.quiknode.pro/7091d98af3809c189285739c3f4141b94f368fff"
-        # - "https://thrilling-summer-frost.ethereum-sepolia.quiknode.pro/ca8e71700184f645a7935acf1487acd191e429a1"
-        # - "https://warmhearted-bold-emerald.ethereum-sepolia.quiknode.pro/be4e6633f9443a4dd26046d40be1650a810db3a1"
-        # - "https://empty-hardworking-spree.ethereum-sepolia.quiknode.pro/d1cb31945987ed11caa6f3e63c2b8b86b00d41ff"
-        # - "https://chaotic-maximum-field.ethereum-sepolia.quiknode.pro/86729522e8f604ddcbeb3f6b777bacc447ce5538"
-        # - "https://special-frequent-sailboat.ethereum-sepolia.quiknode.pro/1bd586fffc3fd32d4a0f16b3a7d80831b2431afd"
-        # - "https://newest-holy-spree.ethereum-sepolia.quiknode.pro/ff40bb3a1adb4da61a6c21d8d30e8c590aa211dc"
-        # - "https://necessary-late-shadow.ethereum-sepolia.quiknode.pro/1c50e1c16fecbfd54e4bae3bcebaf639344c3d8e"
-        # - "https://omniscient-skilled-moon.ethereum-sepolia.quiknode.pro/631e501f8f1a5ba844344cf86a56828117f35aed"
-        # - "https://wandering-tiniest-yard.ethereum-sepolia.quiknode.pro/f58f57a3bf0974d29db0ab826b91926fe71e3d72"
-        # - "https://quaint-multi-valley.ethereum-sepolia.quiknode.pro/636044aa729112ea69a2dfc80a0faa3f6a49f86f"
-        # - "https://twilight-weathered-dust.ethereum-sepolia.quiknode.pro/aaef3e3eff58ac9c8cc92a31733f28f7e8a9f96a"
-        # - "https://compatible-boldest-patron.ethereum-sepolia.quiknode.pro/f30417525f63f4feea90e053e314f86b1b1d3a1d"
-        # - "https://wandering-tame-county.ethereum-sepolia.quiknode.pro/a20d01c91e03f4f261cd698a6bcf1dc577e390a2"
-        # - "https://rough-old-silence.ethereum-sepolia.quiknode.pro/e72a4bfa9b596c4fb3bbffc031570c7ec6971c36"
-        # - "https://quick-still-friday.ethereum-sepolia.quiknode.pro/12a85d6d6f82fb5dc08bb770c8ec21b0401081a4"
-        # - "https://chaotic-powerful-yard.ethereum-sepolia.quiknode.pro/50b227887e4c1e0912ce7b9535be33ecb8f056c6"
       api_key: ""  # 如果需要的话
       username: ""
       password: ""
@@ -99,16 +102,15 @@ blockchain:
       # ETH链特定的扫描配置
       scan:
         enabled: true                # 是否启用ETH链扫描
-        interval: 5s                 # 扫描区块的时间间隔
+        interval: 1s                 # 扫描区块的时间间隔
         max_retries: 3               # 区块扫描失败时的最大重试次数
         retry_delay: 3s              # 重试间隔时间
         confirmations: 61            # 需要等待的区块确认数
-        start_block_height: 0        # 扫描起始区块高度
         auto_start: true             # 启动时是否自动开始扫描
         save_to_file: false          # 是否将扫描结果保存到文件
         output_dir: "./output/eth"   # 扫描结果输出目录
         priority: 2                  # 扫描任务优先级（2为中等优先级）
-        max_concurrent: 30            # 最大并发扫描区块数
+        max_concurrent: 40            # 最大并发扫描区块数
         block_timeout: 45s           # 单个区块扫描超时时间
         rescan_interval: 120s        # 重新扫描的时间间隔
         enable_mempool: true         # 是否启用内存池（mempool）扫描

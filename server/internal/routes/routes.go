@@ -3,6 +3,7 @@ package routes
 import (
 	"time"
 
+	"blockChainBrowser/server/internal/database"
 	"blockChainBrowser/server/internal/handlers"
 	"blockChainBrowser/server/internal/middleware"
 	"blockChainBrowser/server/internal/repository"
@@ -46,6 +47,14 @@ func SetupRoutes(
 	jwtAuthMiddleware := middleware.JWTAuthMiddleware(authService)
 	rateLimitMiddleware := middleware.RateLimitMiddleware(apiKeyRepo, requestLogRepo)
 	requestLogMiddleware := middleware.RequestLogMiddleware(requestLogRepo)
+
+	// 创建区块验证服务
+	blockVerificationService := services.NewBlockVerificationService(
+		repository.NewBlockRepository(),
+		repository.NewTransactionRepository(),
+		repository.NewTransactionReceiptRepository(database.GetDB()),
+		repository.NewCoinConfigRepository(),
+	)
 
 	// 公开API路由（不需要认证）
 	api := router.Group("/api")
@@ -109,6 +118,9 @@ func SetupRoutes(
 		noAuthAPI.GET("/transactions/block-height/:blockHeight", txHandler.GetTransactionsByBlockHeightPublic) // 根据区块高度获取交易（公开接口）
 	}
 
+	// 区块验证相关路由
+	blockVerificationHandler := handlers.NewBlockVerificationHandler(blockVerificationService)
+
 	// 需要AccessToken认证的API路由（区块链数据API）
 	v1 := api.Group("/v1")
 	v1.Use(jwtAuthMiddleware)    // JWT认证
@@ -117,6 +129,7 @@ func SetupRoutes(
 	{
 		// 区块相关路由
 		blocks := v1.Group("/blocks")
+		blocks.Use(jwtAuthMiddleware) // Add auth middleware here
 		{
 			blocks.GET("", blockHandler.ListBlocks)                      // 获取区块列表
 			blocks.GET("/latest", blockHandler.GetLatestBlock)           // 获取最新区块
@@ -124,6 +137,11 @@ func SetupRoutes(
 			blocks.GET("/height/:height", blockHandler.GetBlockByHeight) // 根据高度获取区块
 			blocks.GET("/search", blockHandler.SearchBlocks)             // 搜索区块（认证用户）
 			blocks.POST("/create", blockHandler.CreateBlock)             // 创建区块
+			blocks.POST("/update", blockHandler.UpdateBlock)             // 更新区块
+
+			// 区块验证相关路由 - 需要认证
+			blocks.GET("/verification/last-verified", blockVerificationHandler.GetLastVerifiedBlockHeight)
+			blocks.POST("/:blockID/verify", blockVerificationHandler.VerifyBlock)
 		}
 
 		// 交易相关路由
@@ -210,6 +228,7 @@ func SetupRoutes(
 	router.GET("/health", func(c *gin.Context) {
 		c.JSON(200, gin.H{
 			"status":  "ok",
+			"success": true,
 			"message": "Blockchain Browser API is running",
 		})
 	})

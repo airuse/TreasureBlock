@@ -19,7 +19,7 @@ type Transaction struct {
 	TransID      uint    `json:"trans_id" gorm:"type:int(11) unsigned;not null;column:trans_id;comment:提现ID"`
 	Height       uint64  `json:"height" gorm:"type:bigint(20) unsigned;not null;column:height;comment:块高度"`
 	ContractAddr string  `json:"contract_addr" gorm:"type:varchar(120);not null;column:contract_addr;comment:合约地址"`
-	Hex          *string `json:"hex" gorm:"type:text;column:hex"`
+	Hex          *string `json:"hex" gorm:"type:longtext;column:hex"`
 	TxScene      string  `json:"tx_scene" gorm:"type:varchar(20);not null;default:0;column:tx_scene;comment:交易场景"`
 	Remark       string  `json:"remark" gorm:"type:varchar(256);not null;default:'';column:remark;comment:备注"`
 
@@ -46,8 +46,9 @@ type Transaction struct {
 	UsedFee *string `json:"used_fee" gorm:"type:decimal(36,18);column:used_fee;comment:真实手续费"`
 
 	// 排序相关字段
-	Nonce      uint64 `json:"nonce" gorm:"type:bigint(20) unsigned;not null;default:0;column:nonce;comment:交易序号（ETH）或输入索引（BTC）"`
-	BlockIndex uint   `json:"block_index" gorm:"type:int(11) unsigned;not null;default:0;column:block_index;comment:交易在区块中的索引位置"`
+	Nonce      uint64  `json:"nonce" gorm:"type:bigint(20) unsigned;not null;default:0;column:nonce;comment:交易序号（ETH）或输入索引（BTC）"`
+	BlockIndex uint    `json:"block_index" gorm:"type:int(11) unsigned;not null;default:0;column:block_index;comment:交易在区块中的索引位置"`
+	BlockID    *uint64 `json:"block_id" gorm:"type:bigint(20) unsigned;column:block_id;comment:关联的区块ID"`
 
 	// 日志数据字段
 	Logs string `json:"logs" gorm:"type:longtext;column:logs;comment:交易日志数据(JSON格式)"`

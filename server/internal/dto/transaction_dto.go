@@ -9,10 +9,12 @@ import (
 
 // TransactionReceiptData 交易凭证数据（对齐go-ethereum Receipt的JSON字段）
 type TransactionReceiptData struct {
-	Type   interface{} `json:"type,omitempty"`
-	Root   *string     `json:"root,omitempty"`
-	Status interface{} `json:"status,omitempty"`
-	// CumulativeGasUsed 字段已移除，不再需要
+	Type              interface{}              `json:"type,omitempty"`
+	Root              *string                  `json:"root,omitempty"`
+	Status            interface{}              `json:"status,omitempty"`
+	ReceiptType       interface{}              `json:"receiptType,omitempty"`
+	PostState         *string                  `json:"postState,omitempty"`
+	CumulativeGasUsed interface{}              `json:"cumulativeGasUsed,omitempty"`
 	LogsBloom         *string                  `json:"logsBloom,omitempty"`
 	Logs              []map[string]interface{} `json:"logs,omitempty"`
 	TransactionHash   *string                  `json:"transactionHash,omitempty"`
@@ -67,8 +69,9 @@ type CreateTransactionRequest struct {
 	Nonce      uint64  `json:"nonce" validate:"required"`
 
 	// 新增字段
-	Logs    []map[string]interface{} `json:"logs,omitempty"`    // 日志数据（存储在交易表）
-	Receipt *TransactionReceiptData  `json:"receipt,omitempty"` // 凭证数据（存储在凭证表）
+	Logs    []map[string]interface{} `json:"logs,omitempty"`     // 日志数据（存储在交易表）
+	Receipt *TransactionReceiptData  `json:"receipt,omitempty"`  // 凭证数据（存储在凭证表）
+	BlockID *uint64                  `json:"block_id,omitempty"` // 关联的区块ID
 }
 
 // UpdateTransactionRequest 更新交易请求DTO
@@ -182,6 +185,7 @@ func (req *CreateTransactionRequest) ToModel() *models.Transaction {
 		Fee:                  req.Fee,
 		UsedFee:              req.UsedFee,
 		BlockIndex:           req.BlockIndex,
+		BlockID:              req.BlockID,
 		Nonce:                req.Nonce,
 		Logs:                 logsJSON,
 		Ctime:                time.Now(),

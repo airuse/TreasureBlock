@@ -266,7 +266,6 @@ func (c *Client) request(method, endpoint string, payload interface{}, result in
 	if err := json.Unmarshal(responseBody, &apiResp); err != nil {
 		return fmt.Errorf("unmarshal response failed: %w", err)
 	}
-
 	if !apiResp.Success {
 		return fmt.Errorf("API error: %s", apiResp.Error)
 	}
@@ -282,7 +281,6 @@ func (c *Client) request(method, endpoint string, payload interface{}, result in
 			return fmt.Errorf("unmarshal result failed: %w", err)
 		}
 	}
-
 	return nil
 }
 

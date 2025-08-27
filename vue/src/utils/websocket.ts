@@ -4,7 +4,8 @@ import { ref, computed } from 'vue'
 export interface WebSocketMessage {
   type: 'event' | 'notification'  // 第一级别：事件或通知
   category: 'transaction' | 'block' | 'address' | 'stats' | 'network'  // 第二级别：数据类型
-  data: Record<string, unknown>  // 第三级别：真实数据
+  action?: 'create' | 'update' | 'delete'  // 第三级别：动作类型（create, update, delete等）
+  data: Record<string, unknown>  // 第四级别：真实数据
   timestamp: number
   chain: 'eth' | 'btc'  // 区块链类型
 }
@@ -89,19 +90,34 @@ class WebSocketManager {
     if (!this.ws) return
 
     this.ws.onopen = () => {
-      console.log('WebSocket connected')
       this.status.value = WebSocketStatus.CONNECTED
       this.reconnectAttempts = 0
       this.startHeartbeat()
-      resolve()
+      
+      // 延迟一点时间再resolve，确保状态更新完成
+      setTimeout(() => {
+        resolve()
+      }, 100)
     }
 
     this.ws.onmessage = (event) => {
       try {
-        const message: WebSocketMessage = JSON.parse(event.data)
+        // 处理ping消息（服务端发送的纯文本）
+        if (event.data === 'ping') {
+          // 响应pong
+          this.ws?.send('pong')
+          return
+        }
+        
+        // 尝试解析JSON消息
+        const message = JSON.parse(event.data)
         this.handleMessage(message)
       } catch (error) {
         console.error('Failed to parse WebSocket message:', error)
+        // 如果不是JSON，可能是其他类型的消息，记录但不报错
+        if (typeof event.data === 'string' && event.data !== 'ping') {
+          console.warn('Received non-JSON message:', event.data)
+        }
       }
     }
 
@@ -116,18 +132,36 @@ class WebSocketManager {
     }
 
     this.ws.onerror = (error) => {
-      console.error('WebSocket error:', error)
       this.status.value = WebSocketStatus.ERROR
       reject(error)
     }
   }
 
   // 处理接收到的消息
-  private handleMessage(message: WebSocketMessage) {
-    // 验证消息格式
-    if (!this.validateMessage(message)) {
-      console.warn('Invalid message format:', message)
+  private handleMessage(message: any) {
+    // 处理错误消息
+    if (message.type === 'error') {
+      console.warn('WebSocket error message:', message.error)
       return
+    }
+    
+    // 处理订阅响应
+    if (message.type === 'subscribed' || message.type === 'unsubscribed') {
+      console.log('Subscription response:', message)
+      return
+    }
+    
+    // 处理pong响应
+    if (message.type === 'pong') {
+      return
+    }
+
+    // 验证消息格式（只对event和notification类型进行严格验证）
+    if (message.type === 'event' || message.type === 'notification') {
+      if (!this.validateMessage(message)) {
+        console.warn('Invalid message format:', message)
+        return
+      }
     }
 
     // 触发对应的事件监听器
@@ -187,12 +221,11 @@ class WebSocketManager {
   public sendSubscribe(category: string, chain: string): boolean {
     const subscribeMessage = {
       type: 'subscribe',
-      category: category,
-      chain: chain
+      category: category as any, // 转换为MessageCategory类型
+      chain: chain as any        // 转换为ChainType类型
     }
     
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      console.warn('WebSocket is not connected')
       return false
     }
 
@@ -200,7 +233,6 @@ class WebSocketManager {
       this.ws.send(JSON.stringify(subscribeMessage))
       return true
     } catch (error) {
-      console.error('Failed to send subscribe message:', error)
       return false
     }
   }
@@ -209,12 +241,11 @@ class WebSocketManager {
   public sendUnsubscribe(category: string, chain: string): boolean {
     const unsubscribeMessage = {
       type: 'unsubscribe',
-      category: category,
-      chain: chain
+      category: category as any, // 转换为MessageCategory类型
+      chain: chain as any        // 转换为ChainType类型
     }
     
     if (!this.ws || this.ws.readyState !== WebSocket.OPEN) {
-      console.warn('WebSocket is not connected')
       return false
     }
 
@@ -222,7 +253,6 @@ class WebSocketManager {
       this.ws.send(JSON.stringify(unsubscribeMessage))
       return true
     } catch (error) {
-      console.error('Failed to send unsubscribe message:', error)
       return false
     }
   }
@@ -260,19 +290,8 @@ class WebSocketManager {
 
   // 开始心跳检测
   private startHeartbeat() {
-    if (this.options.heartbeatInterval && this.options.heartbeatInterval > 0) {
-      this.heartbeatTimer = setInterval(() => {
-        if (this.ws && this.ws.readyState === WebSocket.OPEN) {
-          this.send({
-            type: 'event',
-            category: 'network',
-            data: { type: 'heartbeat' },
-            timestamp: Date.now(),
-            chain: 'eth'
-          })
-        }
-      }, this.options.heartbeatInterval)
-    }
+    // 移除前端主动发送心跳的逻辑，只响应服务端的ping
+    // 心跳检测现在完全由服务端控制
   }
 
   // 停止心跳检测
@@ -286,18 +305,14 @@ class WebSocketManager {
   // 安排重连
   private scheduleReconnect() {
     if (this.reconnectAttempts >= this.options.maxReconnectAttempts!) {
-      console.error('Max reconnection attempts reached')
       return
     }
 
     this.reconnectAttempts++
     this.status.value = WebSocketStatus.RECONNECTING
 
-    console.log(`Scheduling reconnection attempt ${this.reconnectAttempts}/${this.options.maxReconnectAttempts}`)
-
     this.reconnectTimer = setTimeout(() => {
       this.connect().catch(error => {
-        console.error('Reconnection failed:', error)
         this.scheduleReconnect()
       })
     }, this.options.reconnectInterval)
@@ -377,10 +392,8 @@ export function setupVisibilityHandler(manager: WebSocketManager): void {
   visibilityChangeHandler = () => {
     if (document.hidden) {
       // 页面隐藏时，可以选择断开连接或保持连接
-      console.log('Page hidden')
     } else {
       // 页面显示时，确保连接正常
-      console.log('Page visible')
       if (!manager.isConnected.value) {
         manager.connect().catch(console.error)
       }

@@ -203,6 +203,7 @@ func (s *authService) GetAPIKeys(userID uint) ([]*dto.APIKeyResponse, error) {
 			APIKey:      key.APIKey,
 			SecretKey:   key.SecretKey, // 添加SecretKey字段
 			Permissions: s.parsePermissionsFromString(key.Permissions),
+			RateLimit:   key.RateLimit, // 添加RateLimit字段
 			IsActive:    key.IsActive,
 			ExpiresAt:   key.ExpiresAt,
 			LastUsedAt:  key.LastUsedAt,
@@ -234,6 +235,9 @@ func (s *authService) UpdateAPIKey(userID uint, keyID uint, req *dto.UpdateAPIKe
 	if req.Permissions != nil {
 		key.Permissions = s.convertPermissionsToString(*req.Permissions)
 	}
+	if req.RateLimit != nil {
+		key.RateLimit = *req.RateLimit
+	}
 	if req.ExpiresAt != nil {
 		key.ExpiresAt = s.parseExpiresAt(*req.ExpiresAt)
 	}
@@ -253,6 +257,7 @@ func (s *authService) UpdateAPIKey(userID uint, keyID uint, req *dto.UpdateAPIKe
 		APIKey:      key.APIKey,
 		SecretKey:   key.SecretKey, // 添加SecretKey字段
 		Permissions: s.parsePermissionsFromString(key.Permissions),
+		RateLimit:   key.RateLimit, // 添加RateLimit字段
 		IsActive:    key.IsActive,
 		ExpiresAt:   key.ExpiresAt,
 		LastUsedAt:  key.LastUsedAt,

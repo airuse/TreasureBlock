@@ -35,6 +35,11 @@ type CreateBlockRequest struct {
 	BaseFee     string `json:"base_fee,omitempty" validate:"omitempty,max=100"`
 	BurnedEth   string `json:"burned_eth,omitempty" validate:"omitempty,max=100"`
 	MinerTipEth string `json:"miner_tip_eth,omitempty" validate:"omitempty,max=100"`
+
+	// ETH状态根字段
+	StateRoot        string `json:"state_root,omitempty" validate:"omitempty,len=66"`
+	TransactionsRoot string `json:"transactions_root,omitempty" validate:"omitempty,len=66"`
+	ReceiptsRoot     string `json:"receipts_root,omitempty" validate:"omitempty,len=66"`
 }
 
 // UpdateBlockRequest 更新区块请求DTO
@@ -62,6 +67,11 @@ type UpdateBlockRequest struct {
 	BaseFee     *string `json:"base_fee,omitempty" validate:"omitempty,max=100"`
 	BurnedEth   *string `json:"burned_eth,omitempty" validate:"omitempty,max=100"`
 	MinerTipEth *string `json:"miner_tip_eth,omitempty" validate:"omitempty,max=100"`
+
+	// ETH状态根字段
+	StateRoot        *string `json:"state_root,omitempty" validate:"omitempty,len=66"`
+	TransactionsRoot *string `json:"transactions_root,omitempty" validate:"omitempty,len=66"`
+	ReceiptsRoot     *string `json:"receipts_root,omitempty" validate:"omitempty,len=66"`
 }
 
 // BlockResponse 区块响应DTO
@@ -95,6 +105,11 @@ type BlockResponse struct {
 	BaseFee     string `json:"base_fee,omitempty"`
 	BurnedEth   string `json:"burned_eth,omitempty"`
 	MinerTipEth string `json:"miner_tip_eth,omitempty"`
+
+	// ETH状态根字段
+	StateRoot        string `json:"state_root,omitempty"`
+	TransactionsRoot string `json:"transactions_root,omitempty"`
+	ReceiptsRoot     string `json:"receipts_root,omitempty"`
 
 	// 时间字段
 	CreatedAt time.Time `json:"created_at"`
@@ -141,6 +156,11 @@ func (req *CreateBlockRequest) ToModel() *models.Block {
 		BaseFee:     req.BaseFee,
 		BurnedEth:   req.BurnedEth,
 		MinerTipEth: req.MinerTipEth,
+
+		// ETH状态根字段
+		StateRoot:        req.StateRoot,
+		TransactionsRoot: req.TransactionsRoot,
+		ReceiptsRoot:     req.ReceiptsRoot,
 	}
 }
 
@@ -207,6 +227,17 @@ func (req *UpdateBlockRequest) ApplyToModel(block *models.Block) {
 	if req.MinerTipEth != nil {
 		block.MinerTipEth = *req.MinerTipEth
 	}
+
+	// ETH状态根字段
+	if req.StateRoot != nil {
+		block.StateRoot = *req.StateRoot
+	}
+	if req.TransactionsRoot != nil {
+		block.TransactionsRoot = *req.TransactionsRoot
+	}
+	if req.ReceiptsRoot != nil {
+		block.ReceiptsRoot = *req.ReceiptsRoot
+	}
 }
 
 // NewBlockResponse 创建BlockResponse
@@ -242,6 +273,11 @@ func NewBlockResponse(block *models.Block) *BlockResponse {
 		BaseFee:     block.BaseFee,
 		BurnedEth:   block.BurnedEth,
 		MinerTipEth: block.MinerTipEth,
+
+		// ETH状态根字段
+		StateRoot:        block.StateRoot,
+		TransactionsRoot: block.TransactionsRoot,
+		ReceiptsRoot:     block.ReceiptsRoot,
 		// 时间
 		CreatedAt: block.CreatedAt,
 		UpdatedAt: block.UpdatedAt,

@@ -22,7 +22,7 @@ export function useWebSocket(options?: Partial<WebSocketOptions>) {
 
   // 默认配置
   const defaultOptions: WebSocketOptions = {
-    url: import.meta.env.VITE_WS_BASE_URL || 'wss://treasureblock.top/ws', // 使用WSS协议连接HTTPS后端
+    url: import.meta.env.VITE_WS_BASE_URL || 'wss://localhost:8443/ws', // 使用HTTP协议避免TLS问题
     autoReconnect: true,
     reconnectInterval: 3000,
     maxReconnectAttempts: 5,
@@ -63,7 +63,6 @@ export function useWebSocket(options?: Partial<WebSocketOptions>) {
   // 订阅事件
   const subscribe = (eventKey: string, callback: (message: WebSocketMessage) => void) => {
     if (!manager.value) {
-      console.warn('WebSocket manager not initialized')
       return () => {}
     }
 
@@ -73,7 +72,6 @@ export function useWebSocket(options?: Partial<WebSocketOptions>) {
   // 发送消息
   const send = (message: WebSocketMessage): boolean => {
     if (!manager.value) {
-      console.warn('WebSocket manager not initialized')
       return false
     }
 
@@ -138,7 +136,7 @@ export function useWebSocket(options?: Partial<WebSocketOptions>) {
 // 特定链的WebSocket组合式函数
 export function useChainWebSocket(chain: 'eth' | 'btc') {
   const { subscribe, send, ...rest } = useWebSocket({
-    url: `${import.meta.env.VITE_WS_BASE_URL || 'wss://treasureblock.top/ws'}/${chain}`
+    url: import.meta.env.VITE_WS_BASE_URL || 'wss://localhost:8443/ws'
   })
 
   // 订阅特定链的事件
@@ -146,9 +144,36 @@ export function useChainWebSocket(chain: 'eth' | 'btc') {
     category: 'transaction' | 'block' | 'address' | 'stats' | 'network',
     callback: (message: WebSocketMessage) => void
   ) => {
-    // 先发送订阅消息到服务器
-    if (rest.manager?.value) {
-      rest.manager.value.sendSubscribe(category, chain)
+    // 等待WebSocket连接建立后再发送订阅消息
+    const sendSubscribeWhenReady = () => {
+      if (rest.manager?.value && rest.isConnected?.value) {
+        const success = rest.manager.value.sendSubscribe(category, chain)
+        return success
+      } else {
+        return false
+      }
+    }
+    
+    // 立即尝试发送订阅消息
+    let subscribeSent = sendSubscribeWhenReady()
+    
+    // 如果发送失败，等待连接建立后重试
+    if (!subscribeSent) {
+      const checkConnection = () => {
+        if (rest.isConnected?.value) {
+          // 添加延迟，确保状态完全同步
+          setTimeout(() => {
+            rest.manager?.value?.sendSubscribe(category, chain)
+          }, 200)
+        }
+      }
+      
+      // 监听连接状态变化
+      watch(rest.isConnected, (connected) => {
+        if (connected) {
+          checkConnection()
+        }
+      })
     }
     
     // 然后订阅本地事件
@@ -199,8 +224,10 @@ export function useChainWebSocket(chain: 'eth' | 'btc') {
     category: 'transaction' | 'block' | 'address' | 'stats' | 'network'
   ) => {
     // 发送取消订阅消息到服务器
-    if (rest.manager?.value) {
-      rest.manager.value.sendUnsubscribe(category, chain)
+    if (rest.manager?.value && rest.isConnected?.value) {
+      const success = rest.manager.value.sendUnsubscribe(category, chain)
+    } else {
+      console.warn('⚠️ WebSocket未连接，无法发送取消订阅消息')
     }
   }
 

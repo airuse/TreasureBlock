@@ -44,6 +44,7 @@ export interface APIKey {
   usage_count: number
   last_used_at?: string
   expires_at?: string
+  rate_limit?: number // 每小时请求限制
   created_at: string
   updated_at: string
 }
@@ -53,6 +54,7 @@ export interface CreateAPIKeyRequest {
   name: string
   permissions: string[] // 权限范围
   expires_at?: string // 过期时间
+  rate_limit?: number // 每小时请求限制
 }
 
 // 创建API密钥响应

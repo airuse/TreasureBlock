@@ -1,10 +1,12 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"fmt"
 	"net/http"
 	"strconv"
+	"time"
 
 	"blockChainBrowser/server/internal/dto"
 	"blockChainBrowser/server/internal/models"
@@ -16,17 +18,24 @@ import (
 
 // TransactionHandler 交易处理器
 type TransactionHandler struct {
-	txService        services.TransactionService
-	receiptService   services.TransactionReceiptService
-	parserConfigRepo repository.ParserConfigRepository
+	txService                services.TransactionService
+	receiptService           services.TransactionReceiptService
+	parserConfigRepo         repository.ParserConfigRepository
+	blockVerificationService services.BlockVerificationService
 }
 
 // NewTransactionHandler 创建交易处理器
-func NewTransactionHandler(txService services.TransactionService, receiptService services.TransactionReceiptService, parserConfigRepo repository.ParserConfigRepository) *TransactionHandler {
+func NewTransactionHandler(
+	txService services.TransactionService,
+	receiptService services.TransactionReceiptService,
+	parserConfigRepo repository.ParserConfigRepository,
+	blockVerificationService services.BlockVerificationService,
+) *TransactionHandler {
 	return &TransactionHandler{
-		txService:        txService,
-		receiptService:   receiptService,
-		parserConfigRepo: parserConfigRepo,
+		txService:                txService,
+		receiptService:           receiptService,
+		parserConfigRepo:         parserConfigRepo,
+		blockVerificationService: blockVerificationService,
 	}
 }
 
@@ -228,8 +237,26 @@ func (h *TransactionHandler) CreateTransaction(c *gin.Context) {
 		return
 	}
 
+	// 验证超时检查
+	if req.BlockID != nil {
+		if err := h.checkBlockVerificationTimeout(c.Request.Context(), *req.BlockID); err != nil {
+			c.JSON(http.StatusRequestTimeout, gin.H{
+				"success":  false,
+				"error":    "BLOCK_TRANSACTION_FAILED",
+				"details":  err.Error(),
+				"block_id": *req.BlockID,
+			})
+			return
+		}
+	}
+
 	if req.Receipt != nil {
 		receiptData := map[string]interface{}{"tx_hash": req.TxID, "chain": req.Chain}
+
+		// 设置 block_id 字段
+		if req.BlockID != nil {
+			receiptData["block_id"] = *req.BlockID
+		}
 
 		// type -> tx_type (convert interface{} to uint8)
 		if req.Receipt.Type != nil {
@@ -290,6 +317,16 @@ func (h *TransactionHandler) CreateTransaction(c *gin.Context) {
 				receiptData["transaction_index"] = *v
 			}
 		}
+		if req.Receipt.CumulativeGasUsed != nil {
+			if v := convertToUint64(req.Receipt.CumulativeGasUsed); v != nil {
+				receiptData["cumulative_gas_used"] = *v
+			}
+		}
+		if req.Receipt.ReceiptType != nil {
+			if v := convertToUint64(req.Receipt.ReceiptType); v != nil {
+				receiptData["receipt_type"] = *v
+			}
+		}
 
 		if err := h.receiptService.CreateTransactionReceipt(c.Request.Context(), receiptData); err != nil {
 			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "创建交易凭证失败", "details": err.Error()})
@@ -305,6 +342,33 @@ func (h *TransactionHandler) CreateTransaction(c *gin.Context) {
 
 	response := dto.NewTransactionResponse(tx)
 	c.JSON(http.StatusCreated, gin.H{"success": true, "data": response, "message": "交易和凭证创建成功"})
+}
+
+// checkBlockVerificationTimeout 检查区块验证是否超时
+func (h *TransactionHandler) checkBlockVerificationTimeout(ctx context.Context, blockID uint64) error {
+	// 获取区块信息
+	block, err := h.blockVerificationService.GetBlockByID(ctx, blockID)
+	if err != nil {
+		return fmt.Errorf("failed to get block: %w", err)
+	}
+
+	// 检查区块是否已经超时
+	if block.VerificationDeadline != nil && time.Now().After(*block.VerificationDeadline) {
+		// 区块已超时，执行超时处理逻辑
+		if err := h.blockVerificationService.HandleTimeoutBlocks(ctx, block.Chain, block.Height); err != nil {
+			return fmt.Errorf("failed to handle timeout blocks: %w", err)
+		}
+
+		// 返回客户端需要的错误格式
+		return fmt.Errorf("BLOCK_TRANSACTION_FAILED")
+	}
+
+	// 检查区块是否已经被标记为验证失败
+	if block.IsVerified == 2 {
+		return fmt.Errorf("BLOCK_TRANSACTION_FAILED")
+	}
+
+	return nil
 }
 
 // GetTransactionsByBlockHeight 根据区块高度获取交易列表（支持分页）

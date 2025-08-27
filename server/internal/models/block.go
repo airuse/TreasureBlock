@@ -9,8 +9,8 @@ import (
 // Block 区块模型 - 支持BTC和ETH的通用模型
 type Block struct {
 	ID               uint      `json:"id" gorm:"primaryKey"`
-	Hash             string    `json:"hash" gorm:"type:char(66);uniqueIndex;not null"`
-	Height           uint64    `json:"height" gorm:"uniqueIndex;not null"`
+	Hash             string    `json:"hash" gorm:"type:varchar(255);uniqueIndex;not null"`
+	Height           uint64    `json:"height" gorm:"index;not null"`
 	PreviousHash     string    `json:"previous_hash" gorm:"type:char(66);index"`
 	Timestamp        time.Time `json:"timestamp"`
 	Size             uint64    `json:"size"`
@@ -35,10 +35,19 @@ type Block struct {
 	Nonce      string `json:"nonce,omitempty" gorm:"type:varchar(20)"`
 	Difficulty string `json:"difficulty,omitempty" gorm:"type:varchar(50)"`
 
+	// ETH状态根字段
+	StateRoot        string `json:"state_root,omitempty" gorm:"type:char(66);comment:状态根哈希"`
+	TransactionsRoot string `json:"transactions_root,omitempty" gorm:"type:char(66);comment:交易根哈希"`
+	ReceiptsRoot     string `json:"receipts_root,omitempty" gorm:"type:char(66);comment:收据根哈希"`
+
 	// ETH London 升级相关字段
 	BaseFee     string `json:"base_fee,omitempty" gorm:"type:varchar(100);comment:基础费"`       // wei，字符串存储
 	BurnedEth   string `json:"burned_eth,omitempty" gorm:"type:varchar(100);comment:燃烧费"`     // ETH数量字符串
 	MinerTipEth string `json:"miner_tip_eth,omitempty" gorm:"type:varchar(100);comment:款工收益"` // ETH数量字符串
+
+	// 验证相关字段
+	VerificationDeadline *time.Time `json:"verification_deadline" gorm:"type:timestamp;column:verification_deadline;comment:最晚验证时间"`
+	IsVerified           uint8      `json:"is_verified" gorm:"type:tinyint(1);not null;default:0;column:is_verified;comment:验证是否通过 0:未验证 1:验证通过 2:验证失败"`
 
 	// 通用时间字段
 	CreatedAt time.Time      `json:"created_at"`

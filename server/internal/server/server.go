@@ -70,8 +70,16 @@ func New() *Server {
 	transactionReceiptRepo := repository.NewTransactionReceiptRepository(database.GetDB())
 	transactionReceiptService := services.NewTransactionReceiptService(transactionReceiptRepo)
 
+	// 创建区块验证服务
+	blockVerificationService := services.NewBlockVerificationService(
+		blockRepo,
+		txRepo,
+		transactionReceiptRepo,
+		coinConfigRepo,
+	)
+
 	// 创建处理器
-	txHandler := handlers.NewTransactionHandler(txService, transactionReceiptService, parserConfigRepo)
+	txHandler := handlers.NewTransactionHandler(txService, transactionReceiptService, parserConfigRepo, blockVerificationService)
 	wsHandler := handlers.NewWebSocketHandler()
 	blockHandler := handlers.NewBlockHandler(blockService, wsHandler)
 	addressHandler := handlers.NewAddressHandler(addressService)

@@ -3,7 +3,6 @@ package pkg
 import (
 	"fmt"
 	"strconv"
-	"time"
 
 	"github.com/sirupsen/logrus"
 )
@@ -52,17 +51,6 @@ func (api *ScannerAPI) GetScannerConfig(configType uint8, configGroup, configKey
 func (api *ScannerAPI) GetScanConfig(chain string) (*ScanConfig, error) {
 	config := &ScanConfig{}
 
-	// 扫块间隔
-	if interval, err := api.getConfigValue(1, "scan", "interval_"+chain); err == nil {
-		if duration, err := time.ParseDuration(interval); err == nil {
-			config.ScanInterval = duration
-		} else {
-			config.ScanInterval = 10 * time.Second
-		}
-	} else {
-		config.ScanInterval = 10 * time.Second
-	}
-
 	// 确认数
 	if confirmations, err := api.getConfigValue(1, "scan", "confirmations_"+chain); err == nil {
 		if conf, err := strconv.Atoi(confirmations); err == nil {
@@ -72,50 +60,6 @@ func (api *ScannerAPI) GetScanConfig(chain string) (*ScanConfig, error) {
 		}
 	} else {
 		config.Confirmations = 6
-	}
-
-	// 起始块高度
-	if startHeight, err := api.getConfigValue(1, "scan", "start_height_"+chain); err == nil {
-		if height, err := strconv.ParseUint(startHeight, 10, 64); err == nil {
-			config.StartBlockHeight = height
-		} else {
-			config.StartBlockHeight = 0
-		}
-	} else {
-		config.StartBlockHeight = 0
-	}
-
-	// 最大重试次数
-	if maxRetries, err := api.getConfigValue(1, "scan", "max_retries_"+chain); err == nil {
-		if retries, err := strconv.Atoi(maxRetries); err == nil {
-			config.MaxRetries = retries
-		} else {
-			config.MaxRetries = 3
-		}
-	} else {
-		config.MaxRetries = 3
-	}
-
-	// 重试延迟
-	if retryDelay, err := api.getConfigValue(1, "scan", "retry_delay_"+chain); err == nil {
-		if delay, err := time.ParseDuration(retryDelay); err == nil {
-			config.RetryDelay = delay
-		} else {
-			config.RetryDelay = 5 * time.Second
-		}
-	} else {
-		config.RetryDelay = 5 * time.Second
-	}
-
-	// 安全高度
-	if safetyHeight, err := api.getConfigValue(1, "scan", "safety_height_"+chain); err == nil {
-		if height, err := strconv.ParseUint(safetyHeight, 10, 64); err == nil {
-			config.SafetyHeight = height
-		} else {
-			config.SafetyHeight = 12
-		}
-	} else {
-		config.SafetyHeight = 12
 	}
 
 	api.logger.Infof("Loaded scan config for chain %s", chain)
@@ -199,10 +143,6 @@ func (api *ScannerAPI) getConfigValue(configType uint8, configGroup, configKey s
 	config, err := api.GetScannerConfig(configType, configGroup, configKey)
 	if err != nil {
 		return "", fmt.Errorf("failed to get config %s.%s: %w", configGroup, configKey, err)
-	}
-
-	if config.Status != 1 {
-		return "", fmt.Errorf("config %s.%s is disabled", configGroup, configKey)
 	}
 
 	return config.ConfigValue, nil
@@ -291,57 +231,56 @@ func (api *ScannerAPI) CreateCoinConfig(config *CreateCoinConfigRequest) error {
 	return nil
 }
 
-// UploadContractInfoToContractAPI 上传合约信息到合约API（新的合约表）
+// UploadContractInfoToContractAPI 上传合约信息到合约API
 func (api *ScannerAPI) UploadContractInfoToContractAPI(contractInfo *ContractInfo) error {
-	if contractInfo == nil {
-		return fmt.Errorf("contract info cannot be nil")
+	if err := api.client.POST("/api/v1/contracts", contractInfo, nil); err != nil {
+		return fmt.Errorf("upload contract info failed: %w", err)
+	}
+	return nil
+}
+
+// GetLastVerifiedBlockHeight 获取最后一个验证通过的区块高度
+func (api *ScannerAPI) GetLastVerifiedBlockHeight(chain string) (uint64, error) {
+	var data LastVerifiedBlockHeightData
+
+	endpoint := fmt.Sprintf("/api/v1/blocks/verification/last-verified?chain=%s", chain)
+	if err := api.client.GET(endpoint, &data); err != nil {
+		return 0, fmt.Errorf("get last verified block height failed: %w", err)
 	}
 
-	// 构造合约信息请求
-	contractReq := &ContractInfoRequest{
-		Address:      contractInfo.Address,
-		Name:         contractInfo.Name,
-		Symbol:       contractInfo.Symbol,
-		Decimals:     contractInfo.Decimals,
-		TotalSupply:  contractInfo.TotalSupply,
-		ChainName:    contractInfo.ChainName,
-		IsERC20:      contractInfo.IsERC20,
-		ContractType: contractInfo.ContractType,
-		Interfaces:   contractInfo.Interfaces,
-		Methods:      contractInfo.Methods,
-		Events:       contractInfo.Events,
-		Metadata:     contractInfo.Metadata,
+	// 支持既可能是字符串也可能是数字
+	i, err := data.Height.Int64()
+	if err != nil {
+		return 0, fmt.Errorf("parse last verified block height failed: %w", err)
 	}
-
-	// 上传到合约API
-	if err := api.client.POST("/api/v1/contracts", contractReq, nil); err != nil {
-		return fmt.Errorf("failed to upload contract info: %w", err)
+	if i < 0 {
+		return 0, fmt.Errorf("invalid height: %d", i)
 	}
+	return uint64(i), nil
+}
 
-	api.logger.Infof("Successfully uploaded contract info to contract API: %s (%s)",
-		contractInfo.Symbol, contractInfo.Address)
+// VerifyBlock 验证区块
+func (api *ScannerAPI) VerifyBlock(blockID uint64) error {
+
+	endpoint := fmt.Sprintf("/api/v1/blocks/%d/verify", blockID)
+	if err := api.client.POST(endpoint, nil, nil); err != nil {
+		return fmt.Errorf("verify block failed: %w", err)
+	}
 
 	return nil
 }
 
-// BatchUploadContractsToContractAPI 批量上传合约信息到合约API
-func (api *ScannerAPI) BatchUploadContractsToContractAPI(contractInfos []*ContractInfo) error {
-	var successCount, failureCount int
-
-	for _, contractInfo := range contractInfos {
-		if err := api.UploadContractInfoToContractAPI(contractInfo); err != nil {
-			fmt.Printf("[API] Warning: Failed to upload contract %s to contract API: %v\n", contractInfo.Address, err)
-			failureCount++
-			continue
-		}
-		successCount++
+// UpdateBlockStats 更新区块统计字段（供扫块端调用）
+func (api *ScannerAPI) UpdateBlockStats(hash string, payload map[string]interface{}) error {
+	// 统一由hash定位，后端UpdateBlock支持按hash查找
+	body := map[string]interface{}{
+		"hash": hash,
 	}
-
-	fmt.Printf("[API] Batch upload to contract API completed: %d success, %d failure\n", successCount, failureCount)
-
-	if failureCount > 0 {
-		return fmt.Errorf("some contracts failed to upload to contract API: %d failures", failureCount)
+	for k, v := range payload {
+		body[k] = v
 	}
-
+	if err := api.client.POST("/api/v1/blocks/update", body, nil); err != nil {
+		return fmt.Errorf("update block stats failed: %w", err)
+	}
 	return nil
 }

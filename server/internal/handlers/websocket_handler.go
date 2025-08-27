@@ -46,7 +46,8 @@ const (
 type WebSocketMessage struct {
 	Type      MessageType     `json:"type"`      // 第一级别：事件或通知
 	Category  MessageCategory `json:"category"`  // 第二级别：数据类型
-	Data      interface{}     `json:"data"`      // 第三级别：真实数据
+	Action    string          `json:"action"`    // 第三级别：动作类型（create, update, delete等）
+	Data      interface{}     `json:"data"`      // 第四级别：真实数据
 	Timestamp int64           `json:"timestamp"` // 时间戳
 	Chain     ChainType       `json:"chain"`     // 区块链类型
 }
@@ -62,7 +63,7 @@ type SubscribeMessage struct {
 type SubscribeResponse struct {
 	Type     string          `json:"type"`
 	Category MessageCategory `json:"category"`
-	Chain    ChainType       `json:"status"`
+	Chain    ChainType       `json:"chain"`
 	Message  string          `json:"message"`
 }
 
@@ -167,22 +168,13 @@ func (h *WebSocketHandler) writePump(client *Client) {
 				client.conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
-			w, err := client.conn.NextWriter(websocket.TextMessage)
-			if err != nil {
+
+			// 单独发送每条消息，避免合并多条消息
+			if err := client.conn.WriteMessage(websocket.TextMessage, message); err != nil {
+				log.Printf("Failed to send message: %v", err)
 				return
 			}
-			w.Write(message)
 
-			// 将队列中的其他消息也发送出去
-			n := len(client.send)
-			for i := 0; i < n; i++ {
-				w.Write([]byte{'\n'})
-				w.Write(<-client.send)
-			}
-
-			if err := w.Close(); err != nil {
-				return
-			}
 		case <-ticker.C:
 			if err := client.conn.WriteMessage(websocket.TextMessage, []byte("ping")); err != nil {
 				return
@@ -208,7 +200,8 @@ func (h *WebSocketHandler) handleMessage(client *Client, msg SubscribeMessage) {
 			}
 
 			h.sendMessage(client, response)
-			log.Printf("Client subscribed to %s", channelKey)
+		} else {
+			log.Printf("Invalid subscribe message: category=%s, chain=%s", msg.Category, msg.Chain)
 		}
 
 	case "unsubscribe":
@@ -225,7 +218,6 @@ func (h *WebSocketHandler) handleMessage(client *Client, msg SubscribeMessage) {
 			}
 
 			h.sendMessage(client, response)
-			log.Printf("Client unsubscribed from %s", channelKey)
 		}
 
 	case "ping":
@@ -235,6 +227,20 @@ func (h *WebSocketHandler) handleMessage(client *Client, msg SubscribeMessage) {
 			"data": "pong",
 		}
 		h.sendMessage(client, response)
+
+	case "pong":
+		// 忽略pong消息
+		return
+
+	case "event":
+		// 处理事件消息（如心跳等）
+		if msg.Category == "network" {
+			// 网络相关事件，如心跳
+			// 可以选择响应或不响应
+			return
+		}
+		// 其他事件类型，记录但不报错
+		return
 
 	default:
 		// 未知消息类型
@@ -272,6 +278,20 @@ func (h *WebSocketHandler) BroadcastBlockEvent(chain ChainType, blockData interf
 	message := WebSocketMessage{
 		Type:      MessageTypeEvent,
 		Category:  MessageCategoryBlock,
+		Action:    "create", // 默认创建事件
+		Data:      blockData,
+		Timestamp: time.Now().UnixMilli(),
+		Chain:     chain,
+	}
+	h.BroadcastMessage(message)
+}
+
+// BroadcastBlockUpdateEvent 广播区块更新事件
+func (h *WebSocketHandler) BroadcastBlockUpdateEvent(chain ChainType, blockData interface{}) {
+	message := WebSocketMessage{
+		Type:      MessageTypeEvent,
+		Category:  MessageCategoryBlock,
+		Action:    "update", // 更新事件
 		Data:      blockData,
 		Timestamp: time.Now().UnixMilli(),
 		Chain:     chain,
@@ -312,13 +332,11 @@ func (h *WebSocketHandler) Start() {
 				h.mutex.Lock()
 				h.clients[client] = true
 				h.mutex.Unlock()
-				log.Printf("Client connected. Total clients: %d", len(h.clients))
 
 			case client := <-h.unregister:
 				h.mutex.Lock()
 				delete(h.clients, client)
 				h.mutex.Unlock()
-				log.Printf("Client disconnected. Total clients: %d", len(h.clients))
 
 			case message := <-h.broadcast:
 				h.mutex.RLock()
@@ -326,9 +344,11 @@ func (h *WebSocketHandler) Start() {
 				channelKey := string(message.Category) + ":" + string(message.Chain)
 
 				// 只发送给订阅了对应频道的客户端
+				sentCount := 0
 				for client := range h.clients {
 					if client.subscribed[channelKey] {
 						h.sendMessage(client, message)
+						sentCount++
 					}
 				}
 				h.mutex.RUnlock()

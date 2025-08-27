@@ -18,6 +18,7 @@ type TransactionReceiptRepository interface {
 	Update(ctx context.Context, receipt *models.TransactionReceipt) error
 	Delete(ctx context.Context, id uint) error
 	Exists(ctx context.Context, txHash string) (bool, error)
+	LogicalDeleteByBlockID(ctx context.Context, blockID uint64) error
 }
 
 // transactionReceiptRepository 交易凭证仓储实现
@@ -97,4 +98,15 @@ func (r *transactionReceiptRepository) Exists(ctx context.Context, txHash string
 		return false, fmt.Errorf("failed to check transaction receipt existence: %w", err)
 	}
 	return count > 0, nil
+}
+
+// LogicalDeleteByBlockID 根据区块ID逻辑删除所有凭证
+func (r *transactionReceiptRepository) LogicalDeleteByBlockID(ctx context.Context, blockID uint64) error {
+	// 直接使用 GORM 的 Delete 方法进行软删除
+	result := r.db.WithContext(ctx).Where("block_id = ?", blockID).Delete(&models.TransactionReceipt{})
+	if result.Error != nil {
+		return result.Error
+	}
+
+	return nil
 }

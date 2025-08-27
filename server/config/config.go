@@ -108,7 +108,9 @@ type RateLimitConfig struct {
 
 // BlockchainConfig 区块链配置
 type BlockchainConfig struct {
-	Chains map[string]ChainConfig `yaml:"chains"`
+	Chains                  map[string]ChainConfig `yaml:"chains"`
+	VerificationTimeout     time.Duration          `yaml:"verification_timeout"`      // 全局区块验证超时时间
+	DefaultVerificationTime time.Duration          `yaml:"default_verification_time"` // 默认验证时间（如果未配置）
 }
 
 // ChainConfig 链配置
@@ -117,6 +119,9 @@ type ChainConfig struct {
 	Symbol   string `yaml:"symbol"`
 	Decimals int    `yaml:"decimals"`
 	Enabled  bool   `yaml:"enabled"`
+	RPCURL   string `yaml:"rpc_url"`  // RPC节点URL
+	Username string `yaml:"username"` // RPC用户名（如果需要）
+	Password string `yaml:"password"` // RPC密码（如果需要）
 }
 
 // CacheConfig 缓存配置
@@ -292,6 +297,10 @@ func loadEnvConfig() error {
 				RequestsPerMinute: getEnvAsInt("API_RATE_LIMIT_REQUESTS_PER_MINUTE", 100),
 				Burst:             getEnvAsInt("API_RATE_LIMIT_BURST", 20),
 			},
+		},
+		Blockchain: BlockchainConfig{
+			VerificationTimeout:     getEnvAsDuration("BLOCKCHAIN_VERIFICATION_TIMEOUT", 30*time.Second),
+			DefaultVerificationTime: getEnvAsDuration("BLOCKCHAIN_DEFAULT_VERIFICATION_TIME", 10*time.Second),
 		},
 		Security: SecurityConfig{
 			JWTSecret:     getEnv("JWT_SECRET", "your-secret-key-change-this-in-production"),

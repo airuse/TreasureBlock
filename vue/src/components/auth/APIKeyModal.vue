@@ -111,10 +111,29 @@
             </div>
           </div>
           
+          <!-- 每小时请求限制 -->
+          <div class="mt-4">
+            <label class="block text-sm font-medium text-gray-700 mb-1">每小时请求限制</label>
+            <div class="flex items-center space-x-2">
+              <input
+                v-model.number="newKeyForm.rateLimit"
+                type="number"
+                min="1"
+                max="100000"
+                class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                placeholder="1000"
+              />
+              <span class="text-sm text-gray-500 whitespace-nowrap">次/小时</span>
+            </div>
+            <p class="mt-1 text-xs text-gray-500">
+              设置API密钥每小时最多可发送的请求数量，建议根据实际需求设置
+            </p>
+          </div>
+          
           <div class="mt-4">
             <button
               @click="createNewAPIKey"
-              :disabled="!newKeyForm.name || newKeyForm.permissions.length === 0 || isLoading"
+              :disabled="!newKeyForm.name || newKeyForm.permissions.length === 0 || !newKeyForm.rateLimit || newKeyForm.rateLimit < 1 || isLoading"
               class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
             >
               {{ isLoading ? '创建中...' : '创建API密钥' }}
@@ -133,6 +152,7 @@
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">名称</th>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">API Key</th>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">权限</th>
+                  <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">请求限制</th>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
                   <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
                 </tr>
@@ -163,6 +183,9 @@
                         {{ perm }}
                       </span>
                     </div>
+                  </td>
+                  <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                    {{ key.rate_limit || '无限制' }}
                   </td>
                   <td class="px-6 py-4 whitespace-nowrap">
                     <span :class="getStatusClass(key.is_active)" class="inline-flex px-2 py-1 text-xs font-semibold rounded-full">
@@ -345,7 +368,8 @@ const createdKeyData = reactive({
 const newKeyForm = reactive({
   name: '',
   permissions: [] as string[], // 初始为空，由watch动态设置
-  expiresAt: getDefaultExpiryDate()
+  expiresAt: getDefaultExpiryDate(),
+  rateLimit: 1000 // 新增每小时请求限制
 })
 
 // 权限类型列表
@@ -370,6 +394,7 @@ watch(() => props.isVisible, (visible) => {
     newKeyForm.name = ''
     newKeyForm.permissions = [] // 重置为空，让watch自动设置默认值
     newKeyForm.expiresAt = getDefaultExpiryDate()
+    newKeyForm.rateLimit = 1000 // 重置每小时请求限制
   }
 })
 
@@ -458,13 +483,24 @@ const createNewAPIKey = async () => {
       return
     }
 
+    if (newKeyForm.permissions.length === 0) {
+      showError('请选择权限范围')
+      return
+    }
+
+    if (!newKeyForm.rateLimit || newKeyForm.rateLimit < 1) {
+      showError('请设置有效的请求限制数量')
+      return
+    }
+
     isLoading.value = true
     
     const response = await createAPIKeyAPI({
       token: authStore.loginToken || '',
       name: newKeyForm.name.trim(),
       permissions: newKeyForm.permissions,
-      expires_at: newKeyForm.expiresAt || undefined
+      expires_at: newKeyForm.expiresAt || undefined,
+      rate_limit: newKeyForm.rateLimit || undefined // 添加每小时请求限制
     })
     
     if (response && response.success === true) {
@@ -482,6 +518,7 @@ const createNewAPIKey = async () => {
       newKeyForm.name = ''
       newKeyForm.permissions = [] // 重置为空，让watch自动设置默认值
       newKeyForm.expiresAt = getDefaultExpiryDate()
+      newKeyForm.rateLimit = 1000 // 重置每小时请求限制
       
       // 关闭权限下拉框
       showPermissionDropdown.value = false

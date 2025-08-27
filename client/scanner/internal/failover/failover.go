@@ -143,7 +143,7 @@ func (fm *FailoverManager) processTask(task *RequestTask) {
 		nodeID := fm.selectNode()
 		if nodeID == -1 {
 			// 所有节点都在休息，等待一下，避免频繁轮询
-			time.Sleep(time.Millisecond * 50)
+			time.Sleep(time.Millisecond * 10)
 			continue
 		}
 
@@ -239,7 +239,7 @@ func (fm *FailoverManager) handleNodeError(nodeID int, err error) {
 		usedTime := node.lastCallTime.Sub(node.firstCallTime)
 		restTime := time.Second - usedTime
 		if restTime < 0 {
-			restTime = time.Millisecond * 50 // 最少休息50ms
+			restTime = time.Millisecond * 10 // 最少休息50ms
 		}
 
 		node.restUntil = now.Add(restTime)
@@ -248,8 +248,8 @@ func (fm *FailoverManager) handleNodeError(nodeID int, err error) {
 	} else {
 		// 其他错误 - 故障
 		node.status = NodeDamaged
-		node.restUntil = now.Add(time.Second * 5) // 固定5秒
-		// fmt.Printf("[Simple Scheduler] Node %d DAMAGED, rest for 5 Second (error: %v)\n", nodeID, err)
+		node.restUntil = now.Add(time.Second * 30) // 固定5秒
+		fmt.Printf("[Simple Scheduler] Node %d DAMAGED, rest for 10 Second (error: %v)\n", nodeID, err)
 	}
 }
 

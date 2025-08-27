@@ -3,13 +3,16 @@ package handlers
 import (
 	"net/http"
 	"strconv"
+	"time"
 
+	"blockChainBrowser/server/config"
 	"blockChainBrowser/server/internal/dto"
 	"blockChainBrowser/server/internal/models"
 	"blockChainBrowser/server/internal/services"
 	"blockChainBrowser/server/internal/utils"
 
 	"github.com/gin-gonic/gin"
+	"github.com/sirupsen/logrus"
 )
 
 // BlockHandler 区块处理器
@@ -24,6 +27,86 @@ func NewBlockHandler(blockService services.BlockService, wsHandler *WebSocketHan
 		blockService: blockService,
 		wsHandler:    wsHandler,
 	}
+}
+
+// UpdateBlock 更新区块指定字段（支持通过 id 或 hash 指定目标区块）
+func (h *BlockHandler) UpdateBlock(c *gin.Context) {
+	// 简化：使用 hash 标识区块，并更新指定字段
+	type updateRequest struct {
+		Hash string `json:"hash"`
+		dto.UpdateBlockRequest
+	}
+
+	var req updateRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "invalid request body"})
+		return
+	}
+	if req.Hash == "" {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "hash is required"})
+		return
+	}
+
+	// 查找区块
+	block, err := h.blockService.GetBlockByHash(c.Request.Context(), req.Hash)
+	if err != nil || block == nil {
+		c.JSON(http.StatusNotFound, gin.H{"success": false, "error": "block not found"})
+		return
+	}
+
+	// 构建字段白名单映射，交给服务层做局部更新
+	fields := map[string]interface{}{}
+	if req.TotalAmount != nil {
+		fields["total_amount"] = *req.TotalAmount
+	}
+	if req.Fee != nil {
+		fields["fee"] = *req.Fee
+	}
+	if req.Confirmations != nil {
+		fields["confirmations"] = *req.Confirmations
+	}
+	if req.BurnedEth != nil {
+		fields["burned_eth"] = *req.BurnedEth
+	}
+	if req.MinerTipEth != nil {
+		fields["miner_tip_eth"] = *req.MinerTipEth
+	}
+	if req.BaseFee != nil {
+		fields["base_fee"] = *req.BaseFee
+	}
+	if req.Size != nil {
+		fields["size"] = *req.Size
+	}
+	if req.TransactionCount != nil {
+		fields["transaction_count"] = *req.TransactionCount
+	}
+
+	if err := h.blockService.UpdateBlockFieldsByHash(c.Request.Context(), req.Hash, fields); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})
+		return
+	}
+
+	// 读取最新数据返回
+	latest, _ := h.blockService.GetBlockByHash(c.Request.Context(), req.Hash)
+
+	// 推送WebSocket更新事件
+	if latest != nil {
+		// 根据链类型选择对应的ChainType
+		var chainType ChainType
+		switch latest.Chain {
+		case "eth":
+			chainType = ChainTypeETH
+		case "btc":
+			chainType = ChainTypeBTC
+		default:
+			chainType = ChainTypeETH // 默认以太坊
+		}
+
+		// 广播区块更新事件
+		h.wsHandler.BroadcastBlockUpdateEvent(chainType, dto.NewBlockResponse(latest))
+	}
+
+	c.JSON(http.StatusOK, gin.H{"success": true, "data": dto.NewBlockResponse(latest)})
 }
 
 // GetBlockByHash 根据哈希获取区块
@@ -486,7 +569,7 @@ func (h *BlockHandler) CreateBlock(c *gin.Context) {
 	// 2. 将DTO转换为模型
 	block := req.ToModel()
 
-	// 3. 调用服务层处理业务逻辑
+	// 3. 调用服务层处理业务逻辑（先创建区块，获取数据库时间）
 	err := h.blockService.CreateBlock(c.Request.Context(), block)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
@@ -496,7 +579,18 @@ func (h *BlockHandler) CreateBlock(c *gin.Context) {
 		return
 	}
 
-	// 4. 返回响应DTO
+	// 4. 基于数据库实际创建时间设置验证截止时间
+	verificationTimeout := h.getVerificationTimeout(block.Chain)
+	verificationDeadline := block.CreatedAt.Add(verificationTimeout)
+	block.VerificationDeadline = &verificationDeadline
+
+	// 5. 更新区块的验证截止时间
+	if err := h.blockService.UpdateBlockVerificationDeadline(c.Request.Context(), uint64(block.ID), &verificationDeadline); err != nil {
+		// 记录错误但不影响正常流程
+		logrus.Errorf("Failed to update verification deadline for block %d: %v", block.ID, err)
+	}
+
+	// 6. 返回响应DTO
 	response := dto.NewBlockResponse(block)
 	c.JSON(http.StatusCreated, gin.H{
 		"success": true,
@@ -504,7 +598,7 @@ func (h *BlockHandler) CreateBlock(c *gin.Context) {
 		"message": "block created successfully",
 	})
 
-	// 5. 使用新的WebSocket广播方法，发送区块事件
+	// 7. 使用新的WebSocket广播方法，发送区块事件
 	// 根据链类型选择对应的ChainType
 	var chainType ChainType
 	switch block.Chain {
@@ -518,4 +612,19 @@ func (h *BlockHandler) CreateBlock(c *gin.Context) {
 
 	// 广播区块事件
 	h.wsHandler.BroadcastBlockEvent(chainType, response)
+}
+
+// getVerificationTimeout 获取全局验证超时时间
+func (h *BlockHandler) getVerificationTimeout(chain string) time.Duration {
+	// 使用全局配置的验证超时时间
+	if config.AppConfig.Blockchain.VerificationTimeout > 0 {
+		return config.AppConfig.Blockchain.VerificationTimeout
+	}
+
+	if config.AppConfig.Blockchain.DefaultVerificationTime > 0 {
+		return config.AppConfig.Blockchain.DefaultVerificationTime
+	}
+
+	// 默认超时时间：5分钟
+	return 5 * time.Minute
 }

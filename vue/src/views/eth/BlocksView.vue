@@ -96,7 +96,7 @@
                   {{ formatGas(block.gasUsed, block.gasLimit) }}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  <span class="font-mono">{{ formatAddress(block.miner) }}</span>
+                  <span class="font-mono">{{ block.miner }}</span>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                   <div>
@@ -288,7 +288,6 @@ const loadData = async () => {
     // 根据登录状态调用不同的API
     if (authStore.isAuthenticated) {
       // 已登录用户：调用 /v1/ 下的API
-      console.log('🔐 已登录用户，调用 /v1/ API 获取区块列表')
       const response = await blocksApi.getBlocks({ 
         page: currentPage.value, 
         page_size: pageSize.value, 
@@ -296,8 +295,6 @@ const loadData = async () => {
       })
       
       if (response && response.success === true) {
-        console.log('📊 后端返回数据:', response.data)
-        
         // 正确处理分页响应结构
         const responseData = response.data as any
         let blocksData: any[] = []
@@ -335,7 +332,6 @@ const loadData = async () => {
         }))
         
         totalBlocks.value = totalCount
-        console.log('✅ 成功加载区块数据:', blocks.value.length, '个区块')
       } else {
         console.error('Failed to load blocks:', response?.message)
         // 如果API调用失败，使用默认数据
@@ -344,7 +340,6 @@ const loadData = async () => {
       }
     } else {
       // 未登录用户：调用 /no-auth/ 下的API（有限制）
-      console.log('👤 未登录用户，调用 /no-auth/ API 获取区块列表（有限制）')
       const response = await blocksApi.getBlocksPublic({ 
         page: currentPage.value, 
         page_size: Math.min(pageSize.value, 100), // 使用动态分页大小，但限制最大100个
@@ -352,8 +347,6 @@ const loadData = async () => {
       })
       
       if (response && response.success === true) {
-        console.log('📊 后端返回数据:', response.data)
-        
         // 正确处理分页响应结构
         const responseData = response.data as any
         let blocksData: any[] = []
@@ -391,7 +384,6 @@ const loadData = async () => {
         }))
         
         totalBlocks.value = totalCount
-        console.log('✅ 成功加载区块数据:', blocks.value.length, '个区块')
       } else {
         console.error('Failed to load blocks:', response?.message)
         // 如果API调用失败，使用默认数据
@@ -443,12 +435,19 @@ function handleBlockCountUpdate(message: any) {
 }
 
 function handleNewBlock(message: any) {
-  console.log('🔔 收到新区块WebSocket消息:', message)
-  
-  // 只在第一页才动画插入
+  // 只在第一页才处理新区块
   if (currentPage.value === 1 && message.data) {
+    const newBlockHeight = message.data.height || message.data.number
+    
+    // 判断区块高度是否已存在
+    const existingBlockIndex = blocks.value.findIndex(block => block.height === newBlockHeight)
+    
+    if (existingBlockIndex !== -1) {
+      return
+    }
+    
     const newBlock: BlockData = {
-      height: message.data.height || message.data.number,
+      height: newBlockHeight,
       timestamp: typeof message.data.timestamp === 'string' 
         ? new Date(message.data.timestamp).getTime() / 1000 
         : message.data.timestamp,
@@ -473,15 +472,50 @@ function handleNewBlock(message: any) {
     if (totalBlocks.value > 0) {
       totalBlocks.value++
     }
+  }
+}
+
+function handleBlockUpdate(message: any) {
+  if (message.data && message.action === 'update') {
+    const updatedBlock = message.data
+    const blockHeight = updatedBlock.height || updatedBlock.number
     
-    console.log('✅ 新区块已插入到列表头部:', newBlock.height)
+    if (blockHeight) {
+      // 在列表中查找并更新对应区块
+      const blockIndex = blocks.value.findIndex(block => block.height === blockHeight)
+      
+      if (blockIndex !== -1) {
+        // 更新现有区块信息
+        const existingBlock = blocks.value[blockIndex]
+        
+        // 记录更新前的值
+        const oldMinerTip = existingBlock.miner_tip_eth
+        
+        // 只更新可能变化的字段
+        if (updatedBlock.miner_tip_eth !== undefined) {
+          existingBlock.miner_tip_eth = updatedBlock.miner_tip_eth
+        }
+        if (updatedBlock.burned_eth !== undefined) {
+          // 如果前端需要burned_eth字段，可以在这里添加
+        }
+        if (updatedBlock.fee !== undefined) {
+          // 如果前端需要fee字段，可以在这里添加
+        }
+      } else {
+        console.log('⚠️ 区块不在当前列表中，无法更新:', blockHeight)
+        console.log('当前列表中的区块高度:', blocks.value.map(b => b.height))
+      }
+    } else {
+      console.warn('⚠️ 更新消息中缺少区块高度:', updatedBlock)
+    }
+  } else {
+    console.warn('⚠️ 无效的更新消息格式:', message)
   }
 }
 
 function handleStatsUpdate(message: any) {
   if (message.data && typeof message.data.totalBlocks === 'number') {
     totalBlocks.value = message.data.totalBlocks
-    console.log('📊 统计信息更新:', message.data)
   }
 }
 
@@ -489,17 +523,36 @@ onMounted(() => {
   loadData()
   
   // 订阅WebSocket事件
-  const unsubscribeBlocks = subscribeChainEvent('block', handleNewBlock)
+  console.log('🔌 开始订阅WebSocket事件...')
+  console.log('🔌 WebSocket状态:', isConnected.value)
+  
+  const unsubscribeBlocks = subscribeChainEvent('block', (message) => {
+    // 根据action区分创建和更新事件
+    if (message.action === 'update') {
+      handleBlockUpdate(message)
+    } else {
+      handleNewBlock(message)
+    }
+  })
   const unsubscribeStats = subscribeChainEvent('stats', handleStatsUpdate)
+  
+  console.log('✅ WebSocket事件订阅完成')
+  
+  // 延迟检查WebSocket连接状态
+  setTimeout(() => {
+    console.log('🔌 延迟检查WebSocket状态:', isConnected.value)
+  }, 2000)
   
   onUnmounted(() => {
     // 取消WebSocket订阅
+    console.log('🔌 取消WebSocket订阅...')
     unsubscribeBlocks()
     unsubscribeStats()
     
     // 同时取消服务器端订阅
     unsubscribeChainEvent('block')
     unsubscribeChainEvent('stats')
+    console.log('✅ WebSocket订阅已取消')
   })
 })
 
@@ -507,11 +560,9 @@ onMounted(() => {
 watch(searchQuery, (newQuery) => {
   if (newQuery) {
     // 实现搜索逻辑
-    console.log('🔍 搜索区块:', newQuery)
     performSearch(newQuery)
   } else {
     // 清空搜索，重新加载默认数据
-    console.log('🔄 清空搜索，重新加载数据')
     currentPage.value = 1
     loadData()
   }
@@ -521,12 +572,9 @@ watch(searchQuery, (newQuery) => {
 const performSearch = async (query: string) => {
   try {
     isLoading.value = true
-    console.log('🔍 开始搜索区块:', query)
-    
     // 根据登录状态调用不同的搜索API
     if (authStore.isAuthenticated) {
       // 已登录用户：调用 /v1/ 下的搜索API
-      console.log('🔐 已登录用户，调用 /v1/ API 搜索区块')
       const response = await blocksApi.searchBlocks({ 
         query: query,
         page: 1, 
@@ -534,10 +582,8 @@ const performSearch = async (query: string) => {
       })
       
       if (response && response.success === true) {
-        console.log('📊 搜索返回数据:', response.data)
         handleSearchResults(response.data, query)
       } else {
-        console.error('搜索失败:', response?.message)
         // 搜索失败时显示空结果
         blocks.value = []
         totalBlocks.value = 0
@@ -552,7 +598,6 @@ const performSearch = async (query: string) => {
       })
       
       if (response && response.success === true) {
-        console.log('�� 搜索返回数据:', response.data)
         handleSearchResults(response.data, query)
       } else {
         console.error('搜索失败:', response?.message)

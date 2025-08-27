@@ -70,22 +70,28 @@ api:
     burst: 20
 
 blockchain:
+  verification_timeout: 40s    #取平均时间，如果超过这个时间，则认为区块验证失败
   chains:
     btc:
       name: "Bitcoin"
       symbol: "BTC"
       decimals: 8
       enabled: true
+      rpc_url: "http://127.0.0.1:8332"
+      username: "bitcoin"
+      password: "bitcoin123"
     eth:
       name: "Ethereum"
       symbol: "ETH"
       decimals: 18
       enabled: true
+      rpc_url: "https://alpha-clean-yard.quiknode.pro/7979488c04b1a36bdc4230b23e3eaac3e9c1c1af"
     bsc:
       name: "Binance Smart Chain"
       symbol: "BNB"
       decimals: 18
       enabled: false
+      rpc_url: "http://127.0.0.1:8545"
 
 cache:
   enabled: false

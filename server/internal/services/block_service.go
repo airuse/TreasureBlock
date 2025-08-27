@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"time"
 
 	"blockChainBrowser/server/internal/models"
 	"blockChainBrowser/server/internal/repository"
@@ -17,6 +18,8 @@ type BlockService interface {
 	CreateBlock(ctx context.Context, block *models.Block) error
 	UpdateBlock(ctx context.Context, block *models.Block) error
 	DeleteBlock(ctx context.Context, hash string) error
+	UpdateBlockVerificationDeadline(ctx context.Context, blockID uint64, deadline *time.Time) error
+	UpdateBlockFieldsByHash(ctx context.Context, hash string, fields map[string]interface{}) error
 }
 
 // blockService 区块服务实现
@@ -113,6 +116,17 @@ func (s *blockService) UpdateBlock(ctx context.Context, block *models.Block) err
 	return nil
 }
 
+// UpdateBlockFieldsByHash 基于白名单字段进行局部更新（按Hash定位）
+func (s *blockService) UpdateBlockFieldsByHash(ctx context.Context, hash string, fields map[string]interface{}) error {
+	if hash == "" {
+		return fmt.Errorf("hash cannot be empty")
+	}
+	if len(fields) == 0 {
+		return nil
+	}
+	return s.blockRepo.UpdateFieldsByHash(ctx, hash, fields)
+}
+
 // DeleteBlock 删除区块
 func (s *blockService) DeleteBlock(ctx context.Context, hash string) error {
 	if hash == "" {
@@ -124,4 +138,13 @@ func (s *blockService) DeleteBlock(ctx context.Context, hash string) error {
 	}
 
 	return nil
+}
+
+// UpdateBlockVerificationDeadline 更新区块验证截止时间
+func (s *blockService) UpdateBlockVerificationDeadline(ctx context.Context, blockID uint64, deadline *time.Time) error {
+	if deadline == nil {
+		return fmt.Errorf("verification deadline cannot be nil")
+	}
+
+	return s.blockRepo.UpdateVerificationDeadline(ctx, blockID, deadline)
 }

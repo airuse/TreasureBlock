@@ -15,9 +15,11 @@ type TransactionRepository interface {
 	GetByAddress(ctx context.Context, address string, offset, limit int) ([]*models.Transaction, int64, error)
 	GetByBlockHash(ctx context.Context, blockHash string) ([]*models.Transaction, error)
 	GetByBlockHeight(ctx context.Context, blockHeight uint64, offset, limit int, chain string) ([]*models.Transaction, int64, error)
+	GetByBlockID(ctx context.Context, blockID uint64) ([]*models.Transaction, error)
 	List(ctx context.Context, offset, limit int, chain string) ([]*models.Transaction, int64, error)
 	Update(ctx context.Context, tx *models.Transaction) error
 	Delete(ctx context.Context, hash string) error
+	LogicalDeleteByBlockID(ctx context.Context, blockID uint64) error
 }
 
 // transactionRepository 交易仓储实现
@@ -102,6 +104,16 @@ func (r *transactionRepository) GetByBlockHeight(ctx context.Context, blockHeigh
 	return txs, total, err
 }
 
+// GetByBlockID 根据区块ID获取交易列表
+func (r *transactionRepository) GetByBlockID(ctx context.Context, blockID uint64) ([]*models.Transaction, error) {
+	var txs []*models.Transaction
+	err := r.db.WithContext(ctx).
+		Where("block_id = ?", blockID).
+		Order("block_index ASC").
+		Find(&txs).Error
+	return txs, err
+}
+
 // List 分页查询交易列表
 func (r *transactionRepository) List(ctx context.Context, offset, limit int, chain string) ([]*models.Transaction, int64, error) {
 	var txs []*models.Transaction
@@ -134,4 +146,14 @@ func (r *transactionRepository) Update(ctx context.Context, tx *models.Transacti
 // Delete 删除交易
 func (r *transactionRepository) Delete(ctx context.Context, hash string) error {
 	return r.db.WithContext(ctx).Where("hash = ?", hash).Delete(&models.Transaction{}).Error
+}
+
+// LogicalDeleteByBlockID 根据区块ID逻辑删除所有交易
+func (r *transactionRepository) LogicalDeleteByBlockID(ctx context.Context, blockID uint64) error {
+	// 直接使用 GORM 的 Delete 方法进行软删除
+	result := r.db.WithContext(ctx).Where("block_id = ?", blockID).Delete(&models.Transaction{})
+	if result.Error != nil {
+		return result.Error
+	}
+	return nil
 }

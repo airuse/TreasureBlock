@@ -118,6 +118,10 @@ func (es *EthereumScanner) parseBlock(block *types.Block) *models.Block {
 		Confirmations:    1,                      // 简化处理
 		Miner:            block.Coinbase().Hex(), // 获取矿工地址
 		BaseFee:          block.BaseFee(),
+		// ETH状态根字段
+		StateRoot:        block.Root().Hex(),        // 状态根
+		TransactionsRoot: block.TxHash().Hex(),      // 交易根
+		ReceiptsRoot:     block.ReceiptHash().Hex(), // 收据根
 	}
 	return parsedBlock
 }
@@ -615,9 +619,6 @@ func (es *EthereumScanner) CalculateBlockStats(block *models.Block, transactions
 				txFee := new(big.Int).Mul(big.NewInt(int64(gasUsed)), gasPrice)
 				totalFee.Add(totalFee, txFee)
 
-				// 记录每笔交易的费用信息
-				// fmt.Printf("[ETH Scanner] Block %d Tx %s: GasUsed=%d, GasPrice=%s wei, Fee=%s wei\n",
-				// 	block.Height, tx["hash"], gasUsed, gasPrice.String(), txFee.String())
 			}
 		}
 	}

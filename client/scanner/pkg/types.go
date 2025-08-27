@@ -1,6 +1,9 @@
 package pkg
 
-import "time"
+import (
+	"encoding/json"
+	"time"
+)
 
 // ================== 通用响应 ==================
 
@@ -10,6 +13,22 @@ type APIResponse struct {
 	Data    interface{} `json:"data"`
 	Error   string      `json:"error,omitempty"`
 	Message string      `json:"message,omitempty"`
+}
+
+// GetLastVerifiedBlockHeightResponse 获取最后一个验证通过区块高度的响应
+type GetLastVerifiedBlockHeightResponse struct {
+	Success bool `json:"success"`
+	Data    struct {
+		Chain  string `json:"chain"`
+		Height string `json:"height"`
+	} `json:"data"`
+	Message string `json:"message"`
+}
+
+// LastVerifiedBlockHeightData 仅 data 部分的DTO（用于客户端通用解包）
+type LastVerifiedBlockHeightData struct {
+	Chain  string      `json:"chain"`
+	Height json.Number `json:"height"`
 }
 
 // ================== 扫块配置 ==================
@@ -29,12 +48,7 @@ type ScannerConfigResponse struct {
 
 // ScanConfig 客户端扫块配置
 type ScanConfig struct {
-	ScanInterval     time.Duration `json:"scan_interval"`
-	Confirmations    int           `json:"confirmations"`
-	StartBlockHeight uint64        `json:"start_block_height"`
-	MaxRetries       int           `json:"max_retries"`
-	RetryDelay       time.Duration `json:"retry_delay"`
-	SafetyHeight     uint64        `json:"safety_height"`
+	Confirmations int `json:"confirmations"`
 }
 
 // RPCConfig RPC配置
@@ -78,6 +92,11 @@ type BlockUploadRequest struct {
 	BaseFee     string `json:"base_fee,omitempty"`
 	BurnedEth   string `json:"burned_eth,omitempty"`
 	MinerTipEth string `json:"miner_tip_eth,omitempty"`
+
+	// ETH状态根字段
+	StateRoot        string `json:"state_root,omitempty"`
+	TransactionsRoot string `json:"transactions_root,omitempty"`
+	ReceiptsRoot     string `json:"receipts_root,omitempty"`
 }
 
 // BlockResponse 区块响应（与后端DTO对齐）

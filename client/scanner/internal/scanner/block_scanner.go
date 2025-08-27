@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 
@@ -151,10 +152,6 @@ func (bs *BlockScanner) scanChain(chainName string, scanner Scanner) {
 
 	logrus.Infof("[%s] Starting continuous scanning for chain %s", chainName, chainName)
 
-	// 保存一下上次扫描的高度，避免重复扫描
-	var lastScanHeight uint64
-	var heightMutex sync.RWMutex
-
 	// 创建定时器
 	ticker := time.NewTicker(chainConfig.Scan.Interval)
 	defer ticker.Stop()
@@ -166,66 +163,83 @@ func (bs *BlockScanner) scanChain(chainName string, scanner Scanner) {
 			logrus.Infof("[%s] Stopped continuous scanning", chainName)
 			return
 		case <-ticker.C:
-			// 使用协程处理单个扫描周期，避免阻塞定时器
-			go bs.processScanCycle(chainName, scanner, chainConfig, &lastScanHeight, &heightMutex)
+			// 每次循环都重新获取最新状态并扫描
+			bs.processScanCycle(chainName, scanner, chainConfig)
 		}
 	}
 }
 
-// processScanCycle 处理单个扫描周期
-func (bs *BlockScanner) processScanCycle(chainName string, scanner Scanner, chainConfig *config.ChainConfig, lastScanHeight *uint64, heightMutex *sync.RWMutex) {
-	// 获取最新区块高度
+// processScanCycle 处理单个扫描周期 - 每次循环都重新获取最新状态
+func (bs *BlockScanner) processScanCycle(chainName string, scanner Scanner, chainConfig *config.ChainConfig) {
+	// 1. 获取最新区块高度
 	latestHeight, err := scanner.GetLatestBlockHeight()
 	if err != nil {
 		logrus.Errorf("[%s] Failed to get latest block height: %v", chainName, err)
 		return
 	}
 
-	// 计算确认后的安全高度
+	// 2. 计算确认后的安全高度
 	safeHeight := latestHeight
 	if latestHeight > uint64(chainConfig.Scan.Confirmations) {
 		safeHeight = latestHeight - uint64(chainConfig.Scan.Confirmations)
 	}
 
-	// 线程安全地检查是否需要扫描
-	heightMutex.RLock()
-	lastHeight := *lastScanHeight
-	heightMutex.RUnlock()
-
-	if lastHeight > 0 && lastHeight >= safeHeight {
-		return
-	}
-
-	// 如果安全高度为0，说明还没有足够的确认，等待新区块
+	// 3. 如果安全高度为0，说明还没有足够的确认，等待新区块
 	if safeHeight == 0 {
 		logrus.Debugf("[%s] Safe height is 0, waiting for more confirmations (latest: %d, confirmations: %d)",
 			chainName, latestHeight, chainConfig.Scan.Confirmations)
 		return
 	}
 
-	// 检查是否有遗漏的区块需要补扫
-	startHeight := lastHeight + 1
-	if startHeight == 1 { // 第一次扫描
-		startHeight = safeHeight
+	// 4. 获取最后一个验证通过的区块高度
+	lastVerifiedHeight, err := bs.getLastVerifiedBlockHeight(chainName)
+
+	if err != nil {
+		logrus.Errorf("[%s] Failed to get last verified block height: %v", chainName, err)
+		// 如果获取失败，使用配置的起始高度
+		logrus.Infof("[%s] Using configured start height: %d", chainName, lastVerifiedHeight)
+		return
+	} else {
+		logrus.Infof("[%s] Last verified height: %d", chainName, lastVerifiedHeight)
 	}
 
-	// 扫描从startHeight到safeHeight的所有区块
-	for height := startHeight; height <= safeHeight; height++ {
-		select {
-		case <-bs.stopChan:
-			return // 如果收到停止信号，立即退出
-		default:
-			logrus.Infof("[%s] Scanning block at height %d (latest: %d, safe: %d)", chainName, height, latestHeight, safeHeight)
-
-			// 扫描单个区块
-			go bs.scanSingleBlock(chainName, scanner, height, chainConfig)
-
-			// 线程安全地更新最后扫描高度
-			heightMutex.Lock()
-			*lastScanHeight = height
-			heightMutex.Unlock()
-		}
+	// 5. 判断是否需要扫描
+	// 只有当安全高度 > 最后验证高度时，才需要扫描
+	if safeHeight <= lastVerifiedHeight {
+		return
 	}
+
+	// 6. 计算要扫描的区块高度
+	scanHeight := lastVerifiedHeight + 1
+
+	logrus.Infof("[%s] Scanning block at height %d (latest: %d, safe: %d, last verified: %d)", chainName, scanHeight, latestHeight, safeHeight, lastVerifiedHeight)
+
+	// 7. 扫描单个区块
+	select {
+	case <-bs.stopChan:
+		logrus.Infof("[%s] Stopped scanning due to stop signal", chainName)
+		return // 如果收到停止信号，立即退出
+	default:
+		// 扫描单个区块
+		bs.scanSingleBlock(chainName, scanner, scanHeight, chainConfig)
+	}
+
+	logrus.Infof("[%s] Completed scan cycle for height %d", chainName, scanHeight)
+}
+
+// getLastVerifiedBlockHeight 获取最后一个验证通过的区块高度
+func (bs *BlockScanner) getLastVerifiedBlockHeight(chainName string) (uint64, error) {
+	api := config.GetScannerAPI()
+	if api == nil {
+		return 0, fmt.Errorf("scanner API not initialized")
+	}
+
+	height, err := api.GetLastVerifiedBlockHeight(chainName)
+	if err != nil {
+		return 0, fmt.Errorf("failed to get last verified block height: %w", err)
+	}
+
+	return height, nil
 }
 
 // scanSingleBlock 扫描单个区块
@@ -244,27 +258,35 @@ func (bs *BlockScanner) scanSingleBlock(chainName string, scanner Scanner, heigh
 		return
 	}
 
+	// 提交区块到服务器，获取区块ID
+	blockID, err := bs.submitBlockToServer(block)
+	if err != nil {
+		logrus.Errorf("[%s] Failed to submit block %d to server: %v", chainName, height, err)
+		return
+	}
+
 	// 获取交易信息 - 直接从区块获取，避免哈希不一致问题
 	transactions, err := scanner.GetBlockTransactionsFromBlock(block)
 	if err != nil {
 		logrus.Warnf("[%s] Failed to get transactions for block %d: %v", chainName, height, err)
 	} else {
 		scanner.CalculateBlockStats(block, transactions)
-		// 提取到服务器
-	}
 
-	// 上传交易信息到服务器
-	if len(transactions) > 0 {
-		if err := bs.submitTransactionsToServer(chainName, block, transactions); err != nil {
+		// 上传交易信息到服务器，传入区块ID
+		if err := bs.submitTransactionsToServer(chainName, block, transactions, blockID); err != nil {
 			logrus.Warnf("[%s] Failed to submit transactions for block %d: %v", chainName, height, err)
+			return
 		}
 	}
 
-	// 提交到服务器
-	if err := bs.submitBlockToServer(block); err != nil {
-		logrus.Errorf("[%s] Failed to submit block %d to server: %v", chainName, height, err)
+	// 验证区块
+	if err := bs.verifyBlock(blockID); err != nil {
+		logrus.Errorf("[%s] Block verification failed for block %d: %v", chainName, height, err)
 		return
 	}
+	// 由于区块最早提交的时候没有 调用 CalculateBlockStats 方法给 block.BurnedEth、block.MinerTipEth、block.TotalAmount、block.Fee、block.Confirmations 等字段赋值
+	// 所以需要在这里调用 更新这些字段 到后端API
+	bs.updateBlockStatsToServer(block, transactions, blockID)
 
 	// 保存到文件（如果启用）
 	if chainConfig.Scan.SaveToFile {
@@ -274,16 +296,66 @@ func (bs *BlockScanner) scanSingleBlock(chainName string, scanner Scanner, heigh
 	}
 
 	processTime := time.Since(startTime).Milliseconds()
-	logrus.Infof("[%s] Successfully processed block %d (hash: %s, %d tx, %dms)",
+	logrus.Infof("[%s] Successfully processed and verified block %d (hash: %s, %d tx, %dms)",
 		chainName, height, block.Hash[:16]+"...", block.TransactionCount, processTime)
 }
 
-// submitBlockToServer 提交区块到服务器
-func (bs *BlockScanner) submitBlockToServer(block *models.Block) error {
+// updateBlockStatsToServer 计算并将区块统计字段更新到后端
+func (bs *BlockScanner) updateBlockStatsToServer(block *models.Block, transactions []map[string]interface{}, blockID uint64) {
+	api := config.GetScannerAPI()
+	if api == nil {
+		logrus.Warn("scanner API not initialized; skip UpdateBlockStats")
+		return
+	}
+
+	// 组装需要更新的字段（与后端 UpdateBlockRequest 对齐，使用可选字段键名）
+	payload := map[string]interface{}{}
+
+	// 这些值应由各链的 CalculateBlockStats 写入到 block 上，这里只做透传
+	if block.TotalAmount > 0 {
+		payload["total_amount"] = block.TotalAmount
+	}
+	if block.Fee > 0 {
+		payload["fee"] = block.Fee
+	}
+	if block.Confirmations > 0 {
+		payload["confirmations"] = block.Confirmations
+	}
+
+	// ETH London 相关字段（字符串）
+	if block.BurnedEth != nil {
+		payload["burned_eth"] = block.BurnedEth.Text('f', 18)
+	}
+	if block.MinerTipEth != nil {
+		payload["miner_tip_eth"] = block.MinerTipEth.Text('f', 18)
+	}
+	if block.BaseFee != nil {
+		payload["base_fee"] = block.BaseFee.String()
+	}
+
+	// 可选：大小、交易数（若统计有修正）
+	if block.Size > 0 {
+		payload["size"] = block.Size
+	}
+	if block.TransactionCount > 0 {
+		payload["transaction_count"] = block.TransactionCount
+	}
+
+	if len(payload) == 0 {
+		return
+	}
+
+	if err := api.UpdateBlockStats(block.Hash, payload); err != nil {
+		logrus.Warnf("Failed to update block stats (hash=%s): %v", block.Hash, err)
+	}
+}
+
+// submitBlockToServer 提交区块到服务器，返回区块ID
+func (bs *BlockScanner) submitBlockToServer(block *models.Block) (uint64, error) {
 	// 获取API实例
 	api := config.GetScannerAPI()
 	if api == nil {
-		return fmt.Errorf("scanner API not initialized")
+		return 0, fmt.Errorf("scanner API not initialized")
 	}
 
 	// 构建区块上传请求
@@ -327,46 +399,90 @@ func (bs *BlockScanner) submitBlockToServer(block *models.Block) error {
 			}
 			return ""
 		}(),
+		// ETH状态根字段
+		StateRoot:        block.StateRoot,
+		TransactionsRoot: block.TransactionsRoot,
+		ReceiptsRoot:     block.ReceiptsRoot,
 	}
 
 	// 使用API上传区块
-	_, err := api.UploadBlock(blockRequest)
+	response, err := api.UploadBlock(blockRequest)
 	if err != nil {
-		return fmt.Errorf("failed to upload block via API: %w", err)
+		return 0, fmt.Errorf("failed to upload block via API: %w", err)
 	}
 
-	return nil
+	// 从响应中提取区块ID
+	if response != nil {
+		return uint64(response.ID), nil
+	}
+
+	return 0, fmt.Errorf("failed to get block ID from response")
 }
 
 // submitTransactionsToServer 将交易信息提交到服务器
-func (bs *BlockScanner) submitTransactionsToServer(chainName string, block *models.Block, transactions []map[string]interface{}) error {
+func (bs *BlockScanner) submitTransactionsToServer(chainName string, block *models.Block, transactions []map[string]interface{}, blockID uint64) error {
 	// 获取API实例
 	api := config.GetScannerAPI()
 	if api == nil {
 		return fmt.Errorf("scanner API instance not available")
 	}
 
-	// 批量上传交易
-	for _, tx := range transactions {
-		// 提取/推导地址
-		fromAddress := ""
-		toAddress := ""
-		if v, ok := tx["from"].(string); ok {
-			fromAddress = v
-		}
-		if v, ok := tx["to"].(string); ok {
-			toAddress = v
-		}
-		// 针对BTC从vin/vout推导
-		if chainName == "btc" {
-			if fromAddress == "" {
-				if vin, ok := tx["vin"].([]interface{}); ok && len(vin) > 0 {
-					if in0, ok := vin[0].(map[string]interface{}); ok {
-						if prevout, ok := in0["prevout"].(map[string]interface{}); ok {
-							if spk, ok := prevout["scriptPubKey"].(map[string]interface{}); ok {
+	// 并发上限：使用链配置的 MaxConcurrent，缺省为 10
+	concurrency := 10
+	if chainCfg := bs.getChainConfig(chainName); chainCfg != nil && chainCfg.Scan.MaxConcurrent > 0 {
+		concurrency = chainCfg.Scan.MaxConcurrent
+	}
+
+	// 并发上传交易，全部完成后再返回
+	var wg sync.WaitGroup
+	errCh := make(chan error, len(transactions))
+	sem := make(chan struct{}, concurrency)
+
+	for i := range transactions {
+		// 避免闭包捕获同一变量，按索引取当前交易
+		tx := transactions[i]
+
+		// 在每个 goroutine 中构建请求并上传
+		wg.Add(1)
+		go func(tx map[string]interface{}) {
+			defer wg.Done()
+			// 限流：获取并发令牌
+			sem <- struct{}{}
+			defer func() { <-sem }()
+
+			// 提取/推导地址
+			fromAddress := ""
+			toAddress := ""
+			if v, ok := tx["from"].(string); ok {
+				fromAddress = v
+			}
+			if v, ok := tx["to"].(string); ok {
+				toAddress = v
+			}
+			// 针对BTC从vin/vout推导
+			if chainName == "btc" {
+				if fromAddress == "" {
+					if vin, ok := tx["vin"].([]interface{}); ok && len(vin) > 0 {
+						if in0, ok := vin[0].(map[string]interface{}); ok {
+							if prevout, ok := in0["prevout"].(map[string]interface{}); ok {
+								if spk, ok := prevout["scriptPubKey"].(map[string]interface{}); ok {
+									if addrs, ok := spk["addresses"].([]interface{}); ok && len(addrs) > 0 {
+										if a0, ok := addrs[0].(string); ok {
+											fromAddress = a0
+										}
+									}
+								}
+							}
+						}
+					}
+				}
+				if toAddress == "" {
+					if vout, ok := tx["vout"].([]interface{}); ok && len(vout) > 0 {
+						if out0, ok := vout[0].(map[string]interface{}); ok {
+							if spk, ok := out0["scriptPubKey"].(map[string]interface{}); ok {
 								if addrs, ok := spk["addresses"].([]interface{}); ok && len(addrs) > 0 {
 									if a0, ok := addrs[0].(string); ok {
-										fromAddress = a0
+										toAddress = a0
 									}
 								}
 							}
@@ -374,77 +490,104 @@ func (bs *BlockScanner) submitTransactionsToServer(chainName string, block *mode
 					}
 				}
 			}
-			if toAddress == "" {
-				if vout, ok := tx["vout"].([]interface{}); ok && len(vout) > 0 {
-					if out0, ok := vout[0].(map[string]interface{}); ok {
-						if spk, ok := out0["scriptPubKey"].(map[string]interface{}); ok {
-							if addrs, ok := spk["addresses"].([]interface{}); ok && len(addrs) > 0 {
-								if a0, ok := addrs[0].(string); ok {
-									toAddress = a0
-								}
-							}
-						}
+
+			// 构建交易请求数据
+			txRequest := map[string]interface{}{
+				"tx_id": tx["hash"],
+				"tx_type": func() uint8 {
+					if txType, ok := tx["type"].(uint8); ok {
+						return txType
 					}
-				}
+					return 0
+				}(),
+				"confirm":      1,
+				"status":       1,
+				"send_status":  1,
+				"balance":      "0",
+				"amount":       tx["value"],
+				"trans_id":     0,
+				"chain":        chainName,
+				"symbol":       chainName,
+				"address_from": fromAddress,
+				"address_to":   toAddress,
+				"gas_limit":    tx["gasLimit"],
+				"gas_price":    tx["gasPrice"],
+				"gas_used":     tx["gasUsed"],
+				"fee":          "0",
+				"used_fee":     nil,
+				"height":       block.Height,
+				"block_id":     blockID,
+				"contract_addr": func() string {
+					if contractAddr, ok := tx["contract_address"].(string); ok {
+						return contractAddr
+					}
+					return ""
+				}(),
+				"hex":         tx["data"],
+				"tx_scene":    "blockchain_scan",
+				"remark":      "Scanned from blockchain",
+				"block_index": tx["block_index"],
+				"nonce":       tx["nonce"],
+				"logs":        tx["logs"],
+				"receipt":     tx["receipt"],
 			}
-		}
 
-		// 构建交易请求数据
-		txRequest := map[string]interface{}{
-			"tx_id": tx["hash"],
-			"tx_type": func() uint8 {
-				if txType, ok := tx["type"].(uint8); ok {
-					return txType
+			// 添加EIP-1559相关字段（如果存在）
+			if maxFeePerGas, ok := tx["maxFeePerGas"]; ok {
+				txRequest["max_fee_per_gas"] = maxFeePerGas
+			}
+			if maxPriorityFeePerGas, ok := tx["maxPriorityFeePerGas"]; ok {
+				txRequest["max_priority_fee_per_gas"] = maxPriorityFeePerGas
+			}
+			if effectiveGasPrice, ok := tx["effectiveGasPrice"]; ok {
+				txRequest["effective_gas_price"] = effectiveGasPrice
+			}
+
+			// 上传交易
+			if err := api.UploadTransaction(txRequest); err != nil {
+				// 检查是否为致命错误，如果是就直接退出程序
+				if strings.Contains(strings.ToUpper(err.Error()), "BLOCK_TRANSACTION_FAILED") {
+					pkg.HandleFatalError(err, "交易上传失败")
 				}
-				return 0
-			}(), // 使用实际的交易类型
-			"confirm":      1,   // 默认确认数
-			"status":       1,   // 成功状态
-			"send_status":  1,   // 已广播
-			"balance":      "0", // 暂时设为0
-			"amount":       tx["value"],
-			"trans_id":     0, // 暂时设为0
-			"chain":        chainName,
-			"symbol":       chainName,
-			"address_from": fromAddress,
-			"address_to":   toAddress,
-			"gas_limit":    tx["gasLimit"],
-			"gas_price":    tx["gasPrice"],
-			"gas_used":     tx["gasUsed"],
-			"fee":          "0", // 暂时设为0，后续计算
-			"used_fee":     nil,
-			"height":       block.Height,
-			"contract_addr": func() string {
-				if contractAddr, ok := tx["contract_address"].(string); ok {
-					return contractAddr
-				}
-				return ""
-			}(), // 从扫描器获取合约地址
-			"hex":         tx["data"], // 保存Input data到hex字段
-			"tx_scene":    "blockchain_scan",
-			"remark":      "Scanned from blockchain",
-			"block_index": tx["block_index"],
-			"nonce":       tx["nonce"],
-			"logs":        tx["logs"],
-			"receipt":     tx["receipt"],
+
+				logrus.Warnf("[%s] Failed to upload transaction %v: %v", chainName, tx["hash"], err)
+				// 收集非致命错误，等待全部完成后再统一返回
+				errCh <- err
+				return
+			}
+		}(tx)
+	}
+
+	// 等待全部上传完成
+	wg.Wait()
+	close(errCh)
+
+	// 汇总错误
+	failed := 0
+	for range errCh {
+		failed++
+	}
+	if failed > 0 {
+		return fmt.Errorf("%d transactions failed to upload", failed)
+	}
+
+	return nil
+}
+
+// verifyBlock 验证区块
+func (bs *BlockScanner) verifyBlock(blockID uint64) error {
+	api := config.GetScannerAPI()
+	if api == nil {
+		return fmt.Errorf("scanner API not initialized")
+	}
+
+	if err := api.VerifyBlock(blockID); err != nil {
+		// 检查是否为致命错误，如果是就直接退出程序
+		if strings.Contains(strings.ToUpper(err.Error()), "BLOCK_VERIFICATION_FAILED") {
+			pkg.HandleFatalError(err, "区块验证失败")
 		}
 
-		// 添加EIP-1559相关字段（如果存在）
-		if maxFeePerGas, ok := tx["maxFeePerGas"]; ok {
-			txRequest["max_fee_per_gas"] = maxFeePerGas
-		}
-		if maxPriorityFeePerGas, ok := tx["maxPriorityFeePerGas"]; ok {
-			txRequest["max_priority_fee_per_gas"] = maxPriorityFeePerGas
-		}
-		if effectiveGasPrice, ok := tx["effectiveGasPrice"]; ok {
-			txRequest["effective_gas_price"] = effectiveGasPrice
-		}
-
-		// 上传交易
-		if err := api.UploadTransaction(txRequest); err != nil {
-			logrus.Warnf("[%s] Failed to upload transaction %s: %v", chainName, tx["hash"], err)
-			continue // 继续上传其他交易
-		}
+		return fmt.Errorf("block verification failed: %w", err)
 	}
 
 	return nil

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strconv"
 
 	"blockChainBrowser/server/internal/models"
 	"blockChainBrowser/server/internal/repository"
@@ -89,6 +90,12 @@ func (s *transactionReceiptService) CreateTransactionReceipt(ctx context.Context
 	}
 	if transactionIndex, ok := receiptData["transaction_index"].(uint); ok {
 		receipt.TransactionIndex = transactionIndex
+	}
+	if cumulativeGasUsed, ok := receiptData["cumulative_gas_used"].(uint64); ok {
+		receipt.CumulativeGasUsed = strconv.FormatUint(cumulativeGasUsed, 10)
+	}
+	if blockID, ok := receiptData["block_id"].(uint64); ok {
+		receipt.BlockID = blockID
 	}
 
 	// 处理日志数据 - 转换为JSON字符串

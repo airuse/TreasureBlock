@@ -64,15 +64,12 @@ type ChainConfig struct {
 
 // ChainScanConfig 链扫描配置
 type ChainScanConfig struct {
-	Enabled          bool          `yaml:"enabled"`
-	Interval         time.Duration `yaml:"interval"`
-	MaxRetries       int           `yaml:"max_retries"`
-	RetryDelay       time.Duration `yaml:"retry_delay"`
-	Confirmations    int           `yaml:"confirmations"`
-	StartBlockHeight uint64        `yaml:"start_block_height"`
-	AutoStart        bool          `yaml:"auto_start"`
-	SaveToFile       bool          `yaml:"save_to_file"`
-	OutputDir        string        `yaml:"output_dir"`
+	Enabled       bool          `yaml:"enabled"`
+	Interval      time.Duration `yaml:"interval"`
+	Confirmations int           `yaml:"confirmations"`
+	AutoStart     bool          `yaml:"auto_start"`
+	SaveToFile    bool          `yaml:"save_to_file"`
+	OutputDir     string        `yaml:"output_dir"`
 	// 链特定的扫描配置
 	Priority        int           `yaml:"priority"`         // 扫描优先级，数字越小优先级越高
 	MaxConcurrent   int           `yaml:"max_concurrent"`   // 最大并发扫描数
@@ -314,11 +311,7 @@ func loadServerConfig() error {
 		}
 
 		// 更新本地配置
-		chainConfig.Scan.Interval = scanConfig.ScanInterval
-		chainConfig.Scan.MaxRetries = scanConfig.MaxRetries
-		chainConfig.Scan.RetryDelay = scanConfig.RetryDelay
 		chainConfig.Scan.Confirmations = scanConfig.Confirmations
-		chainConfig.Scan.StartBlockHeight = scanConfig.StartBlockHeight
 
 		// 获取RPC配置（可选）
 		rpcConfig, err := api.GetRPCConfig(chainKey)
@@ -355,20 +348,8 @@ func loadServerConfig() error {
 func setDefaultChainScanConfigs() {
 	for chainKey, chainConfig := range AppConfig.Blockchain.Chains {
 		// 如果链没有扫描配置，设置默认值
-		if chainConfig.Scan.Interval == 0 {
-			chainConfig.Scan.Interval = 10 * time.Second // 默认间隔
-		}
-		if chainConfig.Scan.MaxRetries == 0 {
-			chainConfig.Scan.MaxRetries = 3 // 默认最大重试次数
-		}
-		if chainConfig.Scan.RetryDelay == 0 {
-			chainConfig.Scan.RetryDelay = 5 * time.Second // 默认重试延迟
-		}
 		if chainConfig.Scan.Confirmations == 0 {
 			chainConfig.Scan.Confirmations = 6 // 默认确认数
-		}
-		if chainConfig.Scan.StartBlockHeight == 0 {
-			chainConfig.Scan.StartBlockHeight = 0 // 默认起始块高
 		}
 		if chainConfig.Scan.OutputDir == "" {
 			chainConfig.Scan.OutputDir = filepath.Join("./output", chainKey)
