@@ -32,27 +32,20 @@
       </div>
     </div>
 
-    <!-- 合约信息 -->
+    <!-- 合约信息（概览） -->
     <div v-else-if="contract" class="space-y-6">
       <!-- 合约基本信息 -->
       <div class="card">
         <div class="flex items-start space-x-6">
           <!-- 合约Logo -->
           <div class="flex-shrink-0">
-            <img 
-              v-if="contract.contract_logo" 
-              :src="contract.contract_logo" 
-              alt="合约Logo" 
-              class="w-24 h-24 rounded-lg object-cover border-2 border-gray-200"
-            />
+            <img v-if="contract.contract_logo" :src="contract.contract_logo" alt="合约Logo" class="w-24 h-24 rounded-lg object-cover border-2 border-gray-200" />
             <div v-else class="w-24 h-24 bg-gray-200 rounded-lg flex items-center justify-center">
               <svg class="w-12 h-12 text-gray-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 21V5a2 2 0 00-2-2H7a2 2 0 00-2 2v16m14 0h2m-2 0h-5m-9 0H3m2 0h5M9 7h1m-1 4h1m4-4h1m-1 4h1m-5 10v-5a1 1 0 011-1h2a1 1 0 011 1v5m-4 0h4"></path>
               </svg>
             </div>
           </div>
-          
-          <!-- 合约基本信息 -->
           <div class="flex-1">
             <div class="flex items-center space-x-3 mb-4">
               <h2 class="text-xl font-bold text-gray-900">{{ contract.name || '未命名合约' }}</h2>
@@ -61,13 +54,10 @@
                 {{ getStatusText(contract.status) }}
               </span>
             </div>
-            
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
                 <label class="block text-sm font-medium text-gray-500">合约地址</label>
-                <p class="mt-1 text-sm text-gray-900 font-mono cursor-pointer hover:text-blue-600" @click="copyToClipboard(contract.address, $event)">
-                  {{ contract.address }}
-                </p>
+                <p class="mt-1 text-sm text-gray-900 font-mono cursor-pointer hover:text-blue-600" @click="copyToClipboard(contract.address, $event)">{{ contract.address }}</p>
               </div>
               <div>
                 <label class="block text-sm font-medium text-gray-500">合约类型</label>
@@ -75,7 +65,7 @@
               </div>
               <div>
                 <label class="block text-sm font-medium text-gray-500">精度</label>
-                <p class="mt-1 text-sm text-gray-900">{{ contract.decimals || 'N/A' }}</p>
+                <p class="mt-1 text-sm text-gray-900">{{ contract.decimals ?? 'N/A' }}</p>
               </div>
               <div>
                 <label class="block text-sm font-medium text-gray-500">总供应量</label>
@@ -84,70 +74,138 @@
               <div>
                 <label class="block text-sm font-medium text-gray-500">验证状态</label>
                 <p class="mt-1 text-sm text-gray-900">
-                  <span :class="contract.verified ? 'text-green-600' : 'text-red-600'">
-                    {{ contract.verified ? '已验证' : '未验证' }}
-                  </span>
+                  <span :class="contract.verified ? 'text-green-600' : 'text-red-600'">{{ contract.verified ? '已验证' : '未验证' }}</span>
                 </p>
               </div>
               <div>
                 <label class="block text-sm font-medium text-gray-500">创建者</label>
-                <p class="mt-1 text-sm text-gray-900 font-mono cursor-pointer hover:text-blue-600" @click="copyToClipboard(contract.creator, $event)">
-                  {{ contract.creator || 'N/A' }}
-                </p>
+                <p class="mt-1 text-sm text-gray-900 font-mono cursor-pointer hover:text-blue-600" @click="copyToClipboard(contract.creator, $event)">{{ contract.creator || 'N/A' }}</p>
               </div>
             </div>
           </div>
         </div>
       </div>
 
-      <!-- 合约详细信息 -->
+      <!-- 编辑合约字段（只读展示） -->
       <div class="card">
-        <h3 class="text-lg font-medium text-gray-900 mb-4">合约详细信息</h3>
-        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
-          <div>
-            <h4 class="text-sm font-medium text-gray-700 mb-2">接口</h4>
-            <div class="bg-gray-50 p-3 rounded-lg">
-              <div v-if="parsedInterfaces.length > 0" class="space-y-1">
-                <span v-for="interfaceName in parsedInterfaces" :key="interfaceName" class="inline-block px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded mr-2 mb-2">
-                  {{ interfaceName }}
-                </span>
-              </div>
-              <p v-else class="text-sm text-gray-500">无接口信息</p>
-            </div>
+        <h3 class="text-lg font-medium text-gray-900 mb-4">编辑合约字段（只读展示）</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+          <Field label="地址" :value="contract.address" mono />
+          <Field label="合约名称" :value="contract.name" />
+          <Field label="合约符号" :value="contract.symbol" />
+          <Field label="合约类型" :value="getTypeText(contract.contract_type)" />
+          <Field label="精度" :value="contract.decimals ?? 'N/A'" />
+          <Field label="总供应量" :value="formatTotalSupply(contract.total_supply)" />
+          <Field label="是否ERC-20" :value="contract.is_erc20 ? '是' : '否'" />
+          <Field label="是否已验证" :value="contract.verified ? '已验证' : '未验证'" />
+          <Field label="创建者" :value="contract.creator" mono />
+          <Field label="创建交易哈希" :value="contract.creation_tx" mono />
+          <Field label="创建区块" :value="contract.creation_block?.toString()" />
+          <Field class="md:col-span-3" label="接口 (JSON/数组)" :value="JSON.stringify(parsedInterfaces, null, 2)" pre />
+          <Field class="md:col-span-3" label="方法 (JSON/数组)" :value="JSON.stringify(parsedMethods, null, 2)" pre />
+          <Field class="md:col-span-3" label="事件 (JSON/数组)" :value="JSON.stringify(parsedEvents, null, 2)" pre />
+          <Field class="md:col-span-3" label="元数据 (JSON 对象)" :value="parsedMetadata ? JSON.stringify(parsedMetadata, null, 2) : ''" pre />
+        </div>
+      </div>
+
+      <!-- 币种信息字段（只读展示，来自后端 coin config） -->
+      <div class="card">
+        <h3 class="text-lg font-medium text-gray-900 mb-4">维护币种信息字段（只读展示）</h3>
+        <div v-if="coinConfig" class="space-y-4">
+          <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+            <Field label="合约地址" :value="coinConfig.contract_address" mono />
+            <Field label="币种名称" :value="coinConfig.name" />
+            <Field label="币种符号" :value="coinConfig.symbol" />
+            <Field label="类型" :value="formatCoinType(coinConfig.coin_type)" />
+            <Field label="精度" :value="coinConfig.precision?.toString()" />
+            <Field label="精度别名" :value="coinConfig.decimals?.toString()" />
+            <Field label="状态" :value="coinConfig.status === 1 ? '启用' : '禁用'" />
+            <Field label="Logo URL" :value="coinConfig.logo_url" />
+            <Field label="是否已验证" :value="coinConfig.is_verified ? '已验证' : '未验证'" />
+            <Field class="md:col-span-3" label="描述" :value="coinConfig.description || ''" />
           </div>
-          
+
+          <!-- 解析配置列表 -->
           <div>
-            <h4 class="text-sm font-medium text-gray-700 mb-2">方法</h4>
-            <div class="bg-gray-50 p-3 rounded-lg">
-              <div v-if="parsedMethods.length > 0" class="space-y-1">
-                <span v-for="method in parsedMethods" :key="method" class="inline-block px-2 py-1 text-xs bg-green-100 text-green-800 rounded mr-2 mb-2">
-                  {{ method }}
-                </span>
+            <h4 class="text-md font-semibold text-gray-900 mb-2">解析配置 parser_configs</h4>
+            <div v-if="Array.isArray(parserConfigs) && parserConfigs.length > 0" class="space-y-4">
+              <div v-for="(cfg, idx) in parserConfigs" :key="cfg.id || idx" class="border rounded-md p-3 bg-gray-50">
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-3">
+                  <Field label="ID" :value="(cfg.id ?? '').toString()" />
+                  <Field label="函数签名" :value="cfg.function_signature || ''" mono />
+                  <Field label="函数名" :value="cfg.function_name || ''" />
+                  <Field label="函数描述" :value="cfg.function_description || ''" class="md:col-span-3" />
+                  <Field label="显示格式" :value="cfg.display_format || ''" class="md:col-span-3" />
+                  <Field label="是否启用" :value="cfg.is_active ? '是' : '否'" />
+                  <Field label="优先级" :value="(cfg.priority ?? 0).toString()" />
+                  <Field label="解析类型" :value="cfg.logs_parser_type || 'input_data'" />
+                  <Field label="事件签名" :value="cfg.event_signature || ''" mono class="md:col-span-3" />
+                  <Field label="事件名称" :value="cfg.event_name || ''" />
+                  <Field label="事件描述" :value="cfg.event_description || ''" class="md:col-span-2" />
+                </div>
+                <div class="mt-3">
+                  <h5 class="text-sm font-medium text-gray-700 mb-1">参数配置 param_config</h5>
+                  <div v-if="Array.isArray(cfg.param_config) && cfg.param_config.length > 0" class="overflow-x-auto">
+                    <table class="min-w-full text-xs">
+                      <thead>
+                        <tr class="text-gray-500">
+                          <th class="text-left pr-4 pb-1">name</th>
+                          <th class="text-left pr-4 pb-1">type</th>
+                          <th class="text-left pr-4 pb-1">offset</th>
+                          <th class="text-left pr-4 pb-1">length</th>
+                          <th class="text-left pr-4 pb-1">description</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="(p, i) in cfg.param_config" :key="i" class="text-gray-800">
+                          <td class="pr-4 py-0.5">{{ p.name }}</td>
+                          <td class="pr-4 py-0.5">{{ p.type }}</td>
+                          <td class="pr-4 py-0.5">{{ p.offset }}</td>
+                          <td class="pr-4 py-0.5">{{ p.length }}</td>
+                          <td class="pr-4 py-0.5">{{ p.description }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <p v-else class="text-xs text-gray-500">无</p>
+                </div>
+                <div class="mt-3">
+                  <h5 class="text-sm font-medium text-gray-700 mb-1">日志参数配置 logs_param_config</h5>
+                  <div v-if="Array.isArray(cfg.logs_param_config) && cfg.logs_param_config.length > 0" class="overflow-x-auto">
+                    <table class="min-w-full text-xs">
+                      <thead>
+                        <tr class="text-gray-500">
+                          <th class="text-left pr-4 pb-1">name</th>
+                          <th class="text-left pr-4 pb-1">type</th>
+                          <th class="text-left pr-4 pb-1">topic_index</th>
+                          <th class="text-left pr-4 pb-1">data_index</th>
+                          <th class="text-left pr-4 pb-1">description</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        <tr v-for="(lp, j) in cfg.logs_param_config" :key="j" class="text-gray-800">
+                          <td class="pr-4 py-0.5">{{ lp.name }}</td>
+                          <td class="pr-4 py-0.5">{{ lp.type }}</td>
+                          <td class="pr-4 py-0.5">{{ lp.topic_index ?? '-' }}</td>
+                          <td class="pr-4 py-0.5">{{ lp.data_index ?? '-' }}</td>
+                          <td class="pr-4 py-0.5">{{ lp.description }}</td>
+                        </tr>
+                      </tbody>
+                    </table>
+                  </div>
+                  <p v-else class="text-xs text-gray-500">无</p>
+                </div>
+                <div class="mt-3 grid grid-cols-1 md:grid-cols-2 gap-3">
+                  <Field label="parser_rules" :value="cfg.parser_rules || {}" pre />
+                  <Field label="logs_parser_rules" :value="cfg.logs_parser_rules || {}" pre />
+                  <Field class="md:col-span-2" label="logs_display_format" :value="cfg.logs_display_format || ''" />
+                </div>
               </div>
-              <p v-else class="text-sm text-gray-500">无方法信息</p>
             </div>
-          </div>
-          
-          <div>
-            <h4 class="text-sm font-medium text-gray-700 mb-2">事件</h4>
-            <div class="bg-gray-50 p-3 rounded-lg">
-              <div v-if="parsedEvents.length > 0" class="space-y-1">
-                <span v-for="event in parsedEvents" :key="event" class="inline-block px-2 py-1 text-xs bg-purple-100 text-purple-800 rounded mr-2 mb-2">
-                  {{ event }}
-                </span>
-              </div>
-              <p v-else class="text-sm text-gray-500">无事件信息</p>
-            </div>
-          </div>
-          
-          <div>
-            <h4 class="text-sm font-medium text-gray-700 mb-2">元数据</h4>
-            <div class="bg-gray-50 p-3 rounded-lg">
-              <pre v-if="parsedMetadata" class="text-xs text-gray-700 whitespace-pre-wrap">{{ JSON.stringify(parsedMetadata, null, 2) }}</pre>
-              <p v-else class="text-sm text-gray-500">无元数据信息</p>
-            </div>
+            <div v-else class="text-sm text-gray-500">暂无解析配置</div>
           </div>
         </div>
+        <div v-else class="text-sm text-gray-500">暂无币种配置信息</div>
       </div>
 
       <!-- 创建信息 -->
@@ -156,9 +214,7 @@
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div>
             <label class="block text-sm font-medium text-gray-500">创建交易</label>
-            <p class="mt-1 text-sm text-gray-900 font-mono cursor-pointer hover:text-blue-600" @click="copyToClipboard(contract.creation_tx, $event)">
-              {{ contract.creation_tx || 'N/A' }}
-            </p>
+            <p class="mt-1 text-sm text-gray-900 font-mono cursor-pointer hover:text-blue-600" @click="copyToClipboard(contract.creation_tx, $event)">{{ contract.creation_tx || 'N/A' }}</p>
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-500">创建区块</label>
@@ -186,21 +242,42 @@
         </div>
         <h3 class="text-lg font-medium text-gray-900 mb-2">加载失败</h3>
         <p class="text-gray-500 mb-4">{{ errorMessage || '无法加载合约信息' }}</p>
-        <button 
-          @click="loadContractData" 
-          class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700"
-        >
-          重试
-        </button>
+        <button @click="loadContractData" class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700">重试</button>
       </div>
     </div>
   </div>
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, computed } from 'vue'
+import { ref, onMounted, computed, defineComponent, h } from 'vue'
 import { useRoute } from 'vue-router'
 import { getContractByAddress } from '@/api/contracts'
+import { getCoinConfigMaintenance } from '@/api/coinconfig'
+
+// 本地展示组件 Field（只读）
+const Field = defineComponent({
+  name: 'Field',
+  props: {
+    label: { type: String, required: true },
+    value: { type: [String, Number, Object, Array], default: '' },
+    mono: { type: Boolean, default: false },
+    pre: { type: Boolean, default: false },
+    class: { type: String, default: '' }
+  },
+  setup(props) {
+    const valueText = () => {
+      if (props.value === null || props.value === undefined) return ''
+      if (typeof props.value === 'string' || typeof props.value === 'number') return String(props.value)
+      try { return JSON.stringify(props.value) } catch { return String(props.value) }
+    }
+    return () => h('div', { class: props.class || '' }, [
+      h('label', { class: 'block text-sm font-medium text-gray-500 mb-1' }, props.label),
+      props.pre
+        ? h('pre', { class: 'text-xs text-gray-800 whitespace-pre-wrap bg-gray-50 p-2 rounded border' }, valueText())
+        : h('p', { class: `mt-1 text-sm text-gray-900 ${props.mono ? 'font-mono break-all' : ''}` }, valueText())
+    ])
+  }
+})
 
 // 路由参数
 const route = useRoute()
@@ -210,6 +287,43 @@ const contractAddress = computed(() => route.params.address as string)
 const contract = ref<any>(null)
 const isLoading = ref(true)
 const errorMessage = ref('')
+
+// 币种配置
+const coinConfig = ref<any | null>(null)
+const parserConfigs = ref<any[]>([])
+
+// 加载合约数据
+const loadContractData = async () => {
+  try {
+    isLoading.value = true
+    errorMessage.value = ''
+    const response: any = await getContractByAddress(contractAddress.value)
+    if (response && response.success === true) {
+      contract.value = response.data
+      // 加载币种配置（基于合约地址）
+      try {
+        const cfgRes: any = await getCoinConfigMaintenance(contractAddress.value)
+        if (cfgRes?.success) {
+          coinConfig.value = cfgRes.data?.coin_config || null
+          parserConfigs.value = cfgRes.data?.parser_configs || []
+        } else {
+          coinConfig.value = null
+          parserConfigs.value = []
+        }
+      } catch {
+        coinConfig.value = null
+        parserConfigs.value = []
+      }
+    } else {
+      throw new Error(response?.message || '获取合约信息失败')
+    }
+  } catch (error) {
+    console.error('Failed to load contract:', error)
+    errorMessage.value = error instanceof Error ? error.message : '加载合约信息失败'
+  } finally {
+    isLoading.value = false
+  }
+}
 
 // 复制提示（跟随点击位置）
 const showToast = ref(false)
@@ -224,69 +338,32 @@ const toastStyle = computed(() => {
 })
 let toastTimer: any = null
 
-// 计算属性
-const parsedInterfaces = computed(() => {
-  if (!contract.value?.interfaces) return []
-  try {
-    return JSON.parse(contract.value.interfaces)
-  } catch {
-    return []
-  }
+// 解析型计算属性（提供安全默认值）
+const parsedInterfaces = computed<string[]>(() => {
+  const val = contract.value?.interfaces
+  if (!val) return []
+  try { return Array.isArray(val) ? val : JSON.parse(val) } catch { return [] }
 })
-
-const parsedMethods = computed(() => {
-  if (!contract.value?.methods) return []
-  try {
-    return JSON.parse(contract.value.methods)
-  } catch {
-    return []
-  }
+const parsedMethods = computed<string[]>(() => {
+  const val = contract.value?.methods
+  if (!val) return []
+  try { return Array.isArray(val) ? val : JSON.parse(val) } catch { return [] }
 })
-
-const parsedEvents = computed(() => {
-  if (!contract.value?.events) return []
-  try {
-    return JSON.parse(contract.value.events)
-  } catch {
-    return []
-  }
+const parsedEvents = computed<string[]>(() => {
+  const val = contract.value?.events
+  if (!val) return []
+  try { return Array.isArray(val) ? val : JSON.parse(val) } catch { return [] }
 })
-
-const parsedMetadata = computed(() => {
-  if (!contract.value?.metadata) return null
-  try {
-    return JSON.parse(contract.value.metadata)
-  } catch {
-    return null
-  }
+const parsedMetadata = computed<Record<string, any> | null>(() => {
+  const val = contract.value?.metadata
+  if (!val) return null
+  try { return typeof val === 'object' ? val : JSON.parse(val) } catch { return null }
 })
-
-// 加载合约数据
-const loadContractData = async () => {
-  try {
-    isLoading.value = true
-    errorMessage.value = ''
-    
-    const response = await getContractByAddress(contractAddress.value)
-    
-    if (response && response.success === true) {
-      contract.value = response.data
-    } else {
-      throw new Error(response?.message || '获取合约信息失败')
-    }
-  } catch (error) {
-    console.error('Failed to load contract:', error)
-    errorMessage.value = error instanceof Error ? error.message : '加载合约信息失败'
-  } finally {
-    isLoading.value = false
-  }
-}
 
 // 复制到剪贴板
 const copyToClipboard = async (text: string, e?: MouseEvent) => {
   try {
     await navigator.clipboard.writeText(text)
-    // 计算提示位置
     if (e) {
       const offset = 12
       toastX.value = Math.min(window.innerWidth - 16, e.clientX + offset)
@@ -369,7 +446,24 @@ const getTypeText = (type: string) => {
   }
 }
 
-// 组件挂载时加载数据
+const formatCoinType = (type: number) => {
+  switch (type) {
+    case 0:
+      return '原生币'
+    case 1:
+      return 'ERC-20'
+    case 2:
+      return 'ERC-223'
+    case 3:
+      return 'ERC-721'
+    case 4:
+      return 'ERC-1155'
+    default:
+      return '未知'
+  }
+}
+
+// 组件挂载
 onMounted(async () => {
   await loadContractData()
 })

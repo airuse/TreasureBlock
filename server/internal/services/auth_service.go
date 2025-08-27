@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"log"
 	"time"
 
 	"blockChainBrowser/server/internal/dto"
@@ -33,32 +34,60 @@ type AuthService interface {
 }
 
 type authService struct {
-	userRepo       repository.UserRepository
-	apiKeyRepo     repository.APIKeyRepository
-	requestLogRepo repository.RequestLogRepository
-	jwtSecret      string
-	jwtExpiration  time.Duration
+	userRepo          repository.UserRepository
+	apiKeyRepo        repository.APIKeyRepository
+	requestLogRepo    repository.RequestLogRepository
+	permissionService *PermissionService // 添加权限服务
+	jwtSecret         string
+	jwtExpiration     time.Duration
 }
 
 func NewAuthService(
 	userRepo repository.UserRepository,
 	apiKeyRepo repository.APIKeyRepository,
 	requestLogRepo repository.RequestLogRepository,
+	permissionService *PermissionService, // 添加权限服务参数
 	jwtSecret string,
 	jwtExpiration time.Duration,
 ) AuthService {
-	return &authService{
-		userRepo:       userRepo,
-		apiKeyRepo:     apiKeyRepo,
-		requestLogRepo: requestLogRepo,
-		jwtSecret:      jwtSecret,
-		jwtExpiration:  jwtExpiration,
+	service := &authService{
+		userRepo:          userRepo,
+		apiKeyRepo:        apiKeyRepo,
+		requestLogRepo:    requestLogRepo,
+		permissionService: permissionService, // 设置权限服务
+		jwtSecret:         jwtSecret,
+		jwtExpiration:     jwtExpiration,
 	}
+
+	// 初始化默认角色和权限
+	go func() {
+		if err := permissionService.InitializeDefaultRoles(); err != nil {
+			log.Printf("初始化默认角色和权限失败: %v", err)
+		}
+	}()
+
+	return service
 }
 
+// Register 用户注册
 func (s *authService) Register(req *dto.RegisterRequest) (*models.User, error) {
+	// 验证用户名
+	if req.Username == "" || len(req.Username) < 3 {
+		return nil, errors.New("用户名至少需要3个字符")
+	}
+
+	// 验证邮箱格式
+	if req.Email == "" {
+		return nil, errors.New("邮箱不能为空")
+	}
+
+	// 验证密码强度
+	if len(req.Password) < 6 {
+		return nil, errors.New("密码至少需要6个字符")
+	}
+
 	// 检查用户名是否已存在
-	exists, err := s.userRepo.IsUsernameExists(req.Username)
+	exists, err := s.userRepo.ExistsByUsername(req.Username)
 	if err != nil {
 		return nil, fmt.Errorf("检查用户名失败: %w", err)
 	}
@@ -67,7 +96,7 @@ func (s *authService) Register(req *dto.RegisterRequest) (*models.User, error) {
 	}
 
 	// 检查邮箱是否已存在
-	exists, err = s.userRepo.IsEmailExists(req.Email)
+	exists, err = s.userRepo.ExistsByEmail(req.Email)
 	if err != nil {
 		return nil, fmt.Errorf("检查邮箱失败: %w", err)
 	}
@@ -81,46 +110,57 @@ func (s *authService) Register(req *dto.RegisterRequest) (*models.User, error) {
 		return nil, fmt.Errorf("密码加密失败: %w", err)
 	}
 
+	// 检查是否是第一个用户
+	isFirstUser, err := s.userRepo.IsFirstUser()
+	if err != nil {
+		return nil, err
+	}
+
 	// 创建用户
 	user := &models.User{
 		Username: req.Username,
 		Email:    req.Email,
 		Password: string(hashedPassword),
-		IsActive: true,
+		Role:     "user", // 默认为普通用户
+		Status:   1,      // 默认启用
 	}
 
-	err = s.userRepo.Create(user)
-	if err != nil {
+	// 如果是第一个用户，设置为管理员
+	if isFirstUser {
+		user.Role = "administrator"
+		log.Printf("第一个用户 %s 自动设置为管理员", req.Username)
+	}
+
+	if err := s.userRepo.Create(user); err != nil {
 		return nil, fmt.Errorf("创建用户失败: %w", err)
+	}
+
+	// 如果是第一个用户，确保角色权限系统已初始化
+	if isFirstUser {
+		if err := s.permissionService.SetFirstUserAsAdmin(); err != nil {
+			log.Printf("设置第一个用户为管理员失败: %v", err)
+		}
 	}
 
 	return user, nil
 }
 
+// Login 用户登录
 func (s *authService) Login(req *dto.LoginRequest) (*dto.LoginResponse, error) {
-	// 根据用户名查找用户
+	// 获取用户
 	user, err := s.userRepo.GetByUsername(req.Username)
 	if err != nil {
 		return nil, errors.New("用户名或密码错误")
 	}
 
-	// 检查用户是否激活
-	if !user.IsActive {
+	// 检查用户状态
+	if user.Status != 1 {
 		return nil, errors.New("用户账户已被禁用")
 	}
 
 	// 验证密码
-	err = bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password))
-	if err != nil {
+	if err := bcrypt.CompareHashAndPassword([]byte(user.Password), []byte(req.Password)); err != nil {
 		return nil, errors.New("用户名或密码错误")
-	}
-
-	// 更新最后登录时间
-	now := time.Now()
-	err = s.userRepo.UpdateLastLogin(user.ID, now)
-	if err != nil {
-		// 不影响登录流程，只记录错误
-		fmt.Printf("更新用户最后登录时间失败: %v\n", err)
 	}
 
 	// 生成JWT令牌
@@ -128,6 +168,9 @@ func (s *authService) Login(req *dto.LoginRequest) (*dto.LoginResponse, error) {
 	if err != nil {
 		return nil, fmt.Errorf("生成令牌失败: %w", err)
 	}
+
+	// 更新最后登录时间（如果需要的话，可以在用户模型中添加LastLogin字段）
+	// 这里暂时不更新，因为当前用户模型没有LastLogin字段
 
 	return &dto.LoginResponse{
 		UserID:    user.ID,
@@ -346,44 +389,52 @@ func (s *authService) DeleteAPIKey(userID uint, keyID uint) error {
 }
 
 func (s *authService) GetAccessToken(req *dto.GetAccessTokenRequest) (*dto.GetAccessTokenResponse, error) {
-	// 根据API Key获取密钥记录
-	key, err := s.apiKeyRepo.GetActiveByAPIKey(req.APIKey)
-	if err != nil {
-		return nil, err
-	}
-
-	// 验证Secret Key
-	err = bcrypt.CompareHashAndPassword([]byte(key.SecretKey), []byte(req.SecretKey))
+	// 验证API密钥
+	apiKey, err := s.apiKeyRepo.GetByAPIKey(req.APIKey)
 	if err != nil {
 		return nil, errors.New("API密钥或Secret密钥错误")
 	}
 
-	// 更新最后使用时间和使用次数
-	now := time.Now()
-	_ = s.apiKeyRepo.UpdateLastUsed(key.ID, now)
-	_ = s.apiKeyRepo.IncrementUsageCount(key.ID)
+	// 检查API密钥是否有效
+	if !apiKey.IsActive {
+		return nil, errors.New("API密钥无效或已过期")
+	}
 
-	// 生成Access Token
-	expiresAt := time.Now().Add(s.jwtExpiration)
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{
-		"user_id":    key.UserID,
-		"api_key_id": key.ID,
-		"username":   key.User.Username,
-		"exp":        expiresAt.Unix(),
-		"iat":        time.Now().Unix(),
-		"type":       "access_token",
-	})
+	// 验证Secret密钥
+	if apiKey.SecretKey != req.SecretKey {
+		return nil, errors.New("API密钥或Secret密钥错误")
+	}
 
-	tokenString, err := token.SignedString([]byte(s.jwtSecret))
+	// 获取用户信息
+	user, err := s.userRepo.GetByID(apiKey.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("获取用户信息失败: %w", err)
+	}
+
+	// 检查用户状态
+	if user.Status != 1 {
+		return nil, errors.New("用户账户已被禁用")
+	}
+
+	// 生成访问令牌
+	token, expiresAt, err := s.generateJWT(user.ID, user.Username)
 	if err != nil {
 		return nil, fmt.Errorf("生成访问令牌失败: %w", err)
 	}
 
+	// 更新API密钥使用统计
+	now := time.Now()
+	apiKey.LastUsedAt = &now
+	apiKey.UsageCount++
+	if err := s.apiKeyRepo.Update(apiKey); err != nil {
+		// 不影响令牌生成，只记录错误
+		log.Printf("更新API密钥使用统计失败: %v", err)
+	}
+
 	return &dto.GetAccessTokenResponse{
-		AccessToken: tokenString,
-		TokenType:   "Bearer",
-		ExpiresIn:   int64(s.jwtExpiration.Seconds()),
+		AccessToken: token,
 		ExpiresAt:   expiresAt.Unix(),
+		TokenType:   "Bearer",
 	}, nil
 }
 
@@ -409,17 +460,15 @@ func (s *authService) ValidateAccessToken(tokenString string) (*jwt.Token, error
 func (s *authService) GetUserProfile(userID uint) (*dto.UserProfileResponse, error) {
 	user, err := s.userRepo.GetByID(userID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("获取用户失败: %w", err)
 	}
 
 	return &dto.UserProfileResponse{
-		ID:        user.ID,
-		Username:  user.Username,
-		Email:     user.Email,
-		IsActive:  user.IsActive,
-		LastLogin: user.LastLogin,
-		CreatedAt: user.CreatedAt,
-		UpdatedAt: user.UpdatedAt,
+		ID:       user.ID,
+		Username: user.Username,
+		Email:    user.Email,
+		Role:     user.Role,
+		Status:   user.Status,
 	}, nil
 }
 
@@ -539,7 +588,7 @@ func (s *authService) RefreshToken(userID uint) (*dto.LoginResponse, error) {
 	}
 
 	// 检查用户是否激活
-	if !user.IsActive {
+	if user.Status != 1 {
 		return nil, errors.New("用户账户已被禁用")
 	}
 
@@ -549,12 +598,7 @@ func (s *authService) RefreshToken(userID uint) (*dto.LoginResponse, error) {
 		return nil, fmt.Errorf("生成令牌失败: %w", err)
 	}
 
-	// 更新用户最后登录时间
-	user.LastLogin = &expiresAt
-	if err := s.userRepo.Update(user); err != nil {
-		// 记录错误但不影响令牌刷新
-		// 这里可以添加日志记录
-	}
+	// 不更新LastLogin（模型无此字段）
 
 	return &dto.LoginResponse{
 		UserID:    user.ID,

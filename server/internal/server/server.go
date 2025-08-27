@@ -58,10 +58,15 @@ func New() *Server {
 	baseConfigService := services.NewBaseConfigService(baseConfigRepo)
 	coinConfigService := services.NewCoinConfigService(coinConfigRepo)
 	contractService := services.NewContractService(contractRepo, coinConfigRepo)
+	// 权限服务依赖
+	roleRepo := repository.NewRoleRepository(database.GetDB())
+	permissionRepo := repository.NewPermissionRepository(database.GetDB())
+	permissionService := services.NewPermissionService(userRepo, roleRepo, permissionRepo)
 	authService := services.NewAuthService(
 		userRepo,
 		apiKeyRepo,
 		requestLogRepo,
+		permissionService,
 		config.AppConfig.Security.JWTSecret,
 		config.AppConfig.Security.JWTExpiration,
 	)

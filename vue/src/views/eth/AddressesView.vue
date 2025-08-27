@@ -1376,13 +1376,14 @@
               <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                 <div class="flex items-center space-x-2">
                   <button 
+                    v-if="isAdmin"
                     @click="editAddress(address)"
                     class="text-blue-600 hover:text-blue-800 text-xs"
                   >
                     编辑
                   </button>
                   <button 
-                    v-if="address.isErc20"
+                    v-if="isAdmin && address.isErc20"
                     @click="maintainCoinConfig(address)"
                     class="text-green-600 hover:text-green-800 text-xs"
                   >
@@ -1470,6 +1471,7 @@ import { getContracts, createOrUpdateContract, getContractByAddress } from '@/ap
 import { getCoinConfigMaintenance, createCoinConfig } from '@/api/coinconfig'
 import { batchSaveParserConfigs, type ParserConfig } from '@/api/parser-configs'
 import { showSuccess, showError } from '@/composables/useToast'
+import request from '@/api/request'
 
 // 定义实际后端响应的类型（因为与标准PaginatedResponse不同）
 interface ContractsResponse {
@@ -1810,7 +1812,7 @@ const editAddress = async (address: Address) => {
         creationBlock: latestContract.creation_block || address.creationBlock || 0
       }
       
-      showSuccess('已加载最新合约信息')
+      
     } else {
       console.warn('获取最新合约数据失败，使用本地数据')
       // 如果获取失败，回退到使用本地数据
@@ -2734,8 +2736,25 @@ watch(pageSize, async () => {
   await loadData()
 })
 
+// 是否管理员（用于权限控制）
+const isAdmin = ref(false)
+
+// 获取用户资料并设置角色
+const fetchUserProfile = async () => {
+  try {
+    const res: any = await request.get('/api/user/profile')
+    if (res?.success && res.data) {
+      const role = res.data.role || res.data.Role || ''
+      isAdmin.value = role.toLowerCase() === 'administrator'
+    }
+  } catch (e) {
+    isAdmin.value = false
+  }
+}
+
 // 组件挂载时加载数据
 onMounted(async () => {
+  await fetchUserProfile()
   await loadData()
 })
 </script> 

@@ -90,6 +90,10 @@ func autoMigrate() error {
 		&models.TransactionReceipt{},
 		&models.ParserConfig{},
 		&models.Contract{},
+		&models.Role{},
+		&models.Permission{},
+		&models.RolePermission{},
+		&models.UserRole{},
 	)
 }
 

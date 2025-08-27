@@ -84,13 +84,13 @@ type UpdateAPIKeyRequest struct {
 
 // UserProfileResponse 用户资料响应
 type UserProfileResponse struct {
-	ID        uint       `json:"id" example:"1"`
-	Username  string     `json:"username" example:"john_doe"`
-	Email     string     `json:"email" example:"john@example.com"`
-	IsActive  bool       `json:"is_active" example:"true"`
-	LastLogin *time.Time `json:"last_login,omitempty" example:"2024-01-01T12:00:00Z"`
-	CreatedAt time.Time  `json:"created_at" example:"2024-01-01T00:00:00Z"`
-	UpdatedAt time.Time  `json:"updated_at" example:"2024-01-01T00:00:00Z"`
+	ID        uint      `json:"id" example:"1"`
+	Username  string    `json:"username" example:"john_doe"`
+	Email     string    `json:"email" example:"john@example.com"`
+	Role      string    `json:"role" example:"administrator"`
+	Status    int       `json:"status" example:"1"`
+	CreatedAt time.Time `json:"created_at" example:"2024-01-01T00:00:00Z"`
+	UpdatedAt time.Time `json:"updated_at" example:"2024-01-01T00:00:00Z"`
 }
 
 // ChangePasswordRequest 修改密码请求
