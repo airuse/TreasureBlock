@@ -427,10 +427,57 @@ func (bs *BlockScanner) submitTransactionsToServer(chainName string, block *mode
 		return fmt.Errorf("scanner API instance not available")
 	}
 
+	if len(transactions) == 0 {
+		logrus.Infof("[%s] No transactions to upload for block %d", chainName, block.Height)
+		return nil
+	}
+
+	// 获取链配置
+	chainConfig := bs.getChainConfig(chainName)
+	if chainConfig == nil {
+		return fmt.Errorf("failed to get chain config for %s", chainName)
+	}
+
+	// 根据配置选择上传方式
+	if chainConfig.Scan.BatchUpload {
+		return bs.submitTransactionsBatch(chainName, block, transactions, blockID, chainConfig, api)
+	} else {
+		return bs.submitTransactionsIndividually(chainName, block, transactions, blockID, chainConfig, api)
+	}
+}
+
+// submitTransactionsBatch 批量上传交易
+func (bs *BlockScanner) submitTransactionsBatch(chainName string, block *models.Block, transactions []map[string]interface{}, blockID uint64, chainConfig *config.ChainConfig, api *pkg.ScannerAPI) error {
+	// 构建批量交易请求数据
+	var batchTransactions []map[string]interface{}
+
+	for _, tx := range transactions {
+		txRequest := bs.buildTransactionRequest(chainName, block, tx, blockID)
+		batchTransactions = append(batchTransactions, txRequest)
+	}
+
+	// 使用批量上传API
+	logrus.Infof("[%s] Uploading %d transactions in batch for block %d", chainName, len(batchTransactions), block.Height)
+
+	if err := api.UploadTransactionsBatch(batchTransactions); err != nil {
+		// 检查是否为致命错误，如果是就直接退出程序
+		if strings.Contains(strings.ToUpper(err.Error()), "BLOCK_TRANSACTION_FAILED") {
+			pkg.HandleFatalError(err, "交易批量上传失败")
+		}
+
+		return fmt.Errorf("batch upload transactions failed: %w", err)
+	}
+
+	logrus.Infof("[%s] Successfully uploaded %d transactions in batch for block %d", chainName, len(batchTransactions), block.Height)
+	return nil
+}
+
+// submitTransactionsIndividually 单个上传交易（保持原有逻辑作为备选）
+func (bs *BlockScanner) submitTransactionsIndividually(chainName string, block *models.Block, transactions []map[string]interface{}, blockID uint64, chainConfig *config.ChainConfig, api *pkg.ScannerAPI) error {
 	// 并发上限：使用链配置的 MaxConcurrent，缺省为 10
 	concurrency := 10
-	if chainCfg := bs.getChainConfig(chainName); chainCfg != nil && chainCfg.Scan.MaxConcurrent > 0 {
-		concurrency = chainCfg.Scan.MaxConcurrent
+	if chainConfig.Scan.MaxConcurrent > 0 {
+		concurrency = chainConfig.Scan.MaxConcurrent
 	}
 
 	// 并发上传交易，全部完成后再返回
@@ -450,98 +497,8 @@ func (bs *BlockScanner) submitTransactionsToServer(chainName string, block *mode
 			sem <- struct{}{}
 			defer func() { <-sem }()
 
-			// 提取/推导地址
-			fromAddress := ""
-			toAddress := ""
-			if v, ok := tx["from"].(string); ok {
-				fromAddress = v
-			}
-			if v, ok := tx["to"].(string); ok {
-				toAddress = v
-			}
-			// 针对BTC从vin/vout推导
-			if chainName == "btc" {
-				if fromAddress == "" {
-					if vin, ok := tx["vin"].([]interface{}); ok && len(vin) > 0 {
-						if in0, ok := vin[0].(map[string]interface{}); ok {
-							if prevout, ok := in0["prevout"].(map[string]interface{}); ok {
-								if spk, ok := prevout["scriptPubKey"].(map[string]interface{}); ok {
-									if addrs, ok := spk["addresses"].([]interface{}); ok && len(addrs) > 0 {
-										if a0, ok := addrs[0].(string); ok {
-											fromAddress = a0
-										}
-									}
-								}
-							}
-						}
-					}
-				}
-				if toAddress == "" {
-					if vout, ok := tx["vout"].([]interface{}); ok && len(vout) > 0 {
-						if out0, ok := vout[0].(map[string]interface{}); ok {
-							if spk, ok := out0["scriptPubKey"].(map[string]interface{}); ok {
-								if addrs, ok := spk["addresses"].([]interface{}); ok && len(addrs) > 0 {
-									if a0, ok := addrs[0].(string); ok {
-										toAddress = a0
-									}
-								}
-							}
-						}
-					}
-				}
-			}
-
 			// 构建交易请求数据
-			txRequest := map[string]interface{}{
-				"tx_id": tx["hash"],
-				"tx_type": func() uint8 {
-					if txType, ok := tx["type"].(uint8); ok {
-						return txType
-					}
-					return 0
-				}(),
-				"confirm":      1,
-				"status":       1,
-				"send_status":  1,
-				"balance":      "0",
-				"amount":       tx["value"],
-				"trans_id":     0,
-				"chain":        chainName,
-				"symbol":       chainName,
-				"address_from": fromAddress,
-				"address_to":   toAddress,
-				"gas_limit":    tx["gasLimit"],
-				"gas_price":    tx["gasPrice"],
-				"gas_used":     tx["gasUsed"],
-				"fee":          "0",
-				"used_fee":     nil,
-				"height":       block.Height,
-				"block_id":     blockID,
-				"contract_addr": func() string {
-					if contractAddr, ok := tx["contract_address"].(string); ok {
-						return contractAddr
-					}
-					return ""
-				}(),
-				"hex":         tx["data"],
-				"tx_scene":    "blockchain_scan",
-				"remark":      "Scanned from blockchain",
-				"block_index": tx["block_index"],
-				"nonce":       tx["nonce"],
-				"logs":        tx["logs"],
-				"receipt":     tx["receipt"],
-			}
-
-			// 添加EIP-1559相关字段（如果存在）
-			if maxFeePerGas, ok := tx["maxFeePerGas"]; ok {
-				txRequest["max_fee_per_gas"] = maxFeePerGas
-			}
-			if maxPriorityFeePerGas, ok := tx["maxPriorityFeePerGas"]; ok {
-				txRequest["max_priority_fee_per_gas"] = maxPriorityFeePerGas
-			}
-			if effectiveGasPrice, ok := tx["effectiveGasPrice"]; ok {
-				txRequest["effective_gas_price"] = effectiveGasPrice
-			}
+			txRequest := bs.buildTransactionRequest(chainName, block, tx, blockID)
 
 			// 上传交易
 			if err := api.UploadTransaction(txRequest); err != nil {
@@ -571,7 +528,107 @@ func (bs *BlockScanner) submitTransactionsToServer(chainName string, block *mode
 		return fmt.Errorf("%d transactions failed to upload", failed)
 	}
 
+	logrus.Infof("[%s] Successfully uploaded %d transactions individually for block %d", chainName, len(transactions), block.Height)
 	return nil
+}
+
+// buildTransactionRequest 构建交易请求数据
+func (bs *BlockScanner) buildTransactionRequest(chainName string, block *models.Block, tx map[string]interface{}, blockID uint64) map[string]interface{} {
+	// 提取/推导地址
+	fromAddress := ""
+	toAddress := ""
+	if v, ok := tx["from"].(string); ok {
+		fromAddress = v
+	}
+	if v, ok := tx["to"].(string); ok {
+		toAddress = v
+	}
+
+	// 针对BTC从vin/vout推导
+	if chainName == "btc" {
+		if fromAddress == "" {
+			if vin, ok := tx["vin"].([]interface{}); ok && len(vin) > 0 {
+				if in0, ok := vin[0].(map[string]interface{}); ok {
+					if prevout, ok := in0["prevout"].(map[string]interface{}); ok {
+						if spk, ok := prevout["scriptPubKey"].(map[string]interface{}); ok {
+							if addrs, ok := spk["addresses"].([]interface{}); ok && len(addrs) > 0 {
+								if a0, ok := addrs[0].(string); ok {
+									fromAddress = a0
+								}
+							}
+						}
+					}
+				}
+			}
+		}
+		if toAddress == "" {
+			if vout, ok := tx["vout"].([]interface{}); ok && len(vout) > 0 {
+				if out0, ok := vout[0].(map[string]interface{}); ok {
+					if spk, ok := out0["scriptPubKey"].(map[string]interface{}); ok {
+						if addrs, ok := spk["addresses"].([]interface{}); ok && len(addrs) > 0 {
+							if a0, ok := addrs[0].(string); ok {
+								toAddress = a0
+							}
+						}
+					}
+				}
+			}
+		}
+	}
+
+	// 构建交易请求数据
+	txRequest := map[string]interface{}{
+		"tx_id": tx["hash"],
+		"tx_type": func() uint8 {
+			if txType, ok := tx["type"].(uint8); ok {
+				return txType
+			}
+			return 0
+		}(),
+		"confirm":      1,
+		"status":       1,
+		"send_status":  1,
+		"balance":      "0",
+		"amount":       tx["value"],
+		"trans_id":     0,
+		"chain":        chainName,
+		"symbol":       chainName,
+		"address_from": fromAddress,
+		"address_to":   toAddress,
+		"gas_limit":    tx["gasLimit"],
+		"gas_price":    tx["gasPrice"],
+		"gas_used":     tx["gasUsed"],
+		"fee":          "0",
+		"used_fee":     nil,
+		"height":       block.Height,
+		"block_id":     blockID,
+		"contract_addr": func() string {
+			if contractAddr, ok := tx["contract_address"].(string); ok {
+				return contractAddr
+			}
+			return ""
+		}(),
+		"hex":         tx["data"],
+		"tx_scene":    "blockchain_scan",
+		"remark":      "Scanned from blockchain",
+		"block_index": tx["block_index"],
+		"nonce":       tx["nonce"],
+		"logs":        tx["logs"],
+		"receipt":     tx["receipt"],
+	}
+
+	// 添加EIP-1559相关字段（如果存在）
+	if maxFeePerGas, ok := tx["maxFeePerGas"]; ok {
+		txRequest["max_fee_per_gas"] = maxFeePerGas
+	}
+	if maxPriorityFeePerGas, ok := tx["maxPriorityFeePerGas"]; ok {
+		txRequest["max_priority_fee_per_gas"] = maxPriorityFeePerGas
+	}
+	if effectiveGasPrice, ok := tx["effectiveGasPrice"]; ok {
+		txRequest["effective_gas_price"] = effectiveGasPrice
+	}
+
+	return txRequest
 }
 
 // verifyBlock 验证区块

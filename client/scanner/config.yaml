@@ -115,6 +115,10 @@ blockchain:
         rescan_interval: 120s        # 重新扫描的时间间隔
         enable_mempool: true         # 是否启用内存池（mempool）扫描
         mempool_interval: 10s        # 内存池扫描的时间间隔
+        # 批量上传配置（推荐启用以提高性能）
+        batch_upload: true           # 是否启用批量上传交易（推荐启用）
+        batch_size: 2000             # 批量上传大小，默认1000条交易
+        batch_timeout: 30s           # 批量上传超时时间
 
 log:
   level: "info"

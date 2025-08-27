@@ -344,6 +344,178 @@ func (h *TransactionHandler) CreateTransaction(c *gin.Context) {
 	c.JSON(http.StatusCreated, gin.H{"success": true, "data": response, "message": "交易和凭证创建成功"})
 }
 
+// CreateTransactionsBatch 批量创建交易记录
+func (h *TransactionHandler) CreateTransactionsBatch(c *gin.Context) {
+	var rawData map[string]interface{}
+	if err := c.ShouldBindJSON(&rawData); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "请求参数验证失败", "details": err.Error()})
+		return
+	}
+
+	// 解析批量请求
+	transactionsData, ok := rawData["transactions"].([]interface{})
+	if !ok {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "transactions字段格式错误，应为数组"})
+		return
+	}
+
+	if len(transactionsData) == 0 {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "transactions数组不能为空"})
+		return
+	}
+
+	// 限制批量数量，防止请求过大
+	const maxBatchSize = 2000
+	if len(transactionsData) > maxBatchSize {
+		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": fmt.Sprintf("批量数量超过限制，最大支持%d条", maxBatchSize)})
+		return
+	}
+
+	// 批量处理交易
+	var successCount int
+	var failedCount int
+	var errors []string
+
+	for i, txData := range transactionsData {
+		txMap, ok := txData.(map[string]interface{})
+		if !ok {
+			errors = append(errors, fmt.Sprintf("第%d条交易数据格式错误", i+1))
+			failedCount++
+			continue
+		}
+
+		// 转换为CreateTransactionRequest
+		var req dto.CreateTransactionRequest
+		if err := mapToStruct(txMap, &req); err != nil {
+			errors = append(errors, fmt.Sprintf("第%d条交易数据转换失败: %v", i+1, err))
+			failedCount++
+			continue
+		}
+
+		// 验证超时检查
+		if req.BlockID != nil {
+			if err := h.checkBlockVerificationTimeout(c.Request.Context(), *req.BlockID); err != nil {
+				errors = append(errors, fmt.Sprintf("第%d条交易区块验证超时: %v", i+1, err))
+				failedCount++
+				continue
+			}
+		}
+
+		// 处理交易凭证
+		if req.Receipt != nil {
+			receiptData := map[string]interface{}{"tx_hash": req.TxID, "chain": req.Chain}
+
+			// 设置 block_id 字段
+			if req.BlockID != nil {
+				receiptData["block_id"] = *req.BlockID
+			}
+
+			// type -> tx_type (convert interface{} to uint8)
+			if req.Receipt.Type != nil {
+				if v := convertToUint64(req.Receipt.Type); v != nil {
+					if *v <= 255 {
+						receiptData["tx_type"] = uint8(*v)
+					}
+				}
+			}
+			if req.Receipt.Root != nil {
+				receiptData["post_state"] = *req.Receipt.Root
+			}
+			if req.Receipt.Status != nil {
+				if v := convertToUint64(req.Receipt.Status); v != nil {
+					receiptData["status"] = *v
+				}
+			}
+			// 处理新增字段：EffectiveGasPrice, BlobGasUsed, BlobGasPrice
+			if req.Receipt.EffectiveGasPrice != nil {
+				if v, ok := req.Receipt.EffectiveGasPrice.(string); ok {
+					receiptData["effective_gas_price"] = v
+				}
+			}
+			if req.Receipt.BlobGasUsed != nil {
+				if v := convertToUint64(req.Receipt.BlobGasUsed); v != nil {
+					receiptData["blob_gas_used"] = *v
+				}
+			}
+			if req.Receipt.BlobGasPrice != nil {
+				if v, ok := req.Receipt.BlobGasPrice.(string); ok {
+					receiptData["blob_gas_price"] = v
+				}
+			}
+			if req.Receipt.LogsBloom != nil {
+				receiptData["bloom"] = *req.Receipt.LogsBloom
+			}
+			if req.Receipt.Logs != nil {
+				receiptData["logs_data"] = req.Receipt.Logs
+			}
+			if req.Receipt.ContractAddress != nil {
+				receiptData["contract_address"] = *req.Receipt.ContractAddress
+			}
+			if req.Receipt.GasUsed != nil {
+				if v := convertToUint64(req.Receipt.GasUsed); v != nil {
+					receiptData["gas_used"] = *v
+				}
+			}
+			if req.Receipt.BlockHash != nil {
+				receiptData["block_hash"] = *req.Receipt.BlockHash
+			}
+			if req.Receipt.BlockNumber != nil {
+				if v := convertToUint64(req.Receipt.BlockNumber); v != nil {
+					receiptData["block_number"] = *v
+				}
+			}
+			if req.Receipt.TransactionIndex != nil {
+				if v := convertToUint(req.Receipt.TransactionIndex); v != nil {
+					receiptData["transaction_index"] = *v
+				}
+			}
+			if req.Receipt.CumulativeGasUsed != nil {
+				if v := convertToUint64(req.Receipt.CumulativeGasUsed); v != nil {
+					receiptData["cumulative_gas_used"] = *v
+				}
+			}
+			if req.Receipt.ReceiptType != nil {
+				if v := convertToUint64(req.Receipt.ReceiptType); v != nil {
+					receiptData["receipt_type"] = *v
+				}
+			}
+
+			if err := h.receiptService.CreateTransactionReceipt(c.Request.Context(), receiptData); err != nil {
+				errors = append(errors, fmt.Sprintf("第%d条交易凭证创建失败: %v", i+1, err))
+				failedCount++
+				continue
+			}
+		}
+
+		// 创建交易记录
+		tx := req.ToModel()
+		if err := h.txService.CreateTransaction(c.Request.Context(), tx); err != nil {
+			errors = append(errors, fmt.Sprintf("第%d条交易创建失败: %v", i+1, err))
+			failedCount++
+			continue
+		}
+
+		successCount++
+	}
+
+	// 构建响应
+	response := gin.H{
+		"success":       true,
+		"total_count":   len(transactionsData),
+		"success_count": successCount,
+		"failed_count":  failedCount,
+	}
+
+	if failedCount > 0 {
+		response["errors"] = errors
+		response["message"] = fmt.Sprintf("批量创建完成，成功%d条，失败%d条", successCount, failedCount)
+	} else {
+		response["message"] = fmt.Sprintf("批量创建成功，共%d条交易", successCount)
+	}
+
+	c.JSON(http.StatusCreated, response)
+}
+
 // checkBlockVerificationTimeout 检查区块验证是否超时
 func (h *TransactionHandler) checkBlockVerificationTimeout(ctx context.Context, blockID uint64) error {
 	// 获取区块信息

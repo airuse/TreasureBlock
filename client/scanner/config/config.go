@@ -77,6 +77,10 @@ type ChainScanConfig struct {
 	RescanInterval  time.Duration `yaml:"rescan_interval"`  // 重新扫描间隔（用于处理分叉）
 	EnableMempool   bool          `yaml:"enable_mempool"`   // 是否启用内存池监控
 	MempoolInterval time.Duration `yaml:"mempool_interval"` // 内存池检查间隔
+	// 批量上传配置
+	BatchUpload  bool          `yaml:"batch_upload"`  // 是否启用批量上传（推荐启用）
+	BatchSize    int           `yaml:"batch_size"`    // 批量上传大小，默认1000
+	BatchTimeout time.Duration `yaml:"batch_timeout"` // 批量上传超时时间
 }
 
 // LogConfig 日志配置
@@ -365,6 +369,13 @@ func setDefaultChainScanConfigs() {
 		}
 		if chainConfig.Scan.MempoolInterval == 0 {
 			chainConfig.Scan.MempoolInterval = 10 * time.Second // 默认内存池检查间隔
+		}
+		// 批量上传配置默认值
+		if chainConfig.Scan.BatchSize == 0 {
+			chainConfig.Scan.BatchSize = 1000 // 默认批量大小
+		}
+		if chainConfig.Scan.BatchTimeout == 0 {
+			chainConfig.Scan.BatchTimeout = 30 * time.Second // 默认批量上传超时时间
 		}
 
 		// 更新配置

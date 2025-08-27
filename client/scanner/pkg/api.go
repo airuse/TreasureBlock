@@ -223,6 +223,22 @@ func (api *ScannerAPI) UploadTransaction(tx map[string]interface{}) error {
 	return nil
 }
 
+// UploadTransactionsBatch 批量上传交易
+func (api *ScannerAPI) UploadTransactionsBatch(transactions []map[string]interface{}) error {
+	if len(transactions) == 0 {
+		return nil
+	}
+
+	payload := map[string]interface{}{
+		"transactions": transactions,
+	}
+
+	if err := api.client.POST("/api/v1/transactions/create/batch", payload, nil); err != nil {
+		return fmt.Errorf("batch upload transactions failed: %w", err)
+	}
+	return nil
+}
+
 // CreateCoinConfig 创建币种配置
 func (api *ScannerAPI) CreateCoinConfig(config *CreateCoinConfigRequest) error {
 	if err := api.client.POST("/api/v1/coin-configs", config, nil); err != nil {

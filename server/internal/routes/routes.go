@@ -153,6 +153,7 @@ func SetupRoutes(
 			transactions.GET("/block-hash/:blockHash", txHandler.GetTransactionsByBlockHash)       // 根据区块哈希获取交易
 			transactions.GET("/block-height/:blockHeight", txHandler.GetTransactionsByBlockHeight) // 根据区块高度获取交易
 			transactions.POST("/create", txHandler.CreateTransaction)                              // 创建交易记录
+			transactions.POST("/create/batch", txHandler.CreateTransactionsBatch)                  // 批量创建交易记录
 			transactions.GET("/receipt/:hash", txHandler.GetTransactionReceiptByHash)              // 根据哈希获取交易凭证
 		}
 
