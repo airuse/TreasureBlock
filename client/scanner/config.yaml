@@ -5,8 +5,8 @@ server:
   environment: "development"  # 新增环境标识，当 production 时用的是线上环境 development 是本地环境
   # api_key: "ak_c9da22f76fa7a6870b10b2f074db1b31"
   # secret_key: "sk_7cad6309637b7c0c374c9974c68a0beeb65ca80093ea4c4bc60a04181eb1f5fa"
-  api_key: "ak_531afe50ef47457b9784916bd12fd93d"
-  secret_key: "sk_70833628875a73e97a96cbe5585530b092d08dcbba0f816956b99428ba79f15f"
+  api_key: "ak_228cf550718b5c62531012d1adbdd8c5"
+  secret_key: "sk_bf891da223a63a1a8bef9eca43cab54a95612d8e93c2be8a4e820eed2db25261"
   # # HTTPS相关配置
   tls:
     enabled: true

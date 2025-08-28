@@ -1,0 +1,265 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "收益模块API",
+    "version": "v1",
+    "description": "用户扫块收益相关接口"
+  },
+  "paths": {
+    "/earnings/balance": {
+      "get": {
+        "summary": "获取用户余额",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "获取用户余额成功",
+                  "data": {
+                    "id": 1,
+                    "user_id": 1,
+                    "balance": 3221,
+                    "total_earned": 3221,
+                    "total_spent": 0,
+                    "last_earning_time": "2025-08-27T17:49:47.702+08:00",
+                    "last_spend_time": null,
+                    "created_at": "2025-08-27T10:00:00Z",
+                    "updated_at": "2025-08-27T17:49:47.702+08:00"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/earnings/records": {
+      "get": {
+        "summary": "获取用户收益记录列表",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "获取收益记录成功",
+                  "data": {
+                    "pagination": {
+                      "page": 1,
+                      "page_size": 10,
+                      "total": 18
+                    },
+                    "records": [
+                      {
+                        "id": 18,
+                        "user_id": 1,
+                        "amount": 193,
+                        "type": "add",
+                        "source": "block_verification",
+                        "source_id": 1007,
+                        "source_chain": "eth",
+                        "block_height": 23201391,
+                        "transaction_count": 193,
+                        "description": "扫块收益 - 区块高度: 23201391, 交易数量: 193",
+                        "balance_before": 3028,
+                        "balance_after": 3221,
+                        "created_at": "2025-08-27T17:49:47.702+08:00",
+                        "updated_at": "2025-08-27T17:49:47.702+08:00"
+                      },
+                      {
+                        "id": 17,
+                        "user_id": 1,
+                        "amount": 146,
+                        "type": "add",
+                        "source": "block_verification",
+                        "source_id": 1006,
+                        "block_height": 23201390,
+                        "transaction_count": 146,
+                        "description": "扫块收益 - 区块高度: 23201390, 交易数量: 146",
+                        "balance_before": 2882,
+                        "balance_after": 3028,
+                        "created_at": "2025-08-27T17:49:39.486+08:00",
+                        "updated_at": "2025-08-27T17:49:39.486+08:00"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/earnings/records/{id}": {
+      "get": {
+        "summary": "获取收益记录详情",
+        "parameters": [
+          {
+            "name": "id",
+            "in": "path",
+            "required": true,
+            "schema": {
+              "type": "integer"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "获取收益记录详情成功",
+                  "data": {
+                    "id": 1,
+                    "user_id": 1,
+                    "block_hash": "0x1234567890abcdef1234567890abcdef12345678",
+                    "block_height": 12345678,
+                    "amount": 0.5,
+                    "status": "confirmed",
+                    "timestamp": "2024-01-15T10:00:00Z",
+                    "created_at": "2024-01-15T10:00:00Z",
+                    "updated_at": "2024-01-15T10:00:00Z",
+                    "transaction_hash": "0xabcdef1234567890abcdef1234567890abcdef12",
+                    "gas_used": 21000,
+                    "gas_price": "20000000000",
+                    "network_fee": 0.00042,
+                    "net_amount": 0.49958,
+                    "description": "区块12345678扫块收益"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/earnings/stats": {
+      "get": {
+        "summary": "获取用户收益统计",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "获取收益统计成功",
+                  "data": {
+                    "user_id": 1,
+                    "total_earnings": 3221,
+                    "total_spendings": 0,
+                    "current_balance": 3221,
+                    "block_count": 18,
+                    "transaction_count": 3221
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/earnings/trend": {
+      "get": {
+        "summary": "获取收益趋势数据",
+        "parameters": [
+          {
+            "name": "hours",
+            "in": "query",
+            "description": "查询小时数（1-24，默认2小时）",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "minimum": 1,
+              "maximum": 24,
+              "default": 2
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "获取收益趋势成功",
+                  "data": [
+                    {
+                      "timestamp": "15:30",
+                      "amount": 193,
+                      "block_height": 23201391,
+                      "transaction_count": 193,
+                      "source_chain": "eth"
+                    },
+                    {
+                      "timestamp": "16:45",
+                      "amount": 146,
+                      "block_height": 23201390,
+                      "transaction_count": 146,
+                      "source_chain": "eth"
+                    },
+                    {
+                      "timestamp": "17:20",
+                      "amount": 202,
+                      "block_height": 23201389,
+                      "transaction_count": 202,
+                      "source_chain": "eth"
+                    }
+                  ]
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/earnings/transfer": {
+      "post": {
+        "summary": "转账T币",
+        "requestBody": {
+          "content": {
+            "application/json": {
+              "schema": {
+                "type": "object",
+                "properties": {
+                  "to_user_id": {
+                    "type": "integer"
+                  },
+                  "amount": {
+                    "type": "number"
+                  },
+                  "description": {
+                    "type": "string"
+                  }
+                }
+              }
+            }
+          }
+        },
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "转账成功",
+                  "data": {
+                    "id": 1,
+                    "from_user_id": 1,
+                    "to_user_id": 2,
+                    "amount": 10.0,
+                    "status": "completed",
+                    "created_at": "2024-01-15T10:30:00Z",
+                    "completed_at": "2024-01-15T10:30:05Z",
+                    "description": "转账给用户2"
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -27,9 +27,11 @@ func SetupRoutes(
 	userAddressHandler *handlers.UserAddressHandler,
 	baseConfigHandler *handlers.BaseConfigHandler,
 	homeHandler *handlers.HomeHandler,
+	earningsHandler *handlers.EarningsHandler,
 	authService services.AuthService,
 	apiKeyRepo repository.APIKeyRepository,
 	requestLogRepo repository.RequestLogRepository,
+	earningsService services.EarningsService,
 	tlsEnabled bool, // 添加TLS配置参数
 ) *gin.Engine {
 	router := gin.Default()
@@ -120,7 +122,7 @@ func SetupRoutes(
 	}
 
 	// 区块验证相关路由
-	blockVerificationHandler := handlers.NewBlockVerificationHandler(blockVerificationService)
+	blockVerificationHandler := handlers.NewBlockVerificationHandler(blockVerificationService, earningsService)
 
 	// 需要AccessToken认证的API路由（区块链数据API）
 	v1 := api.Group("/v1")
@@ -226,6 +228,17 @@ func SetupRoutes(
 		scanner := v1.Group("/scanner")
 		{
 			scanner.GET("/getconfig", scannerHandler.GetScannerConfig)
+		}
+
+		// 收益相关路由
+		earnings := v1.Group("/earnings")
+		{
+			earnings.GET("/balance", earningsHandler.GetUserBalance)              // 获取用户余额
+			earnings.GET("/records", earningsHandler.GetUserEarningsRecords)      // 获取收益记录列表
+			earnings.GET("/records/:id", earningsHandler.GetEarningsRecordDetail) // 获取收益记录详情
+			earnings.GET("/stats", earningsHandler.GetUserEarningsStats)          // 获取收益统计
+			earnings.GET("/trend", earningsHandler.GetEarningsTrend)              // 获取收益趋势数据
+			earnings.POST("/transfer", earningsHandler.TransferTCoins)            // 转账T币
 		}
 	}
 

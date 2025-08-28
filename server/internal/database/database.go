@@ -94,6 +94,8 @@ func autoMigrate() error {
 		&models.Permission{},
 		&models.RolePermission{},
 		&models.UserRole{},
+		&models.UserBalance{},
+		&models.EarningsRecord{},
 	)
 }
 

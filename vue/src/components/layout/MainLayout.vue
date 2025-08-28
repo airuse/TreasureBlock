@@ -6,8 +6,8 @@
         <div class="flex justify-between h-16">
           <div class="flex items-center">
             <div class="flex-shrink-0 flex items-center">
-              <div class="w-16 h-8 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg flex items-center justify-center mr-3">
-                <span class="text-white font-bold text-xs">JDGBCB</span>
+              <div class="w-28 h-8 bg-gradient-to-r from-blue-600 to-purple-600 rounded-lg flex items-center justify-center mr-3">
+                <span class="text-white font-bold text-xs">TreasureBlock</span>
               </div>
               <h1 class="text-xl font-semibold text-gray-900">区块链浏览器</h1>
             </div>

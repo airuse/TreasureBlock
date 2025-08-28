@@ -9,6 +9,7 @@ import * as coinconfig from './coinconfig'
 import * as contracts from './contracts'
 import * as parserConfigs from './parser-configs'
 import * as home from './home'
+import * as earnings from './earnings'
 
 // 统一导出所有API模块
 export {
@@ -21,7 +22,8 @@ export {
   coinconfig,
   contracts,
   parserConfigs,
-  home
+  home,
+  earnings
 }
 
 // 默认导出所有模块
@@ -35,5 +37,6 @@ export default {
   coinconfig,
   contracts,
   parserConfigs,
-  home
+  home,
+  earnings
 }

@@ -22,16 +22,16 @@
         <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">收益概览</h3>
         <div class="grid grid-cols-1 md:grid-cols-3 gap-6">
           <div class="text-center">
-            <div class="text-3xl font-bold text-green-600">{{ totalEarnings }}</div>
-            <div class="text-sm text-gray-500">总收益 (TB)</div>
+            <div class="text-3xl font-bold text-green-600">{{ currentBalance }}</div>
+            <div class="text-sm text-gray-500">当前余额 (TB)</div>
           </div>
           <div class="text-center">
             <div class="text-3xl font-bold text-blue-600">{{ todayEarnings }}</div>
             <div class="text-sm text-gray-500">今日收益 (TB)</div>
           </div>
           <div class="text-center">
-            <div class="text-3xl font-bold text-purple-600">{{ monthlyEarnings }}</div>
-            <div class="text-sm text-gray-500">本月收益 (TB)</div>
+            <div class="text-3xl font-bold text-purple-600">{{ totalTransactionCount }}</div>
+            <div class="text-sm text-gray-500">总扫块交易数</div>
           </div>
         </div>
       </div>
@@ -40,13 +40,9 @@
     <!-- 收益图表 -->
     <div class="bg-white shadow rounded-lg">
       <div class="px-4 py-5 sm:p-6">
-        <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">收益趋势</h3>
-        <div class="h-64 bg-gray-50 rounded-lg flex items-center justify-center">
-          <div class="text-center text-gray-500">
-            <ChartBarIcon class="mx-auto h-12 w-12 text-gray-400 mb-2" />
-            <p>收益图表将在这里显示</p>
-            <p class="text-sm">支持按日、周、月查看收益趋势</p>
-          </div>
+        <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">近1小时收益趋势</h3>
+        <div class="h-96 bg-gray-50 rounded-lg p-6">
+          <div ref="earningsChart" class="w-full h-full"></div>
         </div>
       </div>
     </div>
@@ -70,33 +66,35 @@
             <thead class="bg-gray-50">
               <tr>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">时间</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">区块哈希</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">区块高度</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">交易数量</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">收益 (TB)</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">余额变化</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
               </tr>
             </thead>
             <tbody class="bg-white divide-y divide-gray-200">
               <tr v-for="earning in earningsList" :key="earning.id" class="hover:bg-gray-50">
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {{ formatTime(earning.timestamp) }}
+                  {{ formatTime(new Date(earning.created_at)) }}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  <code class="bg-gray-100 px-2 py-1 rounded text-xs font-mono">
-                    {{ earning.blockHash.substring(0, 10) }}...{{ earning.blockHash.substring(earning.blockHash.length - 8) }}
-                  </code>
+                  <span class="font-mono text-blue-600">{{ earning.block_height }}</span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <span class="font-medium">{{ earning.transaction_count }}</span>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-green-600">
                   +{{ earning.amount }}
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap">
-                  <span :class="getStatusClass(earning.status)" class="inline-flex px-2 py-1 text-xs font-semibold rounded-full">
-                    {{ getStatusText(earning.status) }}
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-600">
+                  <span class="text-xs">
+                    {{ earning.balance_before }} → {{ earning.balance_after }}
                   </span>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium">
                   <button
-                    @click="viewBlockDetails(earning.blockHash)"
+                    @click="viewBlockDetails(earning.block_height || 0)"
                     class="text-blue-600 hover:text-blue-900"
                   >
                     查看区块
@@ -135,13 +133,26 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted, watch } from 'vue'
-import { ChartBarIcon } from '@heroicons/vue/24/outline'
+import { ref, onMounted, watch, nextTick, onUnmounted } from 'vue'
+import { 
+  getUserBalance, 
+  getUserEarningsRecords, 
+  getUserEarningsStats,
+  getEarningsRecordDetail,
+  getEarningsTrend
+} from '@/api/earnings'
+import type { 
+  UserBalance, 
+  EarningRecord, 
+  EarningsStats,
+  EarningsTrendPoint
+} from '@/types/earnings'
+import { showSuccess, showError } from '@/composables/useToast'
 
 // 响应式数据
-const totalEarnings = ref(12.5)
-const todayEarnings = ref(0.8)
-const monthlyEarnings = ref(3.2)
+const currentBalance = ref(0)
+const todayEarnings = ref(0)
+const totalTransactionCount = ref(0)
 const selectedPeriod = ref(30)
 const currentPage = ref(1)
 const pageSize = ref(10)
@@ -149,48 +160,362 @@ const totalItems = ref(0)
 const totalPages = ref(0)
 
 // 收益记录列表
-const earningsList = ref([
-  {
-    id: 1,
-    timestamp: new Date(Date.now() - 1000 * 60 * 30),
-    blockHash: '0x1234567890abcdef1234567890abcdef12345678',
-    amount: 0.5,
-    status: 'confirmed'
-  },
-  {
-    id: 2,
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 2),
-    blockHash: '0xabcdef1234567890abcdef1234567890abcdef12',
-    amount: 0.3,
-    status: 'pending'
-  },
-  {
-    id: 3,
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24),
-    blockHash: '0x567890abcdef1234567890abcdef1234567890ab',
-    amount: 0.7,
-    status: 'confirmed'
-  }
-])
+const earningsList = ref<EarningRecord[]>([])
 
-// 获取状态样式
-const getStatusClass = (status: string) => {
-  switch (status) {
-    case 'confirmed': return 'bg-green-100 text-green-800'
-    case 'pending': return 'bg-yellow-100 text-yellow-800'
-    case 'failed': return 'bg-red-100 text-red-800'
-    default: return 'bg-gray-100 text-gray-800'
+// 收益趋势图表引用
+const earningsChart = ref<HTMLDivElement>()
+
+// 定时刷新相关
+const refreshTimer = ref<NodeJS.Timeout | null>(null)
+const REFRESH_INTERVAL = 30 * 1000 // 30秒
+
+// 创建收益趋势图表
+const createEarningsChart = async () => {
+  try {
+    // 调用专门的趋势接口获取数据
+    const trendResponse = await getEarningsTrend(1) // 改为1小时
+    
+    if (trendResponse.success && trendResponse.data) {
+      const trendData = trendResponse.data
+      
+      // 数据累加处理：按时间戳分组并累加amount
+      const aggregatedData = aggregateTrendData(trendData)
+      
+      // 准备图表数据
+      const labels = aggregatedData.map(point => point.timestamp)
+      const data = aggregatedData.map(point => point.amount)
+      
+      console.log('📊 原始数据点数量:', trendData.length)
+      console.log('📊 累加后数据点数量:', aggregatedData.length)
+      console.log('📊 累加后的数据:', aggregatedData)
+      
+      // 创建简单的SVG图表
+      if (earningsChart.value) {
+        const svg = createSVGChart(labels, data)
+        earningsChart.value.innerHTML = svg
+      }
+    } else {
+      console.error('获取收益趋势数据失败:', trendResponse.message)
+      // 显示空数据提示
+      if (earningsChart.value) {
+        earningsChart.value.innerHTML = createSVGChart([], [])
+      }
+    }
+  } catch (error) {
+    console.error('创建收益趋势图表失败:', error)
+    // 显示错误提示
+    if (earningsChart.value) {
+      earningsChart.value.innerHTML = createSVGChart([], [])
+    }
   }
 }
 
-// 获取状态文本
-const getStatusText = (status: string) => {
-  switch (status) {
-    case 'confirmed': return '已确认'
-    case 'pending': return '待确认'
-    case 'failed': return '失败'
-    default: return '未知'
+// 数据累加处理函数
+const aggregateTrendData = (trendData: any[]) => {
+  // 使用Map按时间戳分组
+  const timeGroupMap = new Map<string, { amount: number; count: number; blockHeights: number[]; transactionCounts: number[] }>()
+  
+  trendData.forEach(point => {
+    const timestamp = point.timestamp
+    const amount = point.amount || 0
+    
+    if (timeGroupMap.has(timestamp)) {
+      // 累加已存在的时间戳数据
+      const existing = timeGroupMap.get(timestamp)!
+      existing.amount += amount
+      existing.count += 1
+      existing.blockHeights.push(point.block_height)
+      existing.transactionCounts.push(point.transaction_count)
+    } else {
+      // 创建新的时间戳分组
+      timeGroupMap.set(timestamp, {
+        amount: amount,
+        count: 1,
+        blockHeights: [point.block_height],
+        transactionCounts: [point.transaction_count]
+      })
+    }
+  })
+  
+  // 转换为数组并按时间排序
+  const aggregatedArray = Array.from(timeGroupMap.entries()).map(([timestamp, data]) => ({
+    timestamp,
+    amount: data.amount,
+    count: data.count,
+    blockHeights: data.blockHeights,
+    transactionCounts: data.transactionCounts,
+    // 计算平均值（可选）
+    avgAmount: Math.round(data.amount / data.count),
+    totalTransactions: data.transactionCounts.reduce((sum, count) => sum + count, 0)
+  }))
+  
+  // 按时间戳排序（HH:MM格式）
+  aggregatedArray.sort((a, b) => {
+    const timeA = new Date(`2000-01-01 ${a.timestamp}`)
+    const timeB = new Date(`2000-01-01 ${b.timestamp}`)
+    return timeA.getTime() - timeB.getTime()
+  })
+  
+  return aggregatedArray
+}
+
+// 启动定时刷新
+const startAutoRefresh = () => {
+  // 清除可能存在的旧定时器
+  if (refreshTimer.value) {
+    clearInterval(refreshTimer.value)
   }
+  
+  // 设置新的定时器，每30秒刷新一次
+  refreshTimer.value = setInterval(async () => {
+    console.log('🔄 自动刷新收益趋势图表...')
+    await createEarningsChart()
+  }, REFRESH_INTERVAL)
+  
+  console.log('✅ 收益趋势图表自动刷新已启动，每30秒刷新一次')
+}
+
+// 停止定时刷新
+const stopAutoRefresh = () => {
+  if (refreshTimer.value) {
+    clearInterval(refreshTimer.value)
+    refreshTimer.value = null
+    console.log('⏹️ 收益趋势图表自动刷新已停止')
+  }
+}
+
+// 创建SVG图表
+const createSVGChart = (labels: string[], data: number[]) => {
+  if (data.length === 0) {
+    return `
+      <div class="flex items-center justify-center h-full">
+        <div class="text-center text-gray-500">
+          <svg class="mx-auto h-12 w-12 text-gray-400 mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 19v-6a2 2 0 00-2-2H5a2 2 0 00-2 2v6a2 2 0 002 2h2a2 2 0 002-2zm0 0V9a2 2 0 012-2h2a2 2 0 012 2v10m-6 0a2 2 0 002 2h2a2 2 0 002-2zm0 0V5a2 2 0 012-2h2a2 2 0 012 2v14a2 2 0 01-2 2h-2a2 2 0 01-2-2z" />
+          </svg>
+          <p>暂无收益数据</p>
+          <p class="text-sm">近1小时内没有扫块收益记录</p>
+        </div>
+      </div>
+    `
+  }
+  
+  // 生成完整的1小时时间轴（每1分钟一个点）
+  const generateFullTimeAxis = () => {
+    const now = new Date()
+    const timePoints = []
+    for (let i = 59; i >= 0; i--) { // 60个点，覆盖1小时
+      const time = new Date(now.getTime() - i * 60 * 1000) // 每1分钟
+      const hour = time.getHours()
+      const minute = time.getMinutes()
+      timePoints.push(`${hour.toString().padStart(2, '0')}:${minute.toString().padStart(2, '0')}`)
+    }
+    return timePoints
+  }
+  
+  const fullTimeAxis = generateFullTimeAxis()
+  
+  // 将实际数据映射到完整时间轴上
+  const mappedData = fullTimeAxis.map(timePoint => {
+    const dataIndex = labels.findIndex(label => label === timePoint)
+    return dataIndex >= 0 ? data[dataIndex] : 0 // 没有数据的时间点设为0
+  })
+  
+  // 图表尺寸 - 使用容器真实像素尺寸，避免字体拉伸失真
+  // 父容器是 Tailwind 的 h-96 (384px) 并有 p-6 (24px) 的内边距
+  const parent = earningsChart.value
+  const containerWidth = parent ? parent.clientWidth : 800
+  const containerHeight = parent ? parent.clientHeight : 300
+  const padding = { top: 30, right: 40, bottom: 40, left: 50 }
+  const chartWidth = containerWidth - padding.left - padding.right
+  const chartHeight = containerHeight - padding.top - padding.bottom
+  
+  const maxValue = Math.max(...mappedData) || 100
+  const minValue = 0 // 从0开始，确保没有数据的时间点也能显示
+  
+  // 创建路径点
+  const points = mappedData.map((value, index) => {
+    const x = padding.left + (index / (fullTimeAxis.length - 1)) * chartWidth
+    const y = padding.top + chartHeight - ((value - minValue) / (maxValue - minValue)) * chartHeight
+    return `${x},${y}`
+  }).join(' ')
+  
+  // 创建区域填充路径
+  const areaPoints = [
+    ...points.split(' ').map(point => point.split(',')[0] + ',' + point.split(',')[1]),
+    ...points.split(' ').reverse().map(point => point.split(',')[0] + ',' + (containerHeight - padding.bottom))
+  ].join(' ')
+  
+  // 生成Y轴标签 - 修正排序：最下边是0，最上边是最大值
+  const yAxisLabels = Array.from({length: 6}, (_, i) => {
+    const value = minValue + (i / 5) * (maxValue - minValue)
+    // 修正Y坐标：i=0时y最大（顶部），i=5时y最小（底部）
+    const y = padding.top + ((5 - i) / 5) * chartHeight
+    return { value: Math.round(value), y }
+  })
+  
+  return `
+    <svg width="${containerWidth}" height="${containerHeight}" style="cursor: crosshair;">
+      <defs>
+        <linearGradient id="areaGradient" x1="0%" y1="0%" x2="0%" y2="100%">
+          <stop offset="0%" style="stop-color:rgba(59,130,246,0.4);stop-opacity:1" />
+          <stop offset="100%" style="stop-color:rgba(59,130,246,0.05);stop-opacity:1" />
+        </linearGradient>
+      </defs>
+      
+      <!-- 背景网格线 -->
+      <g stroke="rgba(0,0,0,0.08)" stroke-width="1" fill="none">
+        ${yAxisLabels.map(label => 
+          `<line x1="${padding.left}" y1="${label.y}" x2="${containerWidth - padding.right}" y2="${label.y}" />`
+        ).join('')}
+      </g>
+      
+      <!-- Y轴标签 -->
+      <g>
+        ${yAxisLabels.map(label => 
+          `<text x="${padding.left - 8}" y="${label.y + 4}" text-anchor="end" font-size="10" fill="#6b7280">${label.value}</text>`
+        ).join('')}
+      </g>
+      
+      <!-- 区域填充 -->
+      <polygon points="${areaPoints}" fill="url(#areaGradient)" />
+      
+      <!-- 折线 -->
+      <polyline points="${points}" fill="none" stroke="rgb(59,130,246)" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" />
+      
+      <!-- 数据点（只显示有数据的时间点） -->
+      ${mappedData.map((value, index) => {
+        if (value === 0) return '' // 跳过没有数据的时间点
+        const x = padding.left + (index / (fullTimeAxis.length - 1)) * chartWidth
+        const y = padding.top + chartHeight - ((value - minValue) / (maxValue - minValue)) * chartHeight
+        return `<circle 
+          cx="${x}" 
+          cy="${y}" 
+          r="5" 
+          fill="white" 
+          stroke="rgb(59,130,246)" 
+          stroke-width="3"
+          style="cursor: pointer; transition: all 0.2s ease;"
+          onmouseover="showDataPointTooltip(event, ${value}, '${fullTimeAxis[index]}', ${index + 1}); this.setAttribute('r', '8'); this.setAttribute('stroke-width', '4'); this.style.fill='rgb(59,130,246)';"
+          onmouseout="hideDataPointTooltip(); this.setAttribute('r', '5'); this.setAttribute('stroke-width', '3'); this.style.fill='white';"
+        />`
+      }).join('')}
+      
+      <!-- X轴标签（30个单位间隔，每个间隔内放两个点） -->
+      ${fullTimeAxis.map((label, index) => {
+        // 每2个点显示一个标签，实现30个单位间隔
+        if (index % 2 !== 0) return ''
+        const x = padding.left + (index / (fullTimeAxis.length - 1)) * chartWidth
+        const isDataPoint = mappedData[index] > 0
+        const color = isDataPoint ? '#1f2937' : '#9ca3af'
+        return `<text x="${x}" y="${containerHeight - padding.bottom + 14}" text-anchor="middle" font-size="10" fill="${color}">${label}</text>`
+      }).join('')}
+      
+      <!-- 图表标题 -->
+      <text x="${containerWidth / 2}" y="20" text-anchor="middle" font-size="12" fill="#1f2937" font-weight="600">收益趋势 (TB)</text>
+      
+      <!-- 说明文字 -->
+      <text x="${containerWidth / 2}" y="34" text-anchor="middle" font-size="10" fill="#6b7280">完整显示近1小时时间轴，每2分钟显示一个标签</text>
+    </svg>
+    
+    <!-- 数据点Tooltip -->
+    <div id="data-point-tooltip" style="
+      position: absolute;
+      background: rgba(0, 0, 0, 0.9);
+      color: white;
+      padding: 12px 16px;
+      border-radius: 8px;
+      font-size: 13px;
+      pointer-events: none;
+      z-index: 1000;
+      display: none;
+      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
+      backdrop-filter: blur(8px);
+      border: 1px solid rgba(255, 255, 255, 0.1);
+      min-width: 160px;
+    ">
+      <div style="font-weight: 600; margin-bottom: 8px; color: #60a5fa; font-size: 14px;" id="tooltip-title">数据点详情</div>
+      <div style="margin-bottom: 6px;">
+        <span style="color: #9ca3af;">时间:</span>
+        <span style="margin-left: 8px; font-weight: 500;" id="tooltip-time">--</span>
+      </div>
+      <div style="margin-bottom: 6px;">
+        <span style="color: #9ca3af;">收益:</span>
+        <span style="margin-left: 8px; font-weight: 500; color: #10b981;" id="tooltip-amount">--</span>
+        <span style="color: #6b7280; font-size: 12px;"> TB</span>
+      </div>
+      <div style="margin-bottom: 6px;">
+        <span style="color: #9ca3af;">位置:</span>
+        <span style="margin-left: 8px; font-weight: 500;" id="tooltip-position">--</span>
+      </div>
+      <div style="
+        position: absolute;
+        top: -6px;
+        left: 20px;
+        width: 12px;
+        height: 12px;
+        background: rgba(0, 0, 0, 0.9);
+        transform: rotate(45deg);
+        border-left: 1px solid rgba(255, 255, 255, 0.1);
+        border-top: 1px solid rgba(255, 255, 255, 0.1);
+      "></div>
+    </div>
+    
+    <script>
+      // 显示数据点Tooltip
+      function showDataPointTooltip(event, value, time, position) {
+        const tooltip = document.getElementById('data-point-tooltip')
+        const titleEl = document.getElementById('tooltip-title')
+        const timeEl = document.getElementById('tooltip-time')
+        const amountEl = document.getElementById('tooltip-amount')
+        const positionEl = document.getElementById('tooltip-position')
+        
+        // 设置内容
+        titleEl.textContent = '数据点详情'
+        timeEl.textContent = time
+        amountEl.textContent = value
+        positionEl.textContent = '第' + position + '个点'
+        
+        // 计算位置
+        const rect = event.target.getBoundingClientRect()
+        const tooltipWidth = 160
+        const tooltipHeight = 120
+        
+        let left = rect.left + rect.width / 2 - tooltipWidth / 2
+        let top = rect.top - tooltipHeight - 20
+        
+        // 确保tooltip不超出屏幕边界
+        if (left < 10) left = 10
+        if (left + tooltipWidth > window.innerWidth - 10) left = window.innerWidth - tooltipWidth - 10
+        if (top < 10) top = rect.bottom + 20
+        
+        tooltip.style.left = left + 'px'
+        tooltip.style.top = top + 'px'
+        tooltip.style.display = 'block'
+        
+        // 添加显示动画
+        tooltip.style.opacity = '0'
+        tooltip.style.transform = 'translateY(10px)'
+        tooltip.style.transition = 'all 0.2s ease'
+        
+        setTimeout(() => {
+          tooltip.style.opacity = '1'
+          tooltip.style.transform = 'translateY(0)'
+        }, 10)
+      }
+      
+      // 隐藏数据点Tooltip
+      function hideDataPointTooltip() {
+        const tooltip = document.getElementById('data-point-tooltip')
+        tooltip.style.opacity = '0'
+        tooltip.style.transform = 'translateY(10px)'
+        
+        setTimeout(() => {
+          tooltip.style.display = 'none'
+        }, 200)
+      }
+    </script>
+  `
 }
 
 // 格式化时间
@@ -205,9 +530,13 @@ const formatTime = (timestamp: Date) => {
 }
 
 // 查看区块详情
-const viewBlockDetails = (blockHash: string) => {
+const viewBlockDetails = (blockHeight: number) => {
+  if (!blockHeight) {
+    showError('无法查看区块详情：区块高度无效')
+    return
+  }
   // TODO: 跳转到区块详情页面
-  console.log('查看区块:', blockHash)
+  console.log('查看区块:', blockHeight)
 }
 
 // 分页方法
@@ -227,9 +556,44 @@ const nextPage = () => {
 
 // 加载收益数据
 const loadEarnings = async () => {
-  // TODO: 从API加载真实数据
-  totalItems.value = 25
-  totalPages.value = Math.ceil(totalItems.value / pageSize.value)
+  try {
+    // 加载收益记录列表
+    const recordsResponse = await getUserEarningsRecords({
+      page: currentPage.value,
+      page_size: pageSize.value,
+      period: selectedPeriod.value
+    })
+    
+    if (recordsResponse.success) {
+      console.log('🔍 收益记录响应数据:', recordsResponse)
+      console.log('🔍 收益记录数据类型:', typeof recordsResponse.data)
+      console.log('🔍 收益记录列表:', recordsResponse.data)
+      console.log('🔍 收益记录是否为数组:', Array.isArray(recordsResponse.data))
+      
+      // 安全检查：后端返回的是 {pagination: {...}, records: Array}
+      if (!recordsResponse.data || !Array.isArray(recordsResponse.data.records)) {
+        console.error('❌ 收益记录数据格式错误:', recordsResponse.data)
+        earningsList.value = []
+        totalItems.value = 0
+        totalPages.value = 0
+        showError('收益记录数据格式错误')
+        return
+      }
+      
+      // 直接使用后端返回的数据，类型已经匹配
+      earningsList.value = recordsResponse.data.records
+      
+      totalItems.value = recordsResponse.data.pagination.total
+      totalPages.value = Math.ceil(totalItems.value / pageSize.value)
+      
+      console.log('🔍 转换后的收益记录:', earningsList.value)
+    } else {
+      showError(`获取收益记录失败: ${recordsResponse.message || '未知错误'}`)
+    }
+  } catch (error) {
+    console.error('加载收益数据失败:', error)
+    showError(`加载收益数据失败: ${error instanceof Error ? error.message : '未知错误'}`)
+  }
 }
 
 // 监听周期变化
@@ -238,7 +602,55 @@ watch(selectedPeriod, () => {
   loadEarnings()
 })
 
-onMounted(() => {
-  loadEarnings()
+// 加载用户余额和统计数据
+const loadUserData = async () => {
+  try {
+    // 并行加载用户余额和收益统计
+    const [balanceResponse, statsResponse] = await Promise.all([
+      getUserBalance(),
+      getUserEarningsStats()
+    ])
+    
+    if (balanceResponse.success) {
+      const balance = balanceResponse.data
+      console.log('🔍 用户余额数据:', balance)
+      
+      // 设置当前余额
+      currentBalance.value = balance.balance || 0
+      // 暂时使用总收益，后续可以从统计接口获取今日数据
+      todayEarnings.value = balance.total_earned || 0
+    }
+    
+    if (statsResponse.success) {
+      const stats = statsResponse.data
+      console.log('🔍 收益统计数据:', stats)
+      
+      // 设置总扫块交易数
+      totalTransactionCount.value = stats.transaction_count || 0
+      
+      // 如果余额接口没有返回今日收益，使用统计接口
+      if (todayEarnings.value === 0) {
+        todayEarnings.value = stats.total_earnings || 0
+      }
+    }
+  } catch (error) {
+    console.error('加载用户数据失败:', error)
+    showError(`加载用户数据失败: ${error instanceof Error ? error.message : '未知错误'}`)
+  }
+}
+
+// 组件挂载时加载数据
+onMounted(async () => {
+  await loadUserData()
+  await loadEarnings()
+  await createEarningsChart() // 独立加载图表数据
+  
+  // 启动自动刷新
+  startAutoRefresh()
+})
+
+// 组件卸载时清理定时器
+onUnmounted(() => {
+  stopAutoRefresh()
 })
 </script>

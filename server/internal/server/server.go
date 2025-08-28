@@ -46,6 +46,8 @@ func New() *Server {
 	userAddressRepo := repository.NewUserAddressRepository(database.GetDB())
 	parserConfigRepo := repository.NewParserConfigRepository(database.GetDB())
 	statsRepo := repository.NewStatsRepository()
+	earningsRepo := repository.NewEarningsRepository(database.GetDB())
+	userBalanceRepo := repository.NewUserBalanceRepository(database.GetDB())
 
 	// 创建解析配置服务
 	parserConfigService := services.NewParserConfigService(parserConfigRepo)
@@ -73,6 +75,9 @@ func New() *Server {
 	userAddressService := services.NewUserAddressService(userAddressRepo)
 	statsService := services.NewStatsService(statsRepo)
 
+	// 创建收益相关服务
+	earningsService := services.NewEarningsService(earningsRepo, userBalanceRepo)
+
 	// 创建交易凭证相关服务
 	transactionReceiptRepo := repository.NewTransactionReceiptRepository(database.GetDB())
 	transactionReceiptService := services.NewTransactionReceiptService(transactionReceiptRepo)
@@ -99,6 +104,7 @@ func New() *Server {
 	baseConfigHandler := handlers.NewBaseConfigHandler(baseConfigService)
 	parserConfigHandler := handlers.NewParserConfigHandler(parserConfigService)
 	homeHandler := handlers.NewHomeHandler(blockService, txService, statsService)
+	earningsHandler := handlers.NewEarningsHandler(earningsService)
 
 	// 启动WebSocket处理器
 	wsHandler.Start()
@@ -118,9 +124,11 @@ func New() *Server {
 		userAddressHandler,
 		baseConfigHandler,
 		homeHandler,
+		earningsHandler,
 		authService,
 		apiKeyRepo,
 		requestLogRepo,
+		earningsService,
 		config.AppConfig.Server.TLSEnabled, // 传递TLS配置
 	)
 

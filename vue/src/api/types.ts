@@ -17,6 +17,16 @@ export interface PaginatedResponse<T> extends ApiResponse<T[]> {
   }
 }
 
+// 后端实际返回的分页响应类型
+export interface BackendPaginatedResponse<T> extends ApiResponse<{
+  pagination: {
+    page: number
+    page_size: number
+    total: number
+  }
+  records: T[]
+}> {}
+
 // 分页请求参数
 export interface PaginationRequest {
   page: number

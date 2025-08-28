@@ -399,9 +399,9 @@ func (s *authService) GetAccessToken(req *dto.GetAccessTokenRequest) (*dto.GetAc
 	if !apiKey.IsActive {
 		return nil, errors.New("API密钥无效或已过期")
 	}
-
-	// 验证Secret密钥
-	if apiKey.SecretKey != req.SecretKey {
+	// 验证Secret密钥（使用bcrypt比较哈希值）
+	err = bcrypt.CompareHashAndPassword([]byte(apiKey.SecretKey), []byte(req.SecretKey))
+	if err != nil {
 		return nil, errors.New("API密钥或Secret密钥错误")
 	}
 
