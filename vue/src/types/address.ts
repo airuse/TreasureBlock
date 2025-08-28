@@ -19,30 +19,7 @@ export interface UserAddress {
   updated_at: string
 }
 
-// 地址详细信息类型（用于BTC地址页面）
-export interface AddressData {
-  address: string
-  balance: number
-  txCount: number
-  utxoCount: number
-  type: string
-  firstSeen: number
-  lastSeen: number
-  transactions: Array<{
-    hash: string
-    timestamp: number
-    type: string
-    amount: number
-    balance: number
-  }>
-  utxos: Array<{
-    txHash: string
-    vout: number
-    amount: number
-    confirmations: number
-    timestamp: number
-  }>
-}
+
 
 // 个人地址类型（用于个人地址管理页面）
 export interface PersonalAddress {

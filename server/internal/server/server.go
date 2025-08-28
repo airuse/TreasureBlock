@@ -72,7 +72,7 @@ func New() *Server {
 		config.AppConfig.Security.JWTSecret,
 		config.AppConfig.Security.JWTExpiration,
 	)
-	userAddressService := services.NewUserAddressService(userAddressRepo)
+	userAddressService := services.NewUserAddressService(userAddressRepo, blockRepo)
 	statsService := services.NewStatsService(statsRepo)
 
 	// 创建收益相关服务

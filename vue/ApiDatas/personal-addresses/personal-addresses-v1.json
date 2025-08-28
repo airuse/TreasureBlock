@@ -1,0 +1,172 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Personal Addresses API",
+    "version": "v1"
+  },
+  "paths": {
+    "/api/user/addresses": {
+      "post": {
+        "summary": "创建个人地址",
+        "description": "创建新的个人地址",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "地址创建成功",
+                  "data": {
+                    "id": 1,
+                    "address": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+                    "label": "我的主钱包",
+                    "type": "wallet",
+                    "balance": 2.5,
+                    "transaction_count": 15,
+                    "is_active": true,
+                    "created_height": 18945678,
+                    "created_at": "2023-12-21T10:30:56Z",
+                    "updated_at": "2023-12-21T10:30:56Z"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "获取个人地址列表",
+        "description": "获取当前用户的所有个人地址",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "获取地址列表成功",
+                  "data": {
+                    "data": [
+                      {
+                        "id": 1,
+                        "address": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+                        "label": "主钱包",
+                        "type": "wallet",
+                        "balance": 1.2,
+                        "transaction_count": 8,
+                        "is_active": true,
+                        "created_height": 18945678,
+                        "created_at": "2023-12-21T10:30:56Z",
+                        "updated_at": "2023-12-21T10:30:56Z"
+                      },
+                      {
+                        "id": 2,
+                        "address": "0x8ba1f109551bD432803012645Hac136c22C177e9",
+                        "label": "交易钱包",
+                        "type": "wallet",
+                        "balance": 0.8,
+                        "transaction_count": 5,
+                        "is_active": true,
+                        "created_height": 18945679,
+                        "created_at": "2023-12-21T10:30:56Z",
+                        "updated_at": "2023-12-21T10:30:56Z"
+                      },
+                      {
+                        "id": 3,
+                        "address": "0x1234567890123456789012345678901234567890",
+                        "label": "冷钱包",
+                        "type": "wallet",
+                        "balance": 0.5,
+                        "transaction_count": 2,
+                        "is_active": false,
+                        "created_height": 18945680,
+                        "created_at": "2023-12-21T10:30:56Z",
+                        "updated_at": "2023-12-21T10:30:56Z"
+                      }
+                    ]
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/user/addresses/{id}": {
+      "get": {
+        "summary": "获取地址详情",
+        "description": "根据ID获取指定地址的详细信息",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "获取地址详情成功",
+                  "data": {
+                    "id": 1,
+                    "address": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+                    "label": "我的主钱包",
+                    "balance": 2.5,
+                    "transactionCount": 15,
+                    "status": "active",
+                    "type": "wallet",
+                    "isActive": true,
+                    "notes": "主要使用的钱包地址",
+                    "createdAt": "2023-12-21T10:30:56Z",
+                    "updatedAt": "2023-12-21T10:30:56Z"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "put": {
+        "summary": "更新地址",
+        "description": "更新指定地址的信息",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "地址更新成功",
+                  "data": {
+                    "id": 1,
+                    "address": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+                    "label": "更新后的标签",
+                    "balance": 2.5,
+                    "transactionCount": 15,
+                    "status": "active",
+                    "type": "wallet",
+                    "isActive": true,
+                    "notes": "新的备注信息",
+                    "createdAt": "2023-12-21T10:30:56Z",
+                    "updatedAt": "2023-12-21T10:30:56Z"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "delete": {
+        "summary": "删除地址",
+        "description": "删除指定的个人地址",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "地址删除成功",
+                  "data": null
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

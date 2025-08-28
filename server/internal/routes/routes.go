@@ -99,11 +99,12 @@ func SetupRoutes(
 		// 用户地址管理
 		addresses := userAPI.Group("/addresses")
 		{
-			addresses.POST("", userAddressHandler.CreateAddress)       // 创建地址
-			addresses.GET("", userAddressHandler.GetUserAddresses)     // 获取地址列表
-			addresses.GET("/:id", userAddressHandler.GetAddressByID)   // 获取地址详情
-			addresses.PUT("/:id", userAddressHandler.UpdateAddress)    // 更新地址
-			addresses.DELETE("/:id", userAddressHandler.DeleteAddress) // 删除地址
+			addresses.POST("", userAddressHandler.CreateAddress)                      // 创建地址
+			addresses.GET("", userAddressHandler.GetUserAddresses)                    // 获取地址列表
+			addresses.GET("/:id", userAddressHandler.GetAddressByID)                  // 获取地址详情
+			addresses.PUT("/:id", userAddressHandler.UpdateAddress)                   // 更新地址
+			addresses.DELETE("/:id", userAddressHandler.DeleteAddress)                // 删除地址
+			addresses.GET("/transactions", userAddressHandler.GetAddressTransactions) // 获取地址交易列表
 		}
 	}
 

@@ -28,8 +28,8 @@ type Transaction struct {
 	Symbol string `json:"symbol" gorm:"type:varchar(20);not null;column:symbol;comment:币种"`
 
 	// 地址字段
-	AddressFrom string `json:"address_from" gorm:"type:varchar(120);not null;column:address_from;comment:发货人地址"`
-	AddressTo   string `json:"address_to" gorm:"type:varchar(120);not null;column:address_to;comment:收货人地址"`
+	AddressFrom string `json:"address_from" gorm:"type:varchar(120);not null;index;column:address_from;comment:发货人地址"`
+	AddressTo   string `json:"address_to" gorm:"type:varchar(120);not null;index;column:address_to;comment:收货人地址"`
 
 	// Gas相关字段（ETH特有，BTC可为空）
 	GasLimit uint   `json:"gas_limit" gorm:"type:int(11) unsigned;not null;column:gas_limit;comment:燃油限制"`

@@ -154,16 +154,12 @@ func (r *statsRepository) GetAverageBlockTime(ctx context.Context, chain string,
 	// 使用GORM查询，只获取验证通过的区块
 	var blocks []models.Block
 	err := r.db.WithContext(ctx).
-		Where("chain = ? AND timestamp >= ? AND verification_status = 1", chain, startTime).
+		Where("chain = ? AND created_at >= ? AND is_verified = 1", chain, startTime).
 		Order("height DESC").
 		Select("height, timestamp").
 		Find(&blocks).Error
 
 	if err != nil || len(blocks) < 2 {
-		// 如果没有足够的区块，返回默认值
-		if chain == "eth" {
-			return 12.0, nil // ETH默认出块时间12秒
-		}
 		return 0, err
 	}
 

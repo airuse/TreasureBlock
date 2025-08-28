@@ -14,6 +14,7 @@ type UserAddress struct {
 	Balance          float64   `json:"balance" gorm:"type:decimal(20,8);default:0"`
 	TransactionCount int64     `json:"transaction_count" gorm:"default:0"`
 	IsActive         bool      `json:"is_active" gorm:"default:true"`
+	CreatedHeight    uint64    `json:"created_height" gorm:"default:0"` // 创建时的区块高度
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
 

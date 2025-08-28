@@ -337,3 +337,45 @@ func NewTransactionListResponse(txs []*models.Transaction, total int64, page, pa
 		TotalPages:   totalPages,
 	}
 }
+
+// AddressTransactionResponse 地址交易响应
+type AddressTransactionResponse struct {
+	ID                   uint   `json:"id"`
+	TxID                 string `json:"tx_id"`
+	Height               uint64 `json:"height"`                   // 区块高度
+	BlockIndex           uint   `json:"block_index"`              // 所在区块位置
+	AddressFrom          string `json:"address_from"`             // 发送方地址
+	AddressTo            string `json:"address_to"`               // 接收方地址
+	Amount               string `json:"amount"`                   // 交易金额
+	GasLimit             uint   `json:"gas_limit"`                // Gas限制
+	GasPrice             string `json:"gas_price"`                // Gas价格
+	GasUsed              uint   `json:"gas_used"`                 // 实际使用的Gas
+	MaxFeePerGas         string `json:"max_fee_per_gas"`          // 最高费用
+	MaxPriorityFeePerGas string `json:"max_priority_fee_per_gas"` // 最高小费
+	EffectiveGasPrice    string `json:"effective_gas_price"`      // 有效Gas价格
+	Fee                  string `json:"fee"`                      // 手续费
+	Status               uint8  `json:"status"`                   // 交易状态
+	Confirm              uint   `json:"confirm"`                  // 确认数
+	Chain                string `json:"chain"`                    // 链类型
+	Symbol               string `json:"symbol"`                   // 币种
+	ContractAddr         string `json:"contract_addr"`            // 合约地址
+	Ctime                string `json:"ctime"`                    // 创建时间
+	Mtime                string `json:"mtime"`                    // 修改时间
+}
+
+// AddressTransactionsResponse 地址交易列表响应
+type AddressTransactionsResponse struct {
+	Transactions []AddressTransactionResponse `json:"transactions"`
+	Total        int64                        `json:"total"`
+	Page         int                          `json:"page"`
+	PageSize     int                          `json:"page_size"`
+	HasMore      bool                         `json:"has_more"`
+}
+
+// GetAddressTransactionsRequest 获取地址交易请求
+type GetAddressTransactionsRequest struct {
+	Address  string `form:"address" binding:"required"`        // 地址
+	Page     int    `form:"page" binding:"min=1"`              // 页码，从1开始
+	PageSize int    `form:"page_size" binding:"min=1,max=100"` // 每页大小，最大100
+	Chain    string `form:"chain"`                             // 链类型（可选）
+}

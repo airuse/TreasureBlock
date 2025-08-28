@@ -274,12 +274,22 @@ const { isConnected } = useWebSocket()
 // 菜单项 - 根据当前链动态生成
 const menuItems = computed(() => {
   const basePath = currentChain.value === 'eth' ? '/eth' : '/btc'
-  return [
-    { name: '首页', path: basePath },
-    { name: '区块', path: `${basePath}/blocks` },
-    { name: '地址', path: `${basePath}/addresses` },
-    { name: '统计', path: `${basePath}/statistics` },
-  ]
+  
+  if (currentChain.value === 'eth') {
+    return [
+      { name: '首页', path: basePath },
+      { name: '区块', path: `${basePath}/blocks` },
+      { name: '地址', path: `${basePath}/addresses` },
+      // { name: '统计', path: `${basePath}/statistics` }, // 暂时屏蔽统计页面
+    ]
+  } else {
+    // BTC没有合约地址概念，不显示地址菜单
+    return [
+      { name: '首页', path: basePath },
+      { name: '区块', path: `${basePath}/blocks` },
+      // { name: '统计', path: `${basePath}/statistics` }, // 暂时屏蔽统计页面
+    ]
+  }
 })
 
 // 个人中心菜单项
@@ -306,7 +316,23 @@ const switchChain = (chain: string) => {
   
   // 如果不是首页，添加页面路径
   if (currentPage && currentPage !== 'eth' && currentPage !== 'btc') {
-    newPath = `${basePath}/${currentPage}`
+    // 检查目标路由是否存在
+    const targetPath = `${basePath}/${currentPage}`
+    
+    // 定义每种链支持的有效页面
+    const validPages = {
+      eth: ['blocks', 'addresses', 'settings'], // 暂时屏蔽统计页面
+      btc: ['blocks'] // BTC没有addresses页面，暂时屏蔽统计页面
+    }
+    
+    // 如果目标页面在当前链中有效，则跳转；否则跳转到首页
+    if (validPages[chain as keyof typeof validPages]?.includes(currentPage)) {
+      newPath = targetPath
+    } else {
+      // 无效页面，跳转到首页
+      newPath = basePath
+      console.log(`页面 ${currentPage} 在 ${chain} 链中不存在，跳转到首页`)
+    }
   }
   
   router.push(newPath)

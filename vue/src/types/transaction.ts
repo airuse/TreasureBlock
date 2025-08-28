@@ -67,3 +67,47 @@ export interface TransactionListItem {
   status?: string
   confirmations?: number
 } 
+
+// 交易相关类型定义
+
+// 地址交易响应类型
+export interface AddressTransactionResponse {
+  id: number
+  tx_id: string
+  height: number
+  block_index: number
+  address_from: string
+  address_to: string
+  amount: string
+  gas_limit: number
+  gas_price: string
+  gas_used: number
+  max_fee_per_gas: string
+  max_priority_fee_per_gas: string
+  effective_gas_price: string
+  fee: string
+  status: number
+  confirm: number
+  chain: string
+  symbol: string
+  contract_addr: string
+  ctime: string
+  mtime: string
+}
+
+// 地址交易列表响应类型
+export interface AddressTransactionsResponse {
+  transactions: AddressTransactionResponse[]
+  total: number
+  page: number
+  page_size: number
+  has_more: boolean
+}
+
+// 获取地址交易请求类型
+export interface GetAddressTransactionsRequest {
+  address: string
+  page: number
+  page_size: number
+  chain?: string
+} 

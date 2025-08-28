@@ -23,6 +23,7 @@ type UserAddressResponse struct {
 	Balance          float64 `json:"balance"`
 	TransactionCount int64   `json:"transaction_count"`
 	IsActive         bool    `json:"is_active"`
+	CreatedHeight    uint64  `json:"created_height"` // 创建时的区块高度
 	CreatedAt        string  `json:"created_at"`
 	UpdatedAt        string  `json:"updated_at"`
 }

@@ -184,3 +184,50 @@ func (h *UserAddressHandler) GetAddressByID(c *gin.Context) {
 
 	utils.SuccessResponse(c, http.StatusOK, "获取地址详情成功", address)
 }
+
+// GetAddressTransactions 获取地址相关的交易列表
+// @Summary 获取地址交易列表
+// @Description 获取指定地址相关的所有交易
+// @Tags 用户地址管理
+// @Produce json
+// @Param address query string true "地址"
+// @Param page query int false "页码，默认1" default(1)
+// @Param page_size query int false "每页大小，默认20，最大100" default(20)
+// @Param chain query string false "链类型（eth/btc）"
+// @Success 200 {object} utils.Response{data=dto.AddressTransactionsResponse}
+// @Failure 400 {object} utils.Response
+// @Failure 401 {object} utils.Response
+// @Router /api/user/addresses/transactions [get]
+func (h *UserAddressHandler) GetAddressTransactions(c *gin.Context) {
+	userID := c.GetUint("user_id")
+	if userID == 0 {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "未授权")
+		return
+	}
+
+	var req dto.GetAddressTransactionsRequest
+	if err := c.ShouldBindQuery(&req); err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "请求参数错误: "+err.Error())
+		return
+	}
+
+	// 设置默认值
+	if req.Page <= 0 {
+		req.Page = 1
+	}
+	if req.PageSize <= 0 {
+		req.PageSize = 20
+	}
+	if req.PageSize > 100 {
+		req.PageSize = 100
+	}
+
+	// 获取交易列表
+	transactions, err := h.userAddressService.GetAddressTransactions(userID, req.Address, req.Page, req.PageSize, req.Chain)
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, err.Error())
+		return
+	}
+
+	utils.SuccessResponse(c, http.StatusOK, "获取交易列表成功", transactions)
+}

@@ -4,6 +4,7 @@ import (
 	"blockChainBrowser/server/internal/database"
 	"blockChainBrowser/server/internal/models"
 	"context"
+	"sort"
 
 	"gorm.io/gorm"
 )
@@ -22,6 +23,8 @@ type TransactionRepository interface {
 	Update(ctx context.Context, tx *models.Transaction) error
 	Delete(ctx context.Context, hash string) error
 	LogicalDeleteByBlockID(ctx context.Context, blockID uint64) error
+	// ComputeEthSumsWei 统计自指定高度以来的ETH转入/转出总额（Wei）
+	ComputeEthSumsWei(ctx context.Context, address string, fromHeight uint64) (string, string, error)
 }
 
 // transactionRepository 交易仓储实现
@@ -56,20 +59,79 @@ func (r *transactionRepository) GetByAddress(ctx context.Context, address string
 	var txs []*models.Transaction
 	var total int64
 
-	query := r.db.WithContext(ctx).Where("from_address = ? OR to_address = ?", address, address)
+	// 使用 UNION 查询替代 OR 条件，提高查询性能
+	// 分别查询作为发送方和接收方的交易，然后合并
+	var txsFrom []*models.Transaction
+	var txsTo []*models.Transaction
 
-	// 获取总数
-	if err := query.Model(&models.Transaction{}).Count(&total).Error; err != nil {
+	// 查询作为发送方的交易
+	if err := r.db.WithContext(ctx).
+		Where("address_from = ?", address).
+		Order("height DESC").
+		Offset(offset).
+		Limit(limit).
+		Find(&txsFrom).Error; err != nil {
 		return nil, 0, err
 	}
 
-	// 获取分页数据
-	err := query.Order("block_index DESC").
+	// 查询作为接收方的交易
+	if err := r.db.WithContext(ctx).
+		Where("address_to = ?", address).
+		Order("height DESC").
 		Offset(offset).
 		Limit(limit).
-		Find(&txs).Error
+		Find(&txsTo).Error; err != nil {
+		return nil, 0, err
+	}
 
-	return txs, total, err
+	// 合并结果并按高度排序
+	txs = append(txsFrom, txsTo...)
+
+	// 按高度降序排序
+	sort.Slice(txs, func(i, j int) bool {
+		return txs[i].Height > txs[j].Height
+	})
+
+	// 获取总数 - 分别统计然后相加
+	var totalFrom, totalTo int64
+	if err := r.db.WithContext(ctx).Model(&models.Transaction{}).Where("address_from = ?", address).Count(&totalFrom).Error; err != nil {
+		return nil, 0, err
+	}
+	if err := r.db.WithContext(ctx).Model(&models.Transaction{}).Where("address_to = ?", address).Count(&totalTo).Error; err != nil {
+		return nil, 0, err
+	}
+	total = totalFrom + totalTo
+
+	return txs, total, nil
+}
+
+// ComputeEthSumsWei 统计自指定高度以来该地址的ETH转入/转出总额（Wei）
+func (r *transactionRepository) ComputeEthSumsWei(ctx context.Context, address string, fromHeight uint64) (string, string, error) {
+	type sumRow struct{ Sum string }
+
+	var inSum sumRow
+	var outSum sumRow
+
+	// 仅统计 ETH 主币（symbol = 'ETH' 或空代表主币，视表字段定义而定）且成功的交易
+	// 转入：address_to = address
+	if err := r.db.WithContext(ctx).
+		Model(&models.Transaction{}).
+		Select("COALESCE(SUM(amount), '0') as sum").
+		Where("chain = ? AND symbol = ? AND status = 1 AND height > ? AND address_to = ?", "eth", "ETH", fromHeight, address).
+		Scan(&inSum).Error; err != nil {
+		return "0", "0", err
+	}
+
+	// 转出：address_from = address
+	if err := r.db.WithContext(ctx).
+		Model(&models.Transaction{}).
+		Select("COALESCE(SUM(amount), '0') as sum").
+		Where("chain = ? AND symbol = ? AND status = 1 AND height > ? AND address_from = ?", "eth", "ETH", fromHeight, address).
+		Scan(&outSum).Error; err != nil {
+		return "0", "0", err
+	}
+
+	return inSum.Sum, outSum.Sum, nil
 }
 
 // GetByBlockHash 根据区块哈希获取交易列表
