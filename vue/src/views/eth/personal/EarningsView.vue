@@ -396,8 +396,8 @@ const createSVGChart = (labels: string[], data: number[]) => {
           stroke="rgb(59,130,246)" 
           stroke-width="3"
           style="cursor: pointer; transition: all 0.2s ease;"
-          onmouseover="showDataPointTooltip(event, ${value}, '${fullTimeAxis[index]}', ${index + 1}); this.setAttribute('r', '8'); this.setAttribute('stroke-width', '4'); this.style.fill='rgb(59,130,246)';"
-          onmouseout="hideDataPointTooltip(); this.setAttribute('r', '5'); this.setAttribute('stroke-width', '3'); this.style.fill='white';"
+          data-time="${fullTimeAxis[index]}"
+          data-value="${value}"
         />`
       }).join('')}
       
@@ -411,110 +411,8 @@ const createSVGChart = (labels: string[], data: number[]) => {
         return `<text x="${x}" y="${containerHeight - padding.bottom + 14}" text-anchor="middle" font-size="10" fill="${color}">${label}</text>`
       }).join('')}
       
-      <!-- 图表标题 -->
-      <text x="${containerWidth / 2}" y="20" text-anchor="middle" font-size="12" fill="#1f2937" font-weight="600">收益趋势 (TB)</text>
       
-      <!-- 说明文字 -->
-      <text x="${containerWidth / 2}" y="34" text-anchor="middle" font-size="10" fill="#6b7280">完整显示近1小时时间轴，每2分钟显示一个标签</text>
     </svg>
-    
-    <!-- 数据点Tooltip -->
-    <div id="data-point-tooltip" style="
-      position: absolute;
-      background: rgba(0, 0, 0, 0.9);
-      color: white;
-      padding: 12px 16px;
-      border-radius: 8px;
-      font-size: 13px;
-      pointer-events: none;
-      z-index: 1000;
-      display: none;
-      box-shadow: 0 8px 25px rgba(0, 0, 0, 0.3);
-      backdrop-filter: blur(8px);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      min-width: 160px;
-    ">
-      <div style="font-weight: 600; margin-bottom: 8px; color: #60a5fa; font-size: 14px;" id="tooltip-title">数据点详情</div>
-      <div style="margin-bottom: 6px;">
-        <span style="color: #9ca3af;">时间:</span>
-        <span style="margin-left: 8px; font-weight: 500;" id="tooltip-time">--</span>
-      </div>
-      <div style="margin-bottom: 6px;">
-        <span style="color: #9ca3af;">收益:</span>
-        <span style="margin-left: 8px; font-weight: 500; color: #10b981;" id="tooltip-amount">--</span>
-        <span style="color: #6b7280; font-size: 12px;"> TB</span>
-      </div>
-      <div style="margin-bottom: 6px;">
-        <span style="color: #9ca3af;">位置:</span>
-        <span style="margin-left: 8px; font-weight: 500;" id="tooltip-position">--</span>
-      </div>
-      <div style="
-        position: absolute;
-        top: -6px;
-        left: 20px;
-        width: 12px;
-        height: 12px;
-        background: rgba(0, 0, 0, 0.9);
-        transform: rotate(45deg);
-        border-left: 1px solid rgba(255, 255, 255, 0.1);
-        border-top: 1px solid rgba(255, 255, 255, 0.1);
-      "></div>
-    </div>
-    
-    <script>
-      // 显示数据点Tooltip
-      function showDataPointTooltip(event, value, time, position) {
-        const tooltip = document.getElementById('data-point-tooltip')
-        const titleEl = document.getElementById('tooltip-title')
-        const timeEl = document.getElementById('tooltip-time')
-        const amountEl = document.getElementById('tooltip-amount')
-        const positionEl = document.getElementById('tooltip-position')
-        
-        // 设置内容
-        titleEl.textContent = '数据点详情'
-        timeEl.textContent = time
-        amountEl.textContent = value
-        positionEl.textContent = '第' + position + '个点'
-        
-        // 计算位置
-        const rect = event.target.getBoundingClientRect()
-        const tooltipWidth = 160
-        const tooltipHeight = 120
-        
-        let left = rect.left + rect.width / 2 - tooltipWidth / 2
-        let top = rect.top - tooltipHeight - 20
-        
-        // 确保tooltip不超出屏幕边界
-        if (left < 10) left = 10
-        if (left + tooltipWidth > window.innerWidth - 10) left = window.innerWidth - tooltipWidth - 10
-        if (top < 10) top = rect.bottom + 20
-        
-        tooltip.style.left = left + 'px'
-        tooltip.style.top = top + 'px'
-        tooltip.style.display = 'block'
-        
-        // 添加显示动画
-        tooltip.style.opacity = '0'
-        tooltip.style.transform = 'translateY(10px)'
-        tooltip.style.transition = 'all 0.2s ease'
-        
-        setTimeout(() => {
-          tooltip.style.opacity = '1'
-          tooltip.style.transform = 'translateY(0)'
-        }, 10)
-      }
-      
-      // 隐藏数据点Tooltip
-      function hideDataPointTooltip() {
-        const tooltip = document.getElementById('data-point-tooltip')
-        tooltip.style.opacity = '0'
-        tooltip.style.transform = 'translateY(10px)'
-        
-        setTimeout(() => {
-          tooltip.style.display = 'none'
-        }, 200)
-      }
-    </script>
   `
 }
 
@@ -535,8 +433,11 @@ const viewBlockDetails = (blockHeight: number) => {
     showError('无法查看区块详情：区块高度无效')
     return
   }
-  // TODO: 跳转到区块详情页面
-  console.log('查看区块:', blockHeight)
+  // 跳转到区块详情页面
+  const route = `/eth/blocks/${blockHeight}`
+  console.log('跳转到区块详情:', route)
+  // 使用 Vue Router 进行导航
+  window.location.href = route
 }
 
 // 分页方法
