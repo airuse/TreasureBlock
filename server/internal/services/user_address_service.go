@@ -9,6 +9,7 @@ import (
 	"errors"
 	"fmt"
 	"math/big"
+	"strconv"
 	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
@@ -23,6 +24,9 @@ type UserAddressService interface {
 	DeleteAddress(userID uint, addressID uint) error
 	GetAddressByID(userID uint, addressID uint) (*dto.UserAddressResponse, error)
 	GetAddressTransactions(userID uint, address string, page, pageSize int, chain string) (*dto.AddressTransactionsResponse, error)
+	GetAllWalletAddresses() ([]dto.UserAddressResponse, error)
+	UpdateAddWalletBalance(ID uint, amount uint64) error
+	UpdateReduceWalletBalance(ID uint, amount uint64) error
 }
 
 // userAddressService 用户地址服务实现
@@ -60,19 +64,33 @@ func (s *userAddressService) CreateAddress(userID uint, req *dto.CreateUserAddre
 		// 如果获取失败，记录错误日志，使用默认值，但不影响地址创建
 		fmt.Printf("警告：获取区块高度和余额失败: %v，使用默认值\n", err)
 		createdHeight = 0
-		balance = 0
+		balance = "0"
+	}
+
+	// 处理授权地址，确保空数组正确处理
+	var authorizedAddresses []string
+	if req.AuthorizedAddresses != nil && len(req.AuthorizedAddresses) > 0 {
+		// 过滤掉空字符串
+		for _, addr := range req.AuthorizedAddresses {
+			if strings.TrimSpace(addr) != "" {
+				authorizedAddresses = append(authorizedAddresses, addr)
+			}
+		}
 	}
 
 	// 创建新地址
 	userAddress := &models.UserAddress{
-		UserID:           userID,
-		Address:          req.Address,
-		Label:            req.Label,
-		Type:             req.Type,
-		Balance:          balance,
-		TransactionCount: 0,
-		IsActive:         true,
-		CreatedHeight:    createdHeight,
+		UserID:              userID,
+		Address:             req.Address,
+		Label:               req.Label,
+		Type:                req.Type,
+		ContractID:          req.ContractID,
+		AuthorizedAddresses: authorizedAddresses,
+		Notes:               req.Notes,
+		Balance:             &balance,
+		TransactionCount:    0,
+		IsActive:            true,
+		BalanceHeight:       createdHeight,
 	}
 
 	if err := s.userAddressRepo.Create(userAddress); err != nil {
@@ -92,13 +110,34 @@ func (s *userAddressService) GetUserAddresses(userID uint) ([]dto.UserAddressRes
 	var responses []dto.UserAddressResponse
 	for _, addr := range addresses {
 		if addr.Type == "wallet" {
-			// 动态计算余额：从创建高度起统计交易收支
-			inWei, outWei, sumErr := s.transactionRepo.ComputeEthSumsWei(context.Background(), addr.Address, addr.CreatedHeight)
-			if sumErr == nil {
-				dynamicBalance := s.computeEthDynamicBalance(addr.Balance, inWei, outWei)
-				resp := s.convertToResponse(&addr)
-				resp.Balance = dynamicBalance
-				responses = append(responses, *resp)
+			// 如果地址有创建高度，计算动态余额
+			if addr.BalanceHeight > 0 {
+				inWei, outWei, sumErr := s.transactionRepo.ComputeEthSumsWei(context.Background(), addr.Address, addr.BalanceHeight)
+				if sumErr == nil && addr.Balance != nil {
+					// 将字符串余额转换为float64进行计算
+					createdBalanceFloat, _ := new(big.Float).SetString(*addr.Balance)
+					if createdBalanceFloat != nil {
+						// 将Wei转换为ETH进行计算
+						weiToEth := new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil))
+						createdBalanceETH, _ := new(big.Float).Quo(createdBalanceFloat, weiToEth).Float64()
+
+						dynamicBalance := s.computeEthDynamicBalance(createdBalanceETH, inWei, outWei)
+
+						// 将计算结果转换回Wei字符串
+						dynamicBalanceWei := new(big.Float).Mul(new(big.Float).SetFloat64(dynamicBalance), weiToEth)
+						dynamicBalanceString := dynamicBalanceWei.Text('f', 0)
+
+						resp := s.convertToResponse(&addr)
+						resp.Balance = &dynamicBalanceString
+						responses = append(responses, *resp)
+					} else {
+						responses = append(responses, *s.convertToResponse(&addr))
+					}
+				} else {
+					responses = append(responses, *s.convertToResponse(&addr))
+				}
+			} else {
+				responses = append(responses, *s.convertToResponse(&addr))
 			}
 		} else {
 			responses = append(responses, *s.convertToResponse(&addr))
@@ -127,6 +166,32 @@ func (s *userAddressService) UpdateAddress(userID uint, addressID uint, req *dto
 	}
 	if req.Type != nil {
 		address.Type = *req.Type
+		// 如果类型不是合约，清空合约ID
+		if *req.Type != "contract" {
+			address.ContractID = nil
+		}
+	}
+	if req.ContractID != nil {
+		address.ContractID = req.ContractID
+	}
+	if req.AuthorizedAddresses != nil {
+		// 过滤掉空字符串
+		var authorizedAddresses []string
+		for _, addr := range *req.AuthorizedAddresses {
+			if strings.TrimSpace(addr) != "" {
+				authorizedAddresses = append(authorizedAddresses, addr)
+			}
+
+		}
+		address.AuthorizedAddresses = authorizedAddresses
+	}
+	if req.ContractBalance != nil {
+		address.ContractBalance = req.ContractBalance
+		// 更新合约余额高度
+		address.ContractBalanceHeight = req.ContractBalanceHeight
+	}
+	if req.Notes != nil {
+		address.Notes = *req.Notes
 	}
 	if req.IsActive != nil {
 		address.IsActive = *req.IsActive
@@ -187,58 +252,56 @@ func (s *userAddressService) isValidAddress(address string) bool {
 // convertToResponse 转换为响应DTO
 func (s *userAddressService) convertToResponse(address *models.UserAddress) *dto.UserAddressResponse {
 	return &dto.UserAddressResponse{
-		ID:               address.ID,
-		Address:          address.Address,
-		Label:            address.Label,
-		Type:             address.Type,
-		Balance:          address.Balance,
-		TransactionCount: address.TransactionCount,
-		IsActive:         address.IsActive,
-		CreatedHeight:    address.CreatedHeight,
-		CreatedAt:        address.CreatedAt.Format("2006-01-02 15:04:05"),
-		UpdatedAt:        address.UpdatedAt.Format("2006-01-02 15:04:05"),
+		ID:                    address.ID,
+		Address:               address.Address,
+		Label:                 address.Label,
+		Type:                  address.Type,
+		ContractID:            address.ContractID,
+		AuthorizedAddresses:   address.AuthorizedAddresses,
+		Notes:                 address.Notes,
+		Balance:               address.Balance,
+		ContractBalance:       address.ContractBalance,
+		ContractBalanceHeight: address.ContractBalanceHeight,
+		TransactionCount:      address.TransactionCount,
+		IsActive:              address.IsActive,
+		BalanceHeight:         address.BalanceHeight,
+		CreatedAt:             address.CreatedAt.Format("2006-01-02 15:04:05"),
+		UpdatedAt:             address.UpdatedAt.Format("2006-01-02 15:04:05"),
 	}
 }
 
 // getCurrentBlockHeightAndBalance 获取当前区块高度和地址余额
 // 优化：使用数据库中的最新区块高度，节省一次RPC调用
-func (s *userAddressService) getCurrentBlockHeightAndBalance(address string) (uint64, float64, error) {
+func (s *userAddressService) getCurrentBlockHeightAndBalance(address string) (uint64, string, error) {
 	ctx := context.Background()
 
-	// 从数据库获取ETH最新区块高度（节省一次RPC调用）
-	latestBlock, err := s.blockRepo.GetLatest(ctx, "eth")
-	if err != nil {
-		return 0, 0, fmt.Errorf("获取最新区块高度失败: %w", err)
-	}
-
-	blockNumber := latestBlock.Height
-
+	blockNumber := uint64(0)
 	// 从配置文件获取ETH RPC URL
 	chainConfig, exists := config.AppConfig.Blockchain.Chains["eth"]
 	if !exists || chainConfig.RPCURL == "" {
-		return blockNumber, 0, fmt.Errorf("未配置ETH RPC URL")
+		return blockNumber, "0", fmt.Errorf("未配置ETH RPC URL")
 	}
 
 	// 连接ETH客户端
 	client, err := ethclient.Dial(chainConfig.RPCURL)
 	if err != nil {
-		return blockNumber, 0, fmt.Errorf("连接ETH RPC失败: %w", err)
+		return blockNumber, "0", fmt.Errorf("连接ETH RPC失败: %w", err)
 	}
 	defer client.Close()
+
+	blockNumber, err = client.BlockNumber(ctx)
+	if err != nil {
+		return blockNumber, "0", fmt.Errorf("获取当前区块高度失败: %w", err)
+	}
 
 	// 获取地址余额 (使用数据库中的最新区块高度)
 	balance, err := client.BalanceAt(ctx, common.HexToAddress(address), big.NewInt(int64(blockNumber)))
 	if err != nil {
-		return blockNumber, 0, fmt.Errorf("获取地址余额失败: %w", err)
+		return blockNumber, "0", fmt.Errorf("获取地址余额失败: %w", err)
 	}
 
-	// 将Wei转换为ETH (1 ETH = 10^18 Wei)
-	balanceFloat := new(big.Float).Quo(new(big.Float).SetInt(balance), new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil)))
-
-	// 转换为float64
-	balanceFloat64, _ := balanceFloat.Float64()
-
-	return blockNumber, balanceFloat64, nil
+	// 直接返回Wei值，不进行单位转换，保持精度
+	return blockNumber, balance.String(), nil
 }
 
 // GetAddressTransactions 获取地址相关的交易列表
@@ -339,4 +402,86 @@ func (s *userAddressService) computeEthDynamicBalance(createdBalanceETH float64,
 	// 转为 float64 返回
 	currentETH, _ := currentETHFloat.Float64()
 	return currentETH
+}
+
+// GetAddressesByAuthorizedAddress 根据授权地址查询地址列表（高效JSON查询）
+func (s *userAddressService) GetAddressesByAuthorizedAddress(authorizedAddr string) ([]dto.UserAddressResponse, error) {
+	// 使用原生SQL进行JSON查询，性能更好
+	query := `
+		SELECT * FROM user_addresses 
+		WHERE JSON_CONTAINS(authorized_addresses, ?) 
+		AND type = 'contract' 
+		AND is_active = true
+	`
+
+	addresses, err := s.userAddressRepo.GetByJSONQuery(query, fmt.Sprintf(`"%s"`, authorizedAddr))
+	if err != nil {
+		return nil, fmt.Errorf("查询授权地址失败: %w", err)
+	}
+
+	var responses []dto.UserAddressResponse
+	for _, addr := range addresses {
+		responses = append(responses, *s.convertToResponse(&addr))
+	}
+
+	return responses, nil
+}
+
+// IsAddressAuthorized 检查地址是否为指定合约的授权地址（高效查询）
+func (s *userAddressService) IsAddressAuthorized(contractAddress string, authorizedAddr string) (bool, error) {
+	query := `
+		SELECT COUNT(*) as count 
+		FROM user_addresses 
+		WHERE address = ? 
+		AND type = 'contract' 
+		AND JSON_CONTAINS(authorized_addresses, ?)
+		AND is_active = true
+	`
+
+	count, err := s.userAddressRepo.CountByJSONQuery(query, contractAddress, fmt.Sprintf(`"%s"`, authorizedAddr))
+	if err != nil {
+		return false, fmt.Errorf("检查授权地址失败: %w", err)
+	}
+
+	return count > 0, nil
+}
+func (s *userAddressService) GetAllWalletAddresses() ([]dto.UserAddressResponse, error) {
+	addresses, err := s.userAddressRepo.GetAllWalletAddresses()
+	if err != nil {
+		return nil, err
+	}
+	var responses []dto.UserAddressResponse
+	for _, addr := range addresses {
+		responses = append(responses, *s.convertToResponse(&addr))
+	}
+	return responses, nil
+}
+func (s *userAddressService) UpdateAddWalletBalance(ID uint, amount uint64) error {
+	address, err := s.userAddressRepo.GetByID(ID)
+	if err != nil {
+		return err
+	}
+	balance, err := strconv.ParseInt(*address.Balance, 10, 64)
+	if err != nil {
+		return fmt.Errorf("failed to parse balance: %w", err)
+	}
+	newBalance := balance + int64(amount)
+	balanceStr := strconv.FormatInt(newBalance, 10)
+	address.Balance = &balanceStr
+	return s.userAddressRepo.Update(address)
+}
+
+func (s *userAddressService) UpdateReduceWalletBalance(ID uint, amount uint64) error {
+	address, err := s.userAddressRepo.GetByID(ID)
+	if err != nil {
+		return err
+	}
+	balance, err := strconv.ParseInt(*address.Balance, 10, 64)
+	if err != nil {
+		return fmt.Errorf("failed to parse balance: %w", err)
+	}
+	newBalance := balance - int64(amount)
+	balanceStr := strconv.FormatInt(newBalance, 10)
+	address.Balance = &balanceStr
+	return s.userAddressRepo.Update(address)
 }

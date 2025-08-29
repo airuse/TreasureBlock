@@ -48,7 +48,7 @@ type Transaction struct {
 	// 排序相关字段
 	Nonce      uint64  `json:"nonce" gorm:"type:bigint(20) unsigned;not null;default:0;column:nonce;comment:交易序号（ETH）或输入索引（BTC）"`
 	BlockIndex uint    `json:"block_index" gorm:"type:int(11) unsigned;not null;default:0;column:block_index;comment:交易在区块中的索引位置"`
-	BlockID    *uint64 `json:"block_id" gorm:"type:bigint(20) unsigned;column:block_id;comment:关联的区块ID"`
+	BlockID    *uint64 `json:"block_id" gorm:"type:bigint(20) unsigned;column:block_id;index;comment:关联的区块ID"`
 
 	// 日志数据字段
 	Logs string `json:"logs" gorm:"type:longtext;column:logs;comment:交易日志数据(JSON格式)"`

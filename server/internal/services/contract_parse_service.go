@@ -7,16 +7,23 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
+	"slices"
 	"strings"
 
 	"blockChainBrowser/server/internal/models"
 	"blockChainBrowser/server/internal/repository"
 )
 
+// TxHashWithIndex represents a transaction hash with its sequential index
+type TxHashWithIndex struct {
+	Hash  string
+	Index int
+}
+
 type ContractParseService interface {
 	ParseAndStore(ctx context.Context, receipt *models.TransactionReceipt, tx *models.Transaction, parserConfigs []*models.ParserConfig) ([]*models.ContractParseResult, error)
 	ParseAndStoreBatchAsync(ctx context.Context, receipts []*models.TransactionReceipt, txs map[string]*models.Transaction, parserConfigs map[string][]*models.ParserConfig)
-	ParseAndStoreBatchByTxHashesAsync(ctx context.Context, txHashes []string)
+	ParseAndStoreBatchByTxHashesAsync(ctx context.Context, txHashesWithIndex []TxHashWithIndex)
 	GetByTxHash(ctx context.Context, hash string) ([]*models.ContractParseResult, error)
 }
 
@@ -26,6 +33,7 @@ type contractParseService struct {
 	txRepo           repository.TransactionRepository
 	parserConfigRepo repository.ParserConfigRepository
 	coinConfigRepo   repository.CoinConfigRepository
+	userAddressRepo  repository.UserAddressRepository
 }
 
 func NewContractParseService(
@@ -34,6 +42,7 @@ func NewContractParseService(
 	txRepo repository.TransactionRepository,
 	parserConfigRepo repository.ParserConfigRepository,
 	coinConfigRepo repository.CoinConfigRepository,
+	userAddressRepo repository.UserAddressRepository,
 ) ContractParseService {
 	return &contractParseService{
 		repo:             repo,
@@ -41,6 +50,7 @@ func NewContractParseService(
 		txRepo:           txRepo,
 		parserConfigRepo: parserConfigRepo,
 		coinConfigRepo:   coinConfigRepo,
+		userAddressRepo:  userAddressRepo,
 	}
 }
 
@@ -58,9 +68,7 @@ func (s *contractParseService) ParseAndStore(ctx context.Context, receipt *model
 
 func (s *contractParseService) ParseAndStoreBatchAsync(ctx context.Context, receipts []*models.TransactionReceipt, txs map[string]*models.Transaction, parserConfigs map[string][]*models.ParserConfig) {
 	go func() {
-		// do NOT use request-scoped ctx in background goroutine
 		bgCtx := context.Background()
-		// 调试日志：入参统计
 		totalReceipts := len(receipts)
 		totalTxs := len(txs)
 		pcKeys := 0
@@ -71,7 +79,8 @@ func (s *contractParseService) ParseAndStoreBatchAsync(ctx context.Context, rece
 		}
 		fmt.Printf("[ParseAndStoreBatchAsync] start: receipts=%d txs=%d parserConfigKeys=%d totalParserConfigs=%d\n", totalReceipts, totalTxs, pcKeys, totalPC)
 
-		for i, rc := range receipts {
+		for i := 0; i < len(receipts); i++ {
+			rc := receipts[i]
 			if rc == nil || rc.TxHash == "" {
 				fmt.Printf("[ParseAndStoreBatchAsync] #%d skip: nil receipt or empty txHash\n", i)
 				continue
@@ -101,73 +110,199 @@ func (s *contractParseService) ParseAndStoreBatchAsync(ctx context.Context, rece
 }
 
 // New entry point: only provide tx hashes; service will fetch receipts/txs/configs and filter
-func (s *contractParseService) ParseAndStoreBatchByTxHashesAsync(ctx context.Context, txHashes []string) {
+func (s *contractParseService) ParseAndStoreBatchByTxHashesAsync(ctx context.Context, txHashesWithIndex []TxHashWithIndex) {
 	go func() {
-		// do NOT use request-scoped ctx in background goroutine
 		bgCtx := context.Background()
-		if len(txHashes) == 0 {
-			fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] empty input\n")
+		if len(txHashesWithIndex) == 0 {
 			return
 		}
-		// preload all parser configs and group by contract address
+
+		fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] start: total=%d transactions\n", len(txHashesWithIndex))
+
+		// Sort by index to ensure strict ordering regardless of input order
+		sortedTxs := make([]TxHashWithIndex, len(txHashesWithIndex))
+		copy(sortedTxs, txHashesWithIndex)
+
+		// Simple bubble sort by Index (for small arrays this is fine)
+		for i := 0; i < len(sortedTxs)-1; i++ {
+			for j := 0; j < len(sortedTxs)-i-1; j++ {
+				if sortedTxs[j].Index > sortedTxs[j+1].Index {
+					sortedTxs[j], sortedTxs[j+1] = sortedTxs[j+1], sortedTxs[j]
+				}
+			}
+		}
+
+		fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] sorted transactions by index\n")
+
+		// Preload all parser configs and group by contract address
 		allConfigs, err := s.parserConfigRepo.GetAllParserConfigs(bgCtx)
 		if err != nil {
-			fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] GetAllParserConfigs error: %v\n", err)
+			fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] failed to load parser configs: %v\n", err)
 			return
 		}
 		grouped := make(map[string][]*models.ParserConfig)
 		for _, pc := range allConfigs {
 			grouped[pc.ContractAddress] = append(grouped[pc.ContractAddress], pc)
 		}
-		fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] start hashes=%d groupedKeys=%d\n", len(txHashes), len(grouped))
 
-		for _, h := range txHashes {
-			if h == "" {
+		// Process transactions in strict index order
+		for _, txItem := range sortedTxs {
+			if txItem.Hash == "" {
+				fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] skip empty hash at index %d\n", txItem.Index)
 				continue
 			}
 
-			rc, err := s.receiptRepo.GetByTxHash(bgCtx, h)
+			fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] processing index=%d hash=%s\n", txItem.Index, txItem.Hash)
+
+			rc, err := s.receiptRepo.GetByTxHash(bgCtx, txItem.Hash)
 			if err != nil || rc == nil {
-				fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] skip tx=%s no receipt: %v\n", h, err)
+				fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] receipt not found for index=%d hash=%s\n", txItem.Index, txItem.Hash)
 				continue
 			}
-			tx, err := s.txRepo.GetByHash(bgCtx, h)
+			tx, err := s.txRepo.GetByHash(bgCtx, txItem.Hash)
 			if err != nil || tx == nil {
-				fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] skip tx=%s no tx record: %v\n", h, err)
+				fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] transaction not found for index=%d hash=%s\n", txItem.Index, txItem.Hash)
 				continue
 			}
+
 			// Only parse when there is explicit contract config for AddressTo
 			pcs := grouped[tx.AddressTo]
 			if len(pcs) == 0 {
-				fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] skip tx=%s no parser config for address=%s\n", h, tx.AddressTo)
 				// If no parser config for the specific address, try to use the default config (key "*")
 				defaultPcs := grouped["*"]
 				if len(defaultPcs) == 0 {
-					fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] skip tx=%s no parser config for address=%s and no default config\n", h, tx.AddressTo)
+					fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] no parser config for index=%d hash=%s addressTo=%s\n", txItem.Index, txItem.Hash, tx.AddressTo)
 					continue
 				}
 				pcs = defaultPcs
 			}
+
 			coinConfigs, err := s.coinConfigRepo.GetAll(bgCtx)
 			if err != nil {
-				fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] GetAll coinConfig error: %v\n", err)
+				fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] failed to load coin configs for index=%d: %v\n", txItem.Index, err)
 				continue
 			}
+
 			results := s.parseReceipt(rc, tx, pcs, coinConfigs)
 			if len(results) > 0 {
 				if err := s.repo.CreateBatch(bgCtx, results); err != nil {
-					fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] CreateBatch error for tx=%s: %v\n", h, err)
+					fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] CreateBatch error for index=%d hash=%s: %v\n", txItem.Index, txItem.Hash, err)
+				} else {
+					fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] successfully processed index=%d hash=%s results=%d\n", txItem.Index, txItem.Hash, len(results))
 				}
 			} else {
-				fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] no results for tx=%s\n", h)
+				fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] no results for index=%d hash=%s\n", txItem.Index, txItem.Hash)
 			}
 		}
-		fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] done\n")
+		fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] completed processing %d transactions\n", len(sortedTxs))
 	}()
 }
 
 func (s *contractParseService) GetByTxHash(ctx context.Context, hash string) ([]*models.ContractParseResult, error) {
 	return s.repo.GetByTxHash(ctx, hash)
+}
+
+// EventUpdate represents a single balance update event with strict ordering
+type EventUpdate struct {
+	Height      uint64
+	TxIndex     uint64
+	EventType   string // "transfer", "transferFrom", "approve", "balanceOf"
+	UserAddress *models.UserAddress
+	DeltaWei    *big.Int // nil for absolute updates
+	AbsoluteWei string   // empty for delta updates
+	SpenderAddr string   // for approve events
+}
+
+// helper: check if event should be processed (strict ordering + idempotency)
+func (s *contractParseService) shouldProcessEvent(height uint64, txIdx uint64, txHash string, logIdx uint, a *models.UserAddress) bool {
+	if a == nil {
+		return false
+	}
+
+	// Check if this specific event was already processed (idempotency)
+	existing, err := s.repo.GetByTxHashAndLogIndex(context.Background(), txHash, logIdx)
+	if err == nil && existing != nil {
+		fmt.Printf("[shouldProcessEvent] event already processed: txHash=%s logIdx=%d\n", txHash, logIdx)
+		return false
+	}
+
+	// Allow processing if no previous snapshot
+	if a.ContractBalanceHeight == nil {
+		return true
+	}
+
+	prevHeight := *a.ContractBalanceHeight
+
+	// Strict ordering: only process if this event is AFTER the last processed event
+	if height > prevHeight {
+		return true
+	}
+	if height < prevHeight {
+		fmt.Printf("[shouldProcessEvent] reject: height %d < stored height %d\n", height, prevHeight)
+		return false
+	}
+
+	// Same height: check transaction index
+	if a.ContractBalanceReceiptIndex == nil {
+		return true
+	}
+	prevTxIdx := *a.ContractBalanceReceiptIndex
+	if txIdx > prevTxIdx {
+		return true
+	}
+
+	fmt.Printf("[shouldProcessEvent] reject: same height %d, txIdx %d <= stored txIdx %d\n", height, txIdx, prevTxIdx)
+	return false
+}
+
+// helper: apply balance update with strict ordering
+func (s *contractParseService) applyBalanceUpdate(update *EventUpdate, txHash string, logIdx uint) error {
+	if update == nil || update.UserAddress == nil {
+		return nil
+	}
+
+	if !s.shouldProcessEvent(update.Height, update.TxIndex, txHash, logIdx, update.UserAddress) {
+		return nil
+	}
+
+	a := update.UserAddress
+
+	// Apply the update
+	if update.EventType == "balanceOf" {
+		// Absolute balance update - overwrites any previous balance
+		val := update.AbsoluteWei
+		a.ContractBalance = &val
+		fmt.Printf("[applyBalanceUpdate] absolute balance: addr=%s balance=%s\n", a.Address, val)
+	} else if update.DeltaWei != nil {
+		// Delta balance update
+		cur := new(big.Int)
+		if a.ContractBalance != nil {
+			_, _ = cur.SetString(*a.ContractBalance, 10)
+		}
+		cur.Add(cur, update.DeltaWei)
+
+		// Prevent negative balances
+		if cur.Sign() < 0 {
+			cur.SetInt64(0)
+			fmt.Printf("[applyBalanceUpdate] prevented negative balance for addr=%s\n", a.Address)
+		}
+
+		val := cur.String()
+		a.ContractBalance = &val
+		fmt.Printf("[applyBalanceUpdate] delta balance: addr=%s delta=%s new=%s\n", a.Address, update.DeltaWei.String(), val)
+	} else if update.EventType == "approve" && update.SpenderAddr != "" {
+		// Authorize spender
+		if a.AuthorizedAddresses != nil && !slices.Contains(a.AuthorizedAddresses, update.SpenderAddr) {
+			a.AuthorizedAddresses = append(a.AuthorizedAddresses, update.SpenderAddr)
+			fmt.Printf("[applyBalanceUpdate] added authorized addr: owner=%s spender=%s\n", a.Address, update.SpenderAddr)
+		}
+	}
+
+	// Update metadata
+	a.ContractBalanceHeight = &update.Height
+	a.ContractBalanceReceiptIndex = &update.TxIndex
+
+	return s.userAddressRepo.Update(a)
 }
 
 // parseReceipt 仅基于 logs_parser_rules 进行快速解析
@@ -193,7 +328,7 @@ func (s *contractParseService) parseReceipt(receipt *models.TransactionReceipt, 
 	// 建立 event_signature -> rules 的快速映射
 	sigToRule := map[string]*models.ParserConfig{}
 	for _, c := range parserConfigs {
-		if c != nil && c.EventSignature != "" && (c.LogsParserRules.ExtractAmount != "" || c.LogsParserRules.ExtractFromAddress != "" || c.LogsParserRules.ExtractToAddress != "") {
+		if c != nil && c.EventSignature != "" && (c.LogsParserRules.ExtractAmount != "" || c.LogsParserRules.ExtractFromAddress != "" || c.LogsParserRules.ExtractToAddress != "" || c.LogsParserRules.ExtractOwnerAddress != "" || c.LogsParserRules.ExtractSpenderAddress != "") {
 			sig := strings.ToLower(c.EventSignature)
 			sigToRule[sig] = c
 		}
@@ -217,19 +352,121 @@ func (s *contractParseService) parseReceipt(receipt *models.TransactionReceipt, 
 			continue
 		}
 
-		// extract fields by rules
 		fromAddr := extractAddressByRule(rule.LogsParserRules.ExtractFromAddress, topics, data)
 		toAddr := extractAddressByRule(rule.LogsParserRules.ExtractToAddress, topics, data)
 		amountWei := extractAmountByRule(rule.LogsParserRules.ExtractAmount, data)
-		fmt.Printf("[parseReceipt] #%d matched sig=%s from=%s to=%s amountWei=%s\n", idx, sig, fromAddr, toAddr, amountWei)
+		ownerAddr := extractAddressByRule(rule.LogsParserRules.ExtractOwnerAddress, topics, data)
+		spenderAddr := extractAddressByRule(rule.LogsParserRules.ExtractSpenderAddress, topics, data)
 
-		// decimals 优先用交易里 token_decimals（若有），否则 18/0 由前端展示层处理
-		var decimals uint16
-		if tx != nil && tx.TokenDecimals != 0 {
-			decimals = uint16(tx.TokenDecimals)
+		fmt.Printf("[parseReceipt] #%d matched sig=%s from=%s to=%s amountWei=%s owner=%s spender=%s\n", idx, sig, fromAddr, toAddr, amountWei, ownerAddr, spenderAddr)
+
+		coinConfig, err := GetCoinConfigByContractAddress(coinConfigs, contractAddr)
+		if err != nil {
+			fmt.Printf("[parseReceipt] #%d get coinConfig error: %v\n", idx, err)
+			continue
 		}
 
-		// 封装结果
+		// update user_address snapshots with strict ordering
+		if receipt.Status == 1 && tx != nil {
+			txIdx := uint64(receipt.TransactionIndex)
+			logIdx := uint(idx)
+
+			if rule.EventName == "Transfer" {
+				amt := new(big.Int)
+				if _, ok := amt.SetString(amountWei, 10); ok && amt.Sign() > 0 {
+					// Process from address (subtract)
+					if fromAddr != "" {
+						fromAddress, _ := s.userAddressRepo.GetByContractAddress(fromAddr, coinConfig.ID)
+						if fromAddress != nil {
+							update := &EventUpdate{
+								Height:      tx.Height,
+								TxIndex:     txIdx,
+								EventType:   "transfer",
+								UserAddress: fromAddress,
+								DeltaWei:    new(big.Int).Neg(amt),
+							}
+							_ = s.applyBalanceUpdate(update, receipt.TxHash, logIdx)
+						}
+					}
+					// Process to address (add)
+					if toAddr != "" {
+						toAddress, _ := s.userAddressRepo.GetByContractAddress(toAddr, coinConfig.ID)
+						if toAddress != nil {
+							update := &EventUpdate{
+								Height:      tx.Height,
+								TxIndex:     txIdx,
+								EventType:   "transfer",
+								UserAddress: toAddress,
+								DeltaWei:    new(big.Int).Set(amt),
+							}
+							_ = s.applyBalanceUpdate(update, receipt.TxHash, logIdx)
+						}
+					}
+				}
+			} else if rule.EventName == "TransferFrom" {
+				amt := new(big.Int)
+				if _, ok := amt.SetString(amountWei, 10); ok && amt.Sign() > 0 {
+					// Process from address (subtract)
+					if fromAddr != "" {
+						fromAddress, _ := s.userAddressRepo.GetByContractApproveAddress(fromAddr, coinConfig.ID)
+						if fromAddress != nil {
+							update := &EventUpdate{
+								Height:      tx.Height,
+								TxIndex:     txIdx,
+								EventType:   "transferFrom",
+								UserAddress: fromAddress,
+								DeltaWei:    new(big.Int).Neg(amt),
+							}
+							_ = s.applyBalanceUpdate(update, receipt.TxHash, logIdx)
+						}
+					}
+					// Process to address (add)
+					if toAddr != "" {
+						toAddress, _ := s.userAddressRepo.GetByContractApproveAddress(toAddr, coinConfig.ID)
+						if toAddress != nil {
+							update := &EventUpdate{
+								Height:      tx.Height,
+								TxIndex:     txIdx,
+								EventType:   "transferFrom",
+								UserAddress: toAddress,
+								DeltaWei:    new(big.Int).Set(amt),
+							}
+							_ = s.applyBalanceUpdate(update, receipt.TxHash, logIdx)
+						}
+					}
+				}
+			} else if rule.EventName == "Approve" {
+				if ownerAddr != "" && spenderAddr != "" {
+					owner, _ := s.userAddressRepo.GetByContractAddress(ownerAddr, coinConfig.ID)
+					if owner != nil {
+						update := &EventUpdate{
+							Height:      tx.Height,
+							TxIndex:     txIdx,
+							EventType:   "approve",
+							UserAddress: owner,
+							SpenderAddr: spenderAddr,
+						}
+						_ = s.applyBalanceUpdate(update, receipt.TxHash, logIdx)
+					}
+				}
+			} else if rule.EventName == "BalanceOf" {
+				if ownerAddr != "" && amountWei != "0" {
+					owner, _ := s.userAddressRepo.GetByContractAddress(ownerAddr, coinConfig.ID)
+					if owner != nil {
+						update := &EventUpdate{
+							Height:      tx.Height,
+							TxIndex:     txIdx,
+							EventType:   "balanceOf",
+							UserAddress: owner,
+							AbsoluteWei: amountWei,
+						}
+						_ = s.applyBalanceUpdate(update, receipt.TxHash, logIdx)
+					}
+				}
+			}
+		}
+
+		// result
 		bj, _ := json.Marshal(log)
 		res := &models.ContractParseResult{}
 		res.TxHash = receipt.TxHash
@@ -241,9 +478,14 @@ func (s *contractParseService) parseReceipt(receipt *models.TransactionReceipt, 
 		res.EventName = rule.EventName
 		res.FromAddress = fromAddr
 		res.ToAddress = toAddr
+		res.OwnerAddress = ownerAddr
+		res.SpenderAddress = spenderAddr
 		res.AmountWei = amountWei
-		res.TokenDecimals = decimals
-		res.TokenSymbol = txSymbol(coinConfigs, tx)
+		res.TokenDecimals = 0
+		if tx != nil && tx.TokenDecimals != 0 {
+			res.TokenDecimals = uint16(tx.TokenDecimals)
+		}
+		res.TokenSymbol = coinConfig.Symbol
 		res.RawLogsHash = rawHashHex
 		res.ParsedJSON = string(bj)
 		out = append(out, res)
@@ -350,18 +592,14 @@ func getDataSlot(data string, idx int) string {
 	return d[start:end]
 }
 
-func removeHexPrefix(s string) string {
-	return strings.TrimPrefix(strings.ToLower(s), "0x")
-}
-
 func emptyIfNil(s string) string {
 	return s
 }
-func txSymbol(coinConfigs []*models.CoinConfig, tx *models.Transaction) string {
+func GetCoinConfigByContractAddress(coinConfigs []*models.CoinConfig, contractAddress string) (*models.CoinConfig, error) {
 	for _, c := range coinConfigs {
-		if c.ContractAddr == tx.AddressTo {
-			return c.Symbol
+		if c.ContractAddr == contractAddress {
+			return c, nil
 		}
 	}
-	return ""
+	return nil, fmt.Errorf("coinConfig not found for contractAddress=%s", contractAddress)
 }

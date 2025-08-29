@@ -6,10 +6,15 @@ export interface PersonalAddressItem {
   address: string
   label: string
   type: string
-  balance: number
+  contract_id?: number
+  authorized_addresses?: string[]
+  notes?: string
+  balance?: string
+  contract_balance?: string
+  contract_balance_height?: number
   transaction_count: number
   is_active: boolean
-  created_height: number
+  balance_height: number
   created_at: string
   updated_at: string
 }
@@ -20,10 +25,15 @@ export interface PersonalAddressListItem {
   address: string
   label: string
   type: string
-  balance: number
+  contract_id?: number
+  authorized_addresses?: string[]
+  notes?: string
+  balance?: string
+  contract_balance?: string
+  contract_balance_height?: number
   transaction_count: number
   is_active: boolean
-  created_height: number
+  balance_height: number
   created_at: string
   updated_at: string
 }
@@ -33,15 +43,17 @@ export interface PersonalAddressDetail {
   id: number
   address: string
   label: string
-  balance: number
+  balance?: string
   transactionCount: number
   status: string
   createdAt: string
   updatedAt: string
   type: string
+  contract_id?: number  // 使用与后端一致的字段名
+  authorized_addresses?: string[]
   isActive: boolean
   notes?: string
-  createdHeight: number
+  balanceHeight: number
 }
 
 // 创建个人地址请求类型
@@ -49,6 +61,8 @@ export interface CreatePersonalAddressRequest {
   address: string
   label: string
   type?: string
+  contract_id?: number  // 使用与后端一致的字段名
+  authorized_addresses?: string[]
   notes?: string
 }
 
@@ -56,6 +70,10 @@ export interface CreatePersonalAddressRequest {
 export interface UpdatePersonalAddressRequest {
   label?: string
   type?: string
+  contract_id?: number  // 使用与后端一致的字段名
+  authorized_addresses?: string[]
+  contract_balance?: string
+  contract_balance_height?: number
   notes?: string
   isActive?: boolean
 }

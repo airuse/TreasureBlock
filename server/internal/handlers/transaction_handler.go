@@ -24,6 +24,7 @@ type TransactionHandler struct {
 	blockVerificationService services.BlockVerificationService
 	contractParseService     services.ContractParseService
 	coinConfigService        services.CoinConfigService
+	userAddressService       services.UserAddressService
 }
 
 // NewTransactionHandler 创建交易处理器
@@ -34,6 +35,7 @@ func NewTransactionHandler(
 	blockVerificationService services.BlockVerificationService,
 	contractParseService services.ContractParseService,
 	coinConfigService services.CoinConfigService,
+	userAddressService services.UserAddressService,
 ) *TransactionHandler {
 	return &TransactionHandler{
 		txService:                txService,
@@ -42,6 +44,7 @@ func NewTransactionHandler(
 		blockVerificationService: blockVerificationService,
 		contractParseService:     contractParseService,
 		coinConfigService:        coinConfigService,
+		userAddressService:       userAddressService,
 	}
 }
 
@@ -396,15 +399,22 @@ func (h *TransactionHandler) CreateTransactionsBatch(c *gin.Context) {
 		return
 	}
 
+	// 找到非合约交易，并更新余额
+	user_wallet_addresses, err := h.userAddressService.GetAllWalletAddresses()
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "获取用户地址失败", "details": err.Error()})
+		return
+	}
+
 	// 批量处理交易
 	var successCount int
 	var failedCount int
 	var errors []string
 
-	txs := make([]string, 0)
+	txs := make([][]string, 0)
 	coinConfigs, err := h.coinConfigService.GetAllCoinConfigs(c.Request.Context())
 	if err != nil {
-		errors = append(errors, fmt.Sprintf("获取币种配置失败: %v", err))
+		errors = append(errors, fmt.Sprintf("获取币种配置失败: %s", err))
 		failedCount++
 		return
 	}
@@ -412,7 +422,6 @@ func (h *TransactionHandler) CreateTransactionsBatch(c *gin.Context) {
 	for _, cc := range coinConfigs {
 		coinConfigMap[cc.ContractAddr] = cc
 	}
-
 	for i, txData := range transactionsData {
 		txMap, ok := txData.(map[string]interface{})
 		if !ok {
@@ -533,9 +542,27 @@ func (h *TransactionHandler) CreateTransactionsBatch(c *gin.Context) {
 			continue
 		}
 		if coinConfigMap[tx.AddressTo] != nil {
-			txs = append(txs, tx.TxID)
+			txs = append(txs, []string{tx.TxID, *req.Receipt.TransactionHash})
 		}
 		successCount++
+
+		// 更新用户wallet钱包余额
+		for _, addr := range user_wallet_addresses {
+			if addr.BalanceHeight >= tx.Height {
+				// 余额高度大于等于当前余额高度不用修改！
+				continue
+			}
+			amount, err := strconv.ParseInt(tx.Amount, 10, 64)
+			if err != nil {
+				continue
+			}
+			if addr.Address == tx.AddressFrom {
+				h.userAddressService.UpdateAddWalletBalance(addr.ID, uint64(amount))
+			}
+			if addr.Address == tx.AddressTo {
+				h.userAddressService.UpdateReduceWalletBalance(addr.ID, uint64(amount))
+			}
+		}
 	}
 
 	// 构建响应
@@ -554,10 +581,32 @@ func (h *TransactionHandler) CreateTransactionsBatch(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, response)
+
+	// 准备带索引的交易hash数组，确保严格顺序处理
 	if len(txs) > 0 {
-		h.contractParseService.ParseAndStoreBatchByTxHashesAsync(c.Request.Context(), txs)
+		// 构建TxHashWithIndex结构
+		txHashesWithIndex := make([]services.TxHashWithIndex, 0, len(txs))
+		for _, tx := range txs {
+			if len(tx) >= 2 {
+				// 将TxID转换为索引（假设TxID是数字字符串）
+				var index int
+				if n, err := fmt.Sscanf(tx[0], "%d", &index); err == nil && n == 1 {
+					txHashesWithIndex = append(txHashesWithIndex, services.TxHashWithIndex{
+						Hash:  tx[1], // TransactionHash
+						Index: index, // TxID as index
+					})
+				}
+			}
+		}
+
+		fmt.Printf("准备解析交易：总数=%d\n", len(txHashesWithIndex))
+		for _, item := range txHashesWithIndex {
+			fmt.Printf("  索引=%d, Hash=%s\n", item.Index, item.Hash)
+		}
+
+		h.contractParseService.ParseAndStoreBatchByTxHashesAsync(c.Request.Context(), txHashesWithIndex)
 	} else {
-		fmt.Println("有问题！一个都没有找到！！！！！")
+		fmt.Println("警告：没有找到需要解析的交易")
 	}
 }
 

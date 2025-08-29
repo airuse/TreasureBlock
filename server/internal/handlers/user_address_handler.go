@@ -45,7 +45,6 @@ func (h *UserAddressHandler) CreateAddress(c *gin.Context) {
 		utils.ErrorResponse(c, http.StatusBadRequest, "请求参数错误: "+err.Error())
 		return
 	}
-
 	address, err := h.userAddressService.CreateAddress(userID, &req)
 	if err != nil {
 		utils.ErrorResponse(c, http.StatusBadRequest, err.Error())

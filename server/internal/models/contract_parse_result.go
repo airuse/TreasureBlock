@@ -18,6 +18,8 @@ type ContractParseResult struct {
 	EventName       string         `json:"event_name" gorm:"size:64;comment:事件名(可选)"`
 	FromAddress     string         `json:"from_address" gorm:"size:66;index;comment:解析出的from地址"`
 	ToAddress       string         `json:"to_address" gorm:"size:66;index;comment:解析出的to地址"`
+	OwnerAddress    string         `json:"owner_address" gorm:"size:66;index;comment:解析出的owner地址(Allowance/BalanceOf等)"`
+	SpenderAddress  string         `json:"spender_address" gorm:"size:66;index;comment:解析出的spender地址(Allowance/Approve等)"`
 	AmountWei       string         `json:"amount_wei" gorm:"type:varchar(100);default:'0';comment:解析出的amount(wei)十进制字符串"`
 	TokenDecimals   uint16         `json:"token_decimals" gorm:"default:0;comment:代币精度(可选)"`
 	TokenSymbol     string         `json:"token_symbol" gorm:"size:32;comment:代币符号(可选)"`

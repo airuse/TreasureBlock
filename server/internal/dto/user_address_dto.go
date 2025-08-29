@@ -2,28 +2,41 @@ package dto
 
 // CreateUserAddressRequest 创建用户地址请求
 type CreateUserAddressRequest struct {
-	Address string `json:"address" binding:"required"`
-	Label   string `json:"label"`
-	Type    string `json:"type" binding:"required,oneof=wallet contract exchange other"`
+	Address             string   `json:"address" binding:"required"`
+	Label               string   `json:"label"`
+	Type                string   `json:"type" binding:"required,oneof=wallet contract exchange other"`
+	ContractID          *uint    `json:"contract_id"`          // 关联的合约ID，仅当type为contract时有效
+	AuthorizedAddresses []string `json:"authorized_addresses"` // 授权地址列表，仅当type为contract时有效
+	Notes               string   `json:"notes"`                // 备注信息
 }
 
 // UpdateUserAddressRequest 更新用户地址请求
 type UpdateUserAddressRequest struct {
-	Label    *string `json:"label"`
-	Type     *string `json:"type" binding:"omitempty,oneof=wallet contract exchange other"`
-	IsActive *bool   `json:"is_active"`
+	Label                 *string   `json:"label"`
+	Type                  *string   `json:"type" binding:"omitempty,oneof=wallet contract exchange other"`
+	ContractID            *uint     `json:"contract_id"`
+	AuthorizedAddresses   *[]string `json:"authorized_addresses"`    // 授权地址列表
+	ContractBalance       *string   `json:"contract_balance"`        // 合约余额
+	ContractBalanceHeight *uint64   `json:"contract_balance_height"` // 合约余额更新时的区块高度
+	Notes                 *string   `json:"notes"`                   // 备注信息
+	IsActive              *bool     `json:"is_active"`
 }
 
 // UserAddressResponse 用户地址响应
 type UserAddressResponse struct {
-	ID               uint    `json:"id"`
-	Address          string  `json:"address"`
-	Label            string  `json:"label"`
-	Type             string  `json:"type"`
-	Balance          float64 `json:"balance"`
-	TransactionCount int64   `json:"transaction_count"`
-	IsActive         bool    `json:"is_active"`
-	CreatedHeight    uint64  `json:"created_height"` // 创建时的区块高度
-	CreatedAt        string  `json:"created_at"`
-	UpdatedAt        string  `json:"updated_at"`
+	ID                    uint     `json:"id"`
+	Address               string   `json:"address"`
+	Label                 string   `json:"label"`
+	Type                  string   `json:"type"`
+	ContractID            *uint    `json:"contract_id"`             // 关联的合约ID
+	AuthorizedAddresses   []string `json:"authorized_addresses"`    // 授权地址列表
+	Notes                 string   `json:"notes"`                   // 备注信息
+	Balance               *string  `json:"balance"`                 // 地址余额，以最小单位存储
+	ContractBalance       *string  `json:"contract_balance"`        // 合约余额，以最小单位存储
+	ContractBalanceHeight *uint64  `json:"contract_balance_height"` // 合约余额更新时的区块高度
+	TransactionCount      int64    `json:"transaction_count"`
+	IsActive              bool     `json:"is_active"`
+	BalanceHeight         uint64   `json:"balance_height"` // 地址余额对应的区块高度
+	CreatedAt             string   `json:"created_at"`
+	UpdatedAt             string   `json:"updated_at"`
 }

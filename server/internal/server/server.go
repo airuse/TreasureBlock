@@ -90,10 +90,10 @@ func New() *Server {
 		coinConfigRepo,
 	)
 	contractParseResultRepo := repository.NewContractParseResultRepository()
-	contractParseResultService := services.NewContractParseService(contractParseResultRepo, transactionReceiptRepo, txRepo, parserConfigRepo, coinConfigRepo)
+	contractParseResultService := services.NewContractParseService(contractParseResultRepo, transactionReceiptRepo, txRepo, parserConfigRepo, coinConfigRepo, userAddressRepo)
 
 	// 创建处理器
-	txHandler := handlers.NewTransactionHandler(txService, transactionReceiptService, parserConfigRepo, blockVerificationService, contractParseResultService, coinConfigService)
+	txHandler := handlers.NewTransactionHandler(txService, transactionReceiptService, parserConfigRepo, blockVerificationService, contractParseResultService, coinConfigService, userAddressService)
 	wsHandler := handlers.NewWebSocketHandler()
 	blockHandler := handlers.NewBlockHandler(blockService, wsHandler)
 	addressHandler := handlers.NewAddressHandler(addressService)

@@ -92,7 +92,7 @@ blockchain:
       symbol: "ETH"
       decimals: 18
       enabled: true
-      rpc_url: "https://alpha-clean-yard.quiknode.pro/7979488c04b1a36bdc4230b23e3eaac3e9c1c1af"
+      rpc_url: "https://alpha-clean-yard.quiknode.pro/7979488c04b1a36bdc4230b23e3eaac3e9c1c1af" #"https://alpha-clean-yard.ethereum-sepolia.quiknode.pro/7979488c04b1a36bdc4230b23e3eaac3e9c1c1af"
     bsc:
       name: "Binance Smart Chain"
       symbol: "BNB"
