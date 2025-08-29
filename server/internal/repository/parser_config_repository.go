@@ -20,6 +20,7 @@ type ParserConfigRepository interface {
 	DeleteParserConfig(ctx context.Context, id uint) error
 	GetActiveParserConfigs(ctx context.Context, contractAddress string) ([]*models.ParserConfig, error)
 	GetContractParserInfo(ctx context.Context, contractAddress string) (*models.ContractParserInfo, error)
+	GetAllParserConfigs(ctx context.Context) ([]*models.ParserConfig, error)
 }
 
 // parserConfigRepository 解析配置仓储实现
@@ -157,4 +158,13 @@ func (r *parserConfigRepository) GetContractParserInfo(ctx context.Context, cont
 	info.ParserConfigs = parserConfigs
 
 	return info, nil
+}
+
+// GetAllParserConfigs 获取所有解析配置（用于批量缓存到内存中做过滤）
+func (r *parserConfigRepository) GetAllParserConfigs(ctx context.Context) ([]*models.ParserConfig, error) {
+	var configs []*models.ParserConfig
+	err := r.db.WithContext(ctx).
+		Order("priority DESC, created_at ASC").
+		Find(&configs).Error
+	return configs, err
 }

@@ -33,6 +33,7 @@ func SetupRoutes(
 	requestLogRepo repository.RequestLogRepository,
 	earningsService services.EarningsService,
 	tlsEnabled bool, // 添加TLS配置参数
+	contractParseResultHandler *handlers.ContractParseResultHandler,
 ) *gin.Engine {
 	router := gin.Default()
 
@@ -165,6 +166,7 @@ func SetupRoutes(
 			transactions.POST("/create", txHandler.CreateTransaction)                              // 创建交易记录
 			transactions.POST("/create/batch", txHandler.CreateTransactionsBatch)                  // 批量创建交易记录
 			transactions.GET("/receipt/:hash", txHandler.GetTransactionReceiptByHash)              // 根据哈希获取交易凭证
+			transactions.GET("/parsed/:hash", contractParseResultHandler.GetByTxHash)              // 根据哈希获取解析结果
 		}
 
 		// 地址相关路由
@@ -245,6 +247,25 @@ func SetupRoutes(
 
 	// WebSocket路由
 	router.GET("/ws", wsHandler.HandleWebSocket)
+
+	// WebSocket状态查看接口（用于调试）
+	router.GET("/ws/status", func(c *gin.Context) {
+		status := wsHandler.GetWebSocketStatus()
+		c.JSON(200, gin.H{
+			"success": true,
+			"data":    status,
+			"message": "WebSocket connection status",
+		})
+	})
+
+	// WebSocket连接管理接口（用于调试）
+	router.POST("/ws/close-all", func(c *gin.Context) {
+		wsHandler.CloseAllConnections()
+		c.JSON(200, gin.H{
+			"success": true,
+			"message": "All WebSocket connections closed",
+		})
+	})
 
 	// 健康检查
 	router.GET("/health", func(c *gin.Context) {

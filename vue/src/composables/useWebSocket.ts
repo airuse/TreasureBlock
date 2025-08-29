@@ -1,4 +1,4 @@
-import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { ref, watch, onMounted, onUnmounted, computed } from 'vue'
 import {
   WebSocketStatus,
   createWebSocketManager,
@@ -34,10 +34,12 @@ export function useWebSocket(options?: Partial<WebSocketOptions>) {
   // 初始化WebSocket管理器
   const initWebSocket = async () => {
     try {
-      // 获取或创建WebSocket管理器
+      // 获取全局WebSocket管理器
       let wsManager = getWebSocketManager()
       
       if (!wsManager) {
+        // 如果没有全局管理器，创建一个（这种情况不应该发生，因为main.ts中已经创建）
+        console.warn('No global WebSocket manager found, creating one...')
         wsManager = createWebSocketManager(finalOptions)
         setupVisibilityHandler(wsManager)
       }
@@ -53,8 +55,10 @@ export function useWebSocket(options?: Partial<WebSocketOptions>) {
         reconnectAttempts.value = wsManager.getReconnectAttempts()
       }, { immediate: true })
 
-      // 连接WebSocket
-      await wsManager.connect()
+      // 只有在没有连接时才连接
+      if (!wsManager.isConnected.value) {
+        await wsManager.connect()
+      }
     } catch (error) {
       console.error('Failed to initialize WebSocket:', error)
     }
@@ -109,8 +113,12 @@ export function useWebSocket(options?: Partial<WebSocketOptions>) {
 
   // 页面卸载时清理
   onUnmounted(() => {
-    // 注意：这里不销毁全局管理器，因为其他组件可能还在使用
-    // 只清理当前组件的订阅
+    // 清理当前组件的订阅
+    if (manager.value) {
+      // 注意：这里不销毁全局管理器，因为其他组件可能还在使用
+      // 只清理当前组件的引用
+      manager.value = null
+    }
   })
 
   return {
@@ -135,19 +143,41 @@ export function useWebSocket(options?: Partial<WebSocketOptions>) {
 
 // 特定链的WebSocket组合式函数
 export function useChainWebSocket(chain: 'eth' | 'btc') {
-  const { subscribe, send, ...rest } = useWebSocket({
-    url: import.meta.env.VITE_WS_BASE_URL || 'wss://localhost:8443/ws'
-  })
+  // 使用全局WebSocket管理器，避免重复创建
+  const manager = getWebSocketManager()
+  
+  if (!manager) {
+    console.warn('WebSocket manager not found, creating one...')
+    createWebSocketManager({
+      url: import.meta.env.VITE_WS_BASE_URL || 'wss://localhost:8443/ws',
+      autoReconnect: true,
+      reconnectInterval: 3000,
+      maxReconnectAttempts: 5,
+      heartbeatInterval: 30000
+    })
+  }
+  
+  // 获取全局管理器的状态
+  const status = computed(() => manager?.getStatus() || WebSocketStatus.DISCONNECTED)
+  const isConnected = computed(() => manager?.isConnected.value || false)
+  const isConnecting = computed(() => manager?.isConnecting.value || false)
+  const isReconnecting = computed(() => manager?.isReconnecting.value || false)
+  const reconnectAttempts = computed(() => manager?.getReconnectAttempts() || 0)
 
   // 订阅特定链的事件
   const subscribeChainEvent = (
     category: 'transaction' | 'block' | 'address' | 'stats' | 'network',
     callback: (message: WebSocketMessage) => void
   ) => {
+    if (!manager) {
+      console.warn('WebSocket manager not available')
+      return () => {}
+    }
+    
     // 等待WebSocket连接建立后再发送订阅消息
     const sendSubscribeWhenReady = () => {
-      if (rest.manager?.value && rest.isConnected?.value) {
-        const success = rest.manager.value.sendSubscribe(category, chain)
+      if (manager && manager.isConnected.value) {
+        const success = manager.sendSubscribe(category, chain)
         return success
       } else {
         return false
@@ -160,16 +190,16 @@ export function useChainWebSocket(chain: 'eth' | 'btc') {
     // 如果发送失败，等待连接建立后重试
     if (!subscribeSent) {
       const checkConnection = () => {
-        if (rest.isConnected?.value) {
+        if (manager && manager.isConnected.value) {
           // 添加延迟，确保状态完全同步
           setTimeout(() => {
-            rest.manager?.value?.sendSubscribe(category, chain)
+            manager.sendSubscribe(category, chain)
           }, 200)
         }
       }
       
       // 监听连接状态变化
-      watch(rest.isConnected, (connected) => {
+      watch(isConnected, (connected) => {
         if (connected) {
           checkConnection()
         }
@@ -177,7 +207,7 @@ export function useChainWebSocket(chain: 'eth' | 'btc') {
     }
     
     // 然后订阅本地事件
-    return subscribe(`event:${category}`, (message) => {
+    return manager.subscribe(`event:${category}`, (message) => {
       // 只处理当前链的消息
       if (message.chain === chain || !message.chain) {
         callback(message)
@@ -191,17 +221,17 @@ export function useChainWebSocket(chain: 'eth' | 'btc') {
     callback: (message: WebSocketMessage) => void
   ) => {
     // 先发送订阅消息到服务器
-    if (rest.manager?.value) {
-      rest.manager.value.sendSubscribe(category, chain)
+    if (manager) {
+      manager.sendSubscribe(category, chain)
     }
     
     // 然后订阅本地事件
-    return subscribe(`notification:${category}`, (message) => {
+    return manager?.subscribe(`notification:${category}`, (message) => {
       // 只处理当前链的消息
       if (message.chain === chain || !message.chain) {
         callback(message)
       }
-    })
+    }) || (() => {})
   }
 
   // 发送链特定消息
@@ -210,7 +240,9 @@ export function useChainWebSocket(chain: 'eth' | 'btc') {
     category: 'transaction' | 'block' | 'address' | 'stats' | 'network',
     data: Record<string, unknown>
   ) => {
-    return send({
+    if (!manager) return false
+    
+    return manager.send({
       type,
       category,
       data,
@@ -224,15 +256,22 @@ export function useChainWebSocket(chain: 'eth' | 'btc') {
     category: 'transaction' | 'block' | 'address' | 'stats' | 'network'
   ) => {
     // 发送取消订阅消息到服务器
-    if (rest.manager?.value && rest.isConnected?.value) {
-      const success = rest.manager.value.sendUnsubscribe(category, chain)
+    if (manager && manager.isConnected.value) {
+      const success = manager.sendUnsubscribe(category, chain)
+      if (!success) {
+        console.warn('⚠️ WebSocket未连接，无法发送取消订阅消息')
+      }
     } else {
       console.warn('⚠️ WebSocket未连接，无法发送取消订阅消息')
     }
   }
 
   return {
-    ...rest,
+    status,
+    isConnected,
+    isConnecting,
+    isReconnecting,
+    reconnectAttempts,
     subscribeChainEvent,
     subscribeChainNotification,
     sendChainMessage,

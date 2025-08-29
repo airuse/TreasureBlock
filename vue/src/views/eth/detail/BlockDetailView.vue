@@ -322,25 +322,28 @@
                     </div>
                   </div>
 
-                  <!-- 解析合约转账 -->
-                  <div v-if="tx.is_token && (getParsedFromAddress(tx.tx_id || tx.hash) || getParsedToAddress(tx.tx_id || tx.hash) || getParsedAmount(tx.tx_id || tx.hash))" class="border-t border-gray-200 pt-1 mt-1">
+                  <!-- 解析合约转账（优先后端预解析） -->
+                  <div v-if="tx.is_token && parsedResults[(tx.tx_id || tx.hash)] && parsedResults[(tx.tx_id || tx.hash)].length > 0" class="border-t border-gray-200 pt-1 mt-1">
                     <h6 class="text-sm font-medium text-gray-700 mb-1">解析合约</h6>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
-                      <div v-if="getParsedFromAddress(tx.tx_id || tx.hash)">
+                      <div>
                         <span class="text-gray-500">From: </span>
-                        <span class="font-mono text-blue-600 cursor-pointer hover:text-blue-800" @click="copyToClipboard(getParsedFromAddress(tx.tx_id || tx.hash) || '', $event)">
-                          {{ getParsedFromAddress(tx.tx_id || tx.hash) }}
+                        <span class="font-mono text-blue-600 cursor-pointer hover:text-blue-800" @click="copyToClipboard(parsedResults[(tx.tx_id || tx.hash)][0]?.from_address || '', $event)">
+                          {{ parsedResults[(tx.tx_id || tx.hash)][0]?.from_address }}
                         </span>
                       </div>
-                      <div v-if="getParsedToAddress(tx.tx_id || tx.hash)">
+                      <div>
                         <span class="text-gray-500">To: </span>
-                        <span class="font-mono text-blue-600 cursor-pointer hover:text-blue-800" @click="copyToClipboard(getParsedToAddress(tx.tx_id || tx.hash) || '', $event)">
-                          {{ getParsedToAddress(tx.tx_id || tx.hash) }}
+                        <span class="font-mono text-blue-600 cursor-pointer hover:text-blue-800" @click="copyToClipboard(parsedResults[(tx.tx_id || tx.hash)][0]?.to_address || '', $event)">
+                          {{ parsedResults[(tx.tx_id || tx.hash)][0]?.to_address }}
                         </span>
                       </div>
-                      <div v-if="getParsedAmount(tx.tx_id || tx.hash)" class="md:col-span-2">
+                      <div class="md:col-span-2">
                         <span class="text-gray-500">Amount: </span>
-                        <span class="text-gray-900 font-medium">{{ getParsedAmount(tx.tx_id || tx.hash) }} {{ tx.token_symbol || 'ETH' }}</span>
+                        <span class="text-gray-900 font-medium">
+                          {{ formatNumber.wei(new BigNumber(parsedResults[(tx.tx_id || tx.hash)][0]?.amount_wei || '0').dividedBy(new BigNumber(10).pow(tx.token_decimals)).toString()) }}
+                          {{ parsedResults[(tx.tx_id || tx.hash)][0]?.token_symbol || tx.token_symbol || 'ETH' }}
+                        </span>
                       </div>
                     </div>
                   </div>
@@ -478,6 +481,9 @@ const totalPages = ref(1)
 const expandedTransactions = ref<Record<string, boolean>>({})
 const loadingReceipts = ref<Record<string, boolean>>({})
 const transactionReceipts = ref<Record<string, any>>({})
+// 解析结果缓存与加载状态
+const parsedResults = ref<Record<string, any[]>>({})
+const loadingParsed = ref<Record<string, boolean>>({})
 
 // 计算属性
 const isFilteredByBlock = computed(() => {
@@ -906,6 +912,11 @@ const toggleTransactionExpansion = async (txHash: string) => {
   if (!isExpanded && !transactionReceipts.value[txHash] && authStore.isAuthenticated) {
     await loadTransactionReceipt(txHash)
   }
+
+  // 同步尝试加载后端预解析结果（需要登录）
+  if (!isExpanded && authStore.isAuthenticated && !parsedResults.value[txHash] && !loadingParsed.value[txHash]) {
+    await loadParsedResults(txHash)
+  }
 }
 
 // 加载交易凭证
@@ -928,6 +939,21 @@ const loadTransactionReceipt = async (txHash: string) => {
     console.error('Failed to load transaction receipt:', error)
   } finally {
     loadingReceipts.value[txHash] = false
+  }
+}
+
+// 加载交易解析结果（后端预解析）
+const loadParsedResults = async (txHash: string) => {
+  try {
+    loadingParsed.value[txHash] = true
+    const resp = await transactionsApi.getParsedTransaction(txHash)
+    if (resp && resp.success === true) {
+      parsedResults.value[txHash] = resp.data || []
+    }
+  } catch (e) {
+    console.warn('加载交易解析结果失败:', e)
+  } finally {
+    loadingParsed.value[txHash] = false
   }
 }
 
@@ -1120,303 +1146,6 @@ const parseLogsDataWithConfig = (logsData: string, txHash?: string) => {
   }
 }
 
-// 从解析配置中获取From地址（基于日志数据）
-const getParsedFromAddress = (txHash?: string): string | null => {
-  if (!txHash || !transactionReceipts.value[txHash]?.parser_configs) return null
-  
-  const receipt = transactionReceipts.value[txHash]
-  const logsData = receipt.logs_data
-  
-  if (!logsData) return null
-  
-  // 查找匹配的解析配置（优先查找有日志解析配置的）
-  const matchedConfig = receipt.parser_configs.find((config: any) => 
-    config.logs_parser_type && config.logs_parser_rules?.extract_from_address
-  )
-  
-  if (matchedConfig?.logs_parser_rules?.extract_from_address) {
-    try {
-      const logs = JSON.parse(logsData)
-      if (Array.isArray(logs) && logs.length > 0) {
-        const log = logs[0] // 取第一个日志
-        const rule = matchedConfig.logs_parser_rules.extract_from_address
-        
-        if (rule === 'topics[1]' && log.topics && log.topics.length > 1) {
-          // 从topics[1]提取from地址
-          return log.topics[1]
-        } else if (rule === 'data[0]' && log.data && log.data !== '0x') {
-          // 从data[0]提取from地址
-          return '0x' + log.data.substring(2, 42)
-        }
-      }
-    } catch (error) {
-      console.error('❌ 解析日志数据失败:', error)
-    }
-  }
-  
-  // 如果没有日志解析配置，尝试从输入数据解析
-  const inputData = receipt.input_data
-  if (inputData && inputData !== '0x') {
-    const signature = inputData.substring(0, 10)
-    const matchedConfig = receipt.parser_configs.find((config: any) => 
-      config.function_signature === signature
-    )
-    
-    if (matchedConfig?.parser_rules?.extract_from_address) {
-      const rule = matchedConfig.parser_rules.extract_from_address
-      if (rule === 'transaction.from') {
-        const tx = transactions.value.find(t => (t.tx_id || t.hash) === txHash)
-        return tx?.address_from || tx?.from || null
-      }
-    }
-  }
-  
-  // 默认从交易信息中获取
-  const tx = transactions.value.find(t => (t.tx_id || t.hash) === txHash)
-  return tx?.address_from || tx?.from || null
-}
-
-// 从解析配置中获取To地址（基于日志数据）
-const getParsedToAddress = (txHash?: string): string | null => {
-  if (!txHash || !transactionReceipts.value[txHash]?.parser_configs) return null
-  
-  const receipt = transactionReceipts.value[txHash]
-  const logsData = receipt.logs_data
-  
-  if (!logsData) return null
-  
-  // 查找匹配的解析配置（优先查找有日志解析配置的）
-  const matchedConfig = receipt.parser_configs.find((config: any) => 
-    config.logs_parser_type && config.logs_parser_rules?.extract_to_address
-  )
-  
-  if (matchedConfig?.logs_parser_rules?.extract_to_address) {
-    try {
-      const logs = JSON.parse(logsData)
-      if (Array.isArray(logs) && logs.length > 0) {
-        const log = logs[0] // 取第一个日志
-        const rule = matchedConfig.logs_parser_rules.extract_to_address
-        
-        if (rule === 'topics[2]' && log.topics && log.topics.length > 2) {
-          // 从topics[2]提取to地址
-          return log.topics[2]
-        } else if (rule === 'data[1]' && log.data && log.data !== '0x') {
-          // 从data[1]提取to地址
-          return '0x' + log.data.substring(66, 106)
-        }
-      }
-    } catch (error) {
-      console.error('❌ 解析日志数据失败:', error)
-    }
-  }
-  
-  // 如果没有日志解析配置，尝试从输入数据解析
-  const inputData = receipt.input_data
-  if (inputData && inputData !== '0x') {
-    const signature = inputData.substring(0, 10)
-    const matchedConfig = receipt.parser_configs.find((config: any) => 
-      config.function_signature === signature
-    )
-    
-    if (matchedConfig?.parser_rules?.extract_to_address) {
-      const rule = matchedConfig.parser_rules.extract_to_address
-      if (rule === 'params.to') {
-        // 从输入数据中提取To地址（通常是第2个参数，偏移量34-74）
-        if (inputData.length >= 74) {
-          return '0x' + inputData.substring(34, 74)
-        }
-      }
-    }
-  }
-  
-  // 默认从交易信息中获取
-  const tx = transactions.value.find(t => (t.tx_id || t.hash) === txHash)
-  return tx?.address_to || tx?.to || null
-}
-
-// 从解析配置中获取Amount（基于日志数据）
-const getParsedAmount = (txHash?: string): string | null => {
-  if (!txHash || !transactionReceipts.value[txHash]?.parser_configs) return null
-  
-  const receipt = transactionReceipts.value[txHash]
-  const logsData = receipt.logs_data
-  
-  if (!logsData) return null
-  
-  // 查找匹配的解析配置（优先查找有日志解析配置的）
-  const matchedConfig = receipt.parser_configs.find((config: any) => 
-    config.logs_parser_type && config.logs_parser_rules?.extract_amount
-  )
-  
-  if (matchedConfig?.logs_parser_rules?.extract_amount) {
-    try {
-      const logs = JSON.parse(logsData)
-      if (Array.isArray(logs) && logs.length > 0) {
-        const log = logs[0] // 取第一个日志
-        const rule = matchedConfig.logs_parser_rules.extract_amount
-        let amountUnit = matchedConfig.logs_parser_rules.amount_unit || '18'
-        
-        console.log('🔍 解析Amount调试信息 (日志):', {
-          txHash,
-          rule,
-          amountUnit,
-          logsData,
-          matchedConfig
-        })
-        
-        // 如果amountUnit是"token_decimals"，需要从合约信息获取实际精度
-        if (amountUnit === 'token_decimals') {
-          const tx = transactions.value.find(t => (t.tx_id || t.hash) === txHash)
-          if (tx?.token_decimals) {
-            amountUnit = tx.token_decimals.toString()
-            console.log('🔍 从合约信息获取精度:', amountUnit)
-          } else {
-            console.log('❌ 无法获取代币精度，使用默认值18')
-            amountUnit = '18'
-          }
-        }
-        
-        if (rule === 'data[0]' && log.data && log.data !== '0x') {
-          // 从data[0]提取amount（通常是前32字节）
-          if (log.data.length >= 66) {
-            const amountHex = log.data.substring(2, 66)
-            console.log('🔍 提取的amount hex (data[0]):', amountHex)
-            
-            try {
-              const amountWei = new BigNumber('0x' + amountHex, 16)
-              console.log('🔍 转换后的amount wei:', amountWei.toString())
-              
-              // 根据精度转换为对应单位
-              const decimals = parseInt(amountUnit)
-              if (!isNaN(decimals)) {
-                const amount = amountWei.dividedBy(new BigNumber(10).pow(decimals))
-                const result = formatNumber.wei(amount.toString())
-                console.log('🔍 最终结果 (精度', decimals, '):', result)
-                return result
-              } else {
-                console.log('❌ 无效的精度值:', amountUnit)
-              }
-            } catch (error) {
-              console.error('❌ Amount解析错误:', error)
-            }
-          } else {
-            console.log('❌ 日志数据长度不足 (data[0]):', log.data.length)
-          }
-        }
-      }
-    } catch (error) {
-      console.error('❌ 解析日志数据失败:', error)
-    }
-  }
-  
-  // 如果没有日志解析配置，尝试从输入数据解析
-  const inputData = receipt.input_data
-  if (inputData && inputData !== '0x') {
-    const signature = inputData.substring(0, 10)
-    const matchedConfig = receipt.parser_configs.find((config: any) => 
-      config.function_signature === signature
-    )
-    
-    if (matchedConfig?.parser_rules?.extract_amount) {
-      const rule = matchedConfig.parser_rules.extract_amount
-      let amountUnit = matchedConfig.parser_rules.amount_unit || '18'
-      
-      console.log('🔍 解析Amount调试信息 (输入数据):', {
-        txHash,
-        signature,
-        rule,
-        amountUnit,
-        inputData,
-        matchedConfig
-      })
-      
-      // 如果amountUnit是"token_decimals"，需要从合约信息获取实际精度
-      if (amountUnit === 'token_decimals') {
-        const tx = transactions.value.find(t => (t.tx_id || t.hash) === txHash)
-        if (tx?.token_decimals) {
-          amountUnit = tx.token_decimals.toString()
-          console.log('🔍 从合约信息获取精度:', amountUnit)
-        } else {
-          console.log('❌ 无法获取代币精度，使用默认值18')
-          amountUnit = '18'
-        }
-      }
-      
-      if (rule === 'params.wad') {
-        // wad参数通常是第1个参数，偏移量10-42
-        if (inputData.length >= 42) {
-          const amountHex = inputData.substring(10, 42)
-          console.log('🔍 提取的amount hex (wad):', amountHex)
-          
-          try {
-            const amountWei = new BigNumber('0x' + amountHex, 16)
-            console.log('🔍 转换后的amount wei:', amountWei.toString())
-            
-            // 根据精度转换为对应单位
-            const decimals = parseInt(amountUnit)
-            if (!isNaN(decimals)) {
-              const amount = amountWei.dividedBy(new BigNumber(10).pow(decimals))
-              const result = formatNumber.wei(amount.toString())
-              console.log('🔍 最终结果 (精度', decimals, '):', result)
-              return result
-            } else {
-              console.log('❌ 无效的精度值:', amountUnit)
-            }
-          } catch (error) {
-            console.error('❌ Amount解析错误:', error)
-          }
-        } else {
-          console.log('❌ 输入数据长度不足 (wad):', inputData.length)
-        }
-      } else if (rule === 'params.value') {
-        // value参数通常是第2个参数，偏移量42-74
-        if (inputData.length >= 74) {
-          const amountHex = inputData.substring(42, 74)
-          console.log('🔍 提取的amount hex (value):', amountHex)
-          
-          try {
-            const amountWei = new BigNumber('0x' + amountHex, 16)
-            console.log('🔍 转换后的amount wei:', amountWei.toString())
-            
-            // 根据精度转换为对应单位
-            const decimals = parseInt(amountUnit)
-            if (!isNaN(decimals)) {
-              const amount = amountWei.dividedBy(new BigNumber(10).pow(decimals))
-              const result = formatNumber.wei(amount.toString())
-              console.log('🔍 最终结果 (精度', decimals, '):', result)
-              return result
-            } else {
-              console.log('❌ 无效的精度值:', amountUnit)
-            }
-          } catch (error) {
-            console.error('❌ Amount解析错误:', error)
-          }
-        } else {
-          console.log('❌ 输入数据长度不足 (value):', inputData.length)
-        }
-      } else if (rule === 'transaction.value') {
-        // 从交易信息中获取
-        const tx = transactions.value.find(t => (t.tx_id || t.hash) === txHash)
-        if (tx?.amount || tx?.value) {
-          const result = formatNumber.weiToEth(tx.amount || tx.value)
-          console.log('🔍 从交易信息获取amount:', result)
-          return result
-        }
-      }
-    }
-  }
-  
-  // 如果没有配置规则，尝试从交易信息中获取
-  const tx = transactions.value.find(t => (t.tx_id || t.hash) === txHash)
-  if (tx?.amount || tx?.value) {
-    const result = formatNumber.weiToEth(tx.amount || tx.value)
-    console.log('🔍 降级从交易信息获取amount:', result)
-    return result
-  }
-  
-  console.log('❌ 无法解析amount，所有方法都失败')
-  return null
-}
 
 // 格式化Base Fee - 使用统一格式化工具
 const formatBaseFee = (baseFee: string | number | undefined): string => {

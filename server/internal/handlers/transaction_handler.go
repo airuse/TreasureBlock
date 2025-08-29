@@ -22,6 +22,8 @@ type TransactionHandler struct {
 	receiptService           services.TransactionReceiptService
 	parserConfigRepo         repository.ParserConfigRepository
 	blockVerificationService services.BlockVerificationService
+	contractParseService     services.ContractParseService
+	coinConfigService        services.CoinConfigService
 }
 
 // NewTransactionHandler 创建交易处理器
@@ -30,12 +32,16 @@ func NewTransactionHandler(
 	receiptService services.TransactionReceiptService,
 	parserConfigRepo repository.ParserConfigRepository,
 	blockVerificationService services.BlockVerificationService,
+	contractParseService services.ContractParseService,
+	coinConfigService services.CoinConfigService,
 ) *TransactionHandler {
 	return &TransactionHandler{
 		txService:                txService,
 		receiptService:           receiptService,
 		parserConfigRepo:         parserConfigRepo,
 		blockVerificationService: blockVerificationService,
+		contractParseService:     contractParseService,
+		coinConfigService:        coinConfigService,
 	}
 }
 
@@ -332,6 +338,25 @@ func (h *TransactionHandler) CreateTransaction(c *gin.Context) {
 			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "创建交易凭证失败", "details": err.Error()})
 			return
 		}
+
+		// 同步解析：不阻塞太久，只做一次最佳努力
+		txForParse, _ := h.txService.GetTransactionByHash(c.Request.Context(), req.TxID)
+		var parserConfigs []*models.ParserConfig
+		if txForParse != nil && txForParse.AddressTo != "" {
+			if configs, err := h.parserConfigRepo.GetParserConfigsByContract(c.Request.Context(), txForParse.AddressTo); err == nil {
+				if len(configs) == 0 {
+					if fallback, err2 := h.parserConfigRepo.GetParserConfigsByContract(c.Request.Context(), "*"); err2 == nil {
+						parserConfigs = fallback
+					}
+				} else {
+					parserConfigs = configs
+				}
+			}
+		}
+		receiptSaved, _ := h.receiptService.GetTransactionReceiptByHash(c.Request.Context(), req.TxID)
+		if receiptSaved != nil {
+			_, _ = h.contractParseService.ParseAndStore(c.Request.Context(), receiptSaved, txForParse, parserConfigs)
+		}
 	}
 
 	tx := req.ToModel()
@@ -375,6 +400,18 @@ func (h *TransactionHandler) CreateTransactionsBatch(c *gin.Context) {
 	var successCount int
 	var failedCount int
 	var errors []string
+
+	txs := make([]string, 0)
+	coinConfigs, err := h.coinConfigService.GetAllCoinConfigs(c.Request.Context())
+	if err != nil {
+		errors = append(errors, fmt.Sprintf("获取币种配置失败: %v", err))
+		failedCount++
+		return
+	}
+	coinConfigMap := make(map[string]*models.CoinConfig)
+	for _, cc := range coinConfigs {
+		coinConfigMap[cc.ContractAddr] = cc
+	}
 
 	for i, txData := range transactionsData {
 		txMap, ok := txData.(map[string]interface{})
@@ -448,8 +485,9 @@ func (h *TransactionHandler) CreateTransactionsBatch(c *gin.Context) {
 			if req.Receipt.Logs != nil {
 				receiptData["logs_data"] = req.Receipt.Logs
 			}
-			if req.Receipt.ContractAddress != nil {
-				receiptData["contract_address"] = *req.Receipt.ContractAddress
+
+			if coinConfigMap[req.AddressTo] != nil {
+				receiptData["contract_address"] = req.AddressTo
 			}
 			if req.Receipt.GasUsed != nil {
 				if v := convertToUint64(req.Receipt.GasUsed); v != nil {
@@ -494,7 +532,9 @@ func (h *TransactionHandler) CreateTransactionsBatch(c *gin.Context) {
 			failedCount++
 			continue
 		}
-
+		if coinConfigMap[tx.AddressTo] != nil {
+			txs = append(txs, tx.TxID)
+		}
 		successCount++
 	}
 
@@ -514,6 +554,11 @@ func (h *TransactionHandler) CreateTransactionsBatch(c *gin.Context) {
 	}
 
 	c.JSON(http.StatusCreated, response)
+	if len(txs) > 0 {
+		h.contractParseService.ParseAndStoreBatchByTxHashesAsync(c.Request.Context(), txs)
+	} else {
+		fmt.Println("有问题！一个都没有找到！！！！！")
+	}
 }
 
 // checkBlockVerificationTimeout 检查区块验证是否超时
@@ -735,6 +780,7 @@ func (h *TransactionHandler) GetTransactionReceiptByHash(c *gin.Context) {
 	var tx *models.Transaction
 	var parserConfigs []*models.ParserConfig
 	if receipt != nil {
+		// 获取交易
 		tx, err = h.txService.GetTransactionByHash(c.Request.Context(), Hash)
 		if err != nil {
 			// 如果获取交易失败，记录警告但不影响凭证返回

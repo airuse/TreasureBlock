@@ -2,9 +2,10 @@ import request from '../request'
 import { 
   handleMockGetTransactions, 
   handleMockGetTransaction,
-  handleMockSearchTransactions
+  handleMockSearchTransactions,
+  handleMockGetParsedTransaction
 } from '../mock/transactions'
-import type { Transaction } from '@/types'
+import type { Transaction, ParsedContractResult } from '@/types'
 import type { ApiResponse, PaginatedResponse, PaginationRequest, SortRequest, SearchRequest } from '../types'
 
 // ==================== API相关类型定义 ====================
@@ -116,6 +117,22 @@ export function getTransactionReceipt(hash: string): Promise<ApiResponse<any>> {
   console.log('🌐 使用真实API - getTransactionReceipt')
   return request({
     url: `/api/v1/transactions/receipt/${hash}`,
+    method: 'GET'
+  })
+}
+
+/**
+ * 获取交易解析结果（后端已预解析）
+ */
+export function getParsedTransaction(hash: string): Promise<ApiResponse<ParsedContractResult[]>> {
+  if (__USE_MOCK__) {
+    console.log('🔧 使用Mock数据 - getParsedTransaction')
+    return handleMockGetParsedTransaction(hash)
+  }
+  
+  console.log('🌐 使用真实API - getParsedTransaction')
+  return request({
+    url: `/api/v1/transactions/parsed/${hash}`,
     method: 'GET'
   })
 }

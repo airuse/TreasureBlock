@@ -160,27 +160,36 @@ func (h *WebSocketHandler) handleMessages(client *Client) {
 			break
 		}
 
-		// 检查是否为ping消息（特殊处理）
-		messageStr := string(message)
-		if messageStr == "ping" {
-			// 直接响应pong，不需要JSON解析
-			response := map[string]interface{}{
-				"type": "pong",
-				"data": "pong",
-			}
-			h.sendMessage(client, response)
+		// 尝试解析JSON消息
+		var msg map[string]interface{}
+		if err := json.Unmarshal(message, &msg); err != nil {
+			log.Printf("Failed to unmarshal message: %v, message: %s", err, string(message))
 			continue
 		}
 
-		// 处理接收到的消息
-		var msg SubscribeMessage
-		if err := json.Unmarshal(message, &msg); err != nil {
-			log.Printf("Failed to unmarshal message: %v, message: %s", err, messageStr)
+		// 检查是否为ping消息
+		if msgType, ok := msg["type"].(string); ok && msgType == "ping" {
+			// 只处理来自客户端的ping，不响应（避免无限循环）
+			log.Printf("🏓 Received ping from client %s, no response needed", client.conn.RemoteAddr().String())
+			continue
+		}
+
+		// 检查是否为pong消息
+		if msgType, ok := msg["type"].(string); ok && msgType == "pong" {
+			// 收到pong，重置读取超时
+			client.conn.SetReadDeadline(time.Now().Add(60 * time.Second))
+			continue
+		}
+
+		// 处理订阅消息
+		var subscribeMsg SubscribeMessage
+		if err := json.Unmarshal(message, &subscribeMsg); err != nil {
+			log.Printf("Failed to unmarshal subscribe message: %v, message: %s", err, string(message))
 			continue
 		}
 
 		// 根据消息类型处理
-		h.handleMessage(client, msg)
+		h.handleMessage(client, subscribeMsg)
 	}
 }
 
@@ -415,4 +424,51 @@ func (h *WebSocketHandler) GetSubscribedClients(category MessageCategory, chain 
 		}
 	}
 	return count
+}
+
+// GetWebSocketStatus 获取WebSocket连接状态详情
+func (h *WebSocketHandler) GetWebSocketStatus() map[string]interface{} {
+	h.mutex.RLock()
+	defer h.mutex.RUnlock()
+
+	activeConnections := make([]map[string]interface{}, 0)
+	subscriptionStats := make(map[string]int)
+
+	// 收集每个连接的详细信息
+	for client := range h.clients {
+		clientInfo := map[string]interface{}{
+			"remote_addr":   client.conn.RemoteAddr().String(),
+			"subscribed_to": client.subscribed,
+			"connected_at":  time.Now().Unix(), // 这里可以添加连接时间字段
+		}
+		activeConnections = append(activeConnections, clientInfo)
+
+		// 统计订阅情况
+		for channel := range client.subscribed {
+			subscriptionStats[channel]++
+		}
+	}
+
+	status := map[string]interface{}{
+		"total_clients":      len(h.clients),
+		"active_connections": activeConnections,
+		"subscription_stats": subscriptionStats,
+		"last_updated":       time.Now().Unix(),
+	}
+
+	return status
+}
+
+// CloseAllConnections 关闭所有WebSocket连接（用于调试）
+func (h *WebSocketHandler) CloseAllConnections() {
+	h.mutex.Lock()
+	defer h.mutex.Unlock()
+
+	log.Printf("Closing all WebSocket connections, count: %d", len(h.clients))
+	for client := range h.clients {
+		client.conn.Close()
+		close(client.send)
+	}
+	h.clients = make(map[*Client]bool)
+	log.Printf("All WebSocket connections closed")
 }

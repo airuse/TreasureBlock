@@ -89,9 +89,11 @@ func New() *Server {
 		transactionReceiptRepo,
 		coinConfigRepo,
 	)
+	contractParseResultRepo := repository.NewContractParseResultRepository()
+	contractParseResultService := services.NewContractParseService(contractParseResultRepo, transactionReceiptRepo, txRepo, parserConfigRepo, coinConfigRepo)
 
 	// 创建处理器
-	txHandler := handlers.NewTransactionHandler(txService, transactionReceiptService, parserConfigRepo, blockVerificationService)
+	txHandler := handlers.NewTransactionHandler(txService, transactionReceiptService, parserConfigRepo, blockVerificationService, contractParseResultService, coinConfigService)
 	wsHandler := handlers.NewWebSocketHandler()
 	blockHandler := handlers.NewBlockHandler(blockService, wsHandler)
 	addressHandler := handlers.NewAddressHandler(addressService)
@@ -105,6 +107,7 @@ func New() *Server {
 	parserConfigHandler := handlers.NewParserConfigHandler(parserConfigService)
 	homeHandler := handlers.NewHomeHandler(blockService, txService, statsService)
 	earningsHandler := handlers.NewEarningsHandler(earningsService)
+	contractParseResultHandler := handlers.NewContractParseResultHandler(contractParseResultService)
 
 	// 启动WebSocket处理器
 	wsHandler.Start()
@@ -130,6 +133,7 @@ func New() *Server {
 		requestLogRepo,
 		earningsService,
 		config.AppConfig.Server.TLSEnabled, // 传递TLS配置
+		contractParseResultHandler,
 	)
 
 	// 创建HTTP服务器

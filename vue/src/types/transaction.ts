@@ -111,3 +111,20 @@ export interface GetAddressTransactionsRequest {
   page_size: number
   chain?: string
 } 
+
+// 合约解析结果类型（后端预解析返回）
+export interface ParsedContractResult {
+  id: number
+  tx_hash: string
+  contract_address: string
+  chain: string
+  block_number: number
+  log_index: number
+  event_signature: string
+  event_name: string
+  from_address: string
+  to_address: string
+  amount_wei: string
+  token_decimals: number
+  token_symbol: string
+}

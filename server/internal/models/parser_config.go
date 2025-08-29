@@ -162,7 +162,7 @@ type ParserConfig struct {
 	EventSignature    string              `json:"event_signature,omitempty" gorm:"column:event_signature;size:66"`
 	EventName         string              `json:"event_name,omitempty" gorm:"column:event_name;size:100"`
 	EventDescription  string              `json:"event_description,omitempty" gorm:"column:event_description;size:255"`
-	LogsParamConfig   LogsParamConfigs    `json:"logs_param_config,omitempty" gorm:"column:logs_param_config;type:json"`
+	LogsParamConfig   LogsParamConfigs    `json:"logs_param_config,omitempty" gorm:"-"`
 	LogsParserRules   LogsParserRulesJSON `json:"logs_parser_rules,omitempty" gorm:"column:logs_parser_rules;type:json"`
 	LogsDisplayFormat string              `json:"logs_display_format,omitempty" gorm:"column:logs_display_format;size:255"`
 }

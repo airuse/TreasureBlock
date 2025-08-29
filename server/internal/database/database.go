@@ -96,6 +96,7 @@ func autoMigrate() error {
 		&models.UserRole{},
 		&models.UserBalance{},
 		&models.EarningsRecord{},
+		&models.ContractParseResult{},
 	)
 }
 

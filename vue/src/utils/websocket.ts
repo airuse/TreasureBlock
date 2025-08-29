@@ -102,15 +102,22 @@ class WebSocketManager {
 
     this.ws.onmessage = (event) => {
       try {
-        // 处理ping消息（服务端发送的纯文本）
-        if (event.data === 'ping') {
-          // 响应pong
-          this.ws?.send('pong')
+        // 尝试解析JSON消息
+        const message = JSON.parse(event.data)
+        
+        // 处理ping消息（服务端发送的JSON格式）
+        if (message.type === 'ping') {
+          // 响应pong消息
+          const pongMessage = {
+            type: 'pong',
+            data: 'pong',
+            timestamp: Date.now()
+          }
+          this.ws?.send(JSON.stringify(pongMessage))
           return
         }
         
-        // 尝试解析JSON消息
-        const message = JSON.parse(event.data)
+        // 处理其他消息
         this.handleMessage(message)
       } catch (error) {
         console.error('Failed to parse WebSocket message:', error)

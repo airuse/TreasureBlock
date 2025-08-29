@@ -45,3 +45,21 @@ export const handleMockSearchTransactions = (data: any): Promise<any> => {
     }, 400)
   })
 }
+
+/**
+ * 模拟获取交易解析结果接口
+ */
+export const handleMockGetParsedTransaction = (hash: string): Promise<any> => {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      // 参考 handleMockSearchTransactions，从 Apifox 导出的 JSON 读取示例
+      try {
+        const response = (apiData as any).paths['/transactions/parsed/{hash}'].get.responses['200'].content['application/json'].example
+        resolve({ success: true, data: response })
+      } catch (e) {
+        // 兼容数据缺失时的最小返回
+        resolve({ success: true, data: [] })
+      }
+    }, 200)
+  })
+}

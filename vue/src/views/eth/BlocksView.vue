@@ -428,6 +428,10 @@ const goToPage = (page: number) => {
 // WebSocket集成
 const { subscribeChainEvent, unsubscribeChainEvent, isConnected } = useChainWebSocket('eth')
 
+// 存储取消订阅函数
+let unsubscribeBlocks: (() => void) | null = null
+let unsubscribeStats: (() => void) | null = null
+
 function handleBlockCountUpdate(message: any) {
   if (message.data && typeof message.data.totalBlocks === 'number') {
     totalBlocks.value = message.data.totalBlocks
@@ -456,7 +460,7 @@ function handleNewBlock(message: any) {
       gasUsed: message.data.gas_used || message.data.gasUsed || 0,
       gasLimit: message.data.gas_limit || message.data.gasLimit || 0,
       miner: message.data.miner || '',
-      miner_tip_eth: message.data.miner_tip_eth // 传递原始字段用于调试
+      miner_tip_eth: message.data.miner_tip_eth
     }
     
     // 实现最新区块插入到列表头部的逻辑
@@ -487,9 +491,6 @@ function handleBlockUpdate(message: any) {
       if (blockIndex !== -1) {
         // 更新现有区块信息
         const existingBlock = blocks.value[blockIndex]
-        
-        // 记录更新前的值
-        const oldMinerTip = existingBlock.miner_tip_eth
         
         // 只更新可能变化的字段
         if (updatedBlock.miner_tip_eth !== undefined) {
@@ -524,9 +525,9 @@ onMounted(() => {
   
   // 订阅WebSocket事件
   console.log('🔌 开始订阅WebSocket事件...')
-  console.log('🔌 WebSocket状态:', isConnected.value)
   
-  const unsubscribeBlocks = subscribeChainEvent('block', (message) => {
+  // 订阅区块事件
+  unsubscribeBlocks = subscribeChainEvent('block', (message) => {
     // 根据action区分创建和更新事件
     if (message.action === 'update') {
       handleBlockUpdate(message)
@@ -534,26 +535,28 @@ onMounted(() => {
       handleNewBlock(message)
     }
   })
-  const unsubscribeStats = subscribeChainEvent('stats', handleStatsUpdate)
+  
+  // 订阅统计事件
+  unsubscribeStats = subscribeChainEvent('stats', handleStatsUpdate)
   
   console.log('✅ WebSocket事件订阅完成')
+})
+
+onUnmounted(() => {
+  // 取消WebSocket订阅
+  console.log('🔌 取消WebSocket订阅...')
   
-  // 延迟检查WebSocket连接状态
-  setTimeout(() => {
-    console.log('🔌 延迟检查WebSocket状态:', isConnected.value)
-  }, 2000)
-  
-  onUnmounted(() => {
-    // 取消WebSocket订阅
-    console.log('🔌 取消WebSocket订阅...')
+  if (unsubscribeBlocks) {
     unsubscribeBlocks()
+    unsubscribeBlocks = null
+  }
+  
+  if (unsubscribeStats) {
     unsubscribeStats()
-    
-    // 同时取消服务器端订阅
-    unsubscribeChainEvent('block')
-    unsubscribeChainEvent('stats')
-    console.log('✅ WebSocket订阅已取消')
-  })
+    unsubscribeStats = null
+  }
+  
+  console.log('✅ WebSocket订阅已取消')
 })
 
 // 监听搜索查询
