@@ -22,6 +22,7 @@ type UserAddressRepository interface {
 	GetByJSONQuery(query string, args ...interface{}) ([]models.UserAddress, error)
 	CountByJSONQuery(query string, args ...interface{}) (int64, error)
 	GetAllWalletAddresses() ([]models.UserAddress, error)
+	GetByType(addressType string) ([]*models.UserAddress, error)
 }
 
 // userAddressRepository 用户地址仓库实现
@@ -127,4 +128,10 @@ func (r *userAddressRepository) GetWalletByUserIDAndAddress(userID uint, address
 		return nil, err
 	}
 	return &userAddress, nil
+}
+
+func (r *userAddressRepository) GetByType(addressType string) ([]*models.UserAddress, error) {
+	var addresses []*models.UserAddress
+	err := r.db.Where("type = ?", addressType).Find(&addresses).Error
+	return addresses, err
 }

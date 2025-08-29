@@ -400,7 +400,7 @@ func (h *TransactionHandler) CreateTransactionsBatch(c *gin.Context) {
 	}
 
 	// 找到非合约交易，并更新余额
-	user_wallet_addresses, err := h.userAddressService.GetAllWalletAddresses()
+	user_wallet_addresses, err := h.userAddressService.GetAllWalletAddressModels()
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "获取用户地址失败", "details": err.Error()})
 		return
@@ -557,10 +557,10 @@ func (h *TransactionHandler) CreateTransactionsBatch(c *gin.Context) {
 				continue
 			}
 			if addr.Address == tx.AddressFrom {
-				h.userAddressService.UpdateAddWalletBalance(addr.ID, uint64(amount))
+				h.userAddressService.UpdateReduceWalletBalance(addr.ID, uint64(amount))
 			}
 			if addr.Address == tx.AddressTo {
-				h.userAddressService.UpdateReduceWalletBalance(addr.ID, uint64(amount))
+				h.userAddressService.UpdateAddWalletBalance(addr.ID, uint64(amount))
 			}
 		}
 	}

@@ -1,26 +1,10 @@
 <template>
   <div class="space-y-6">
-    <!-- 页面头部 -->
-    <div class="bg-white shadow rounded-lg">
-      <div class="px-4 py-5 sm:p-6">
-        <div class="flex items-center justify-between">
-          <div>
-            <h1 class="text-2xl font-bold text-gray-900">个人地址</h1>
-            <p class="mt-1 text-sm text-gray-500">管理您的个人地址和创建交易</p>
-          </div>
-          <div class="flex items-center space-x-2">
-            <div class="w-3 h-3 bg-blue-500 rounded-full"></div>
-            <span class="text-sm text-gray-600">ETH 网络</span>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 地址概览 -->
+    <!-- 地址列表 -->
     <div class="bg-white shadow rounded-lg">
       <div class="px-4 py-5 sm:p-6">
         <div class="flex items-center justify-between mb-4">
-          <h3 class="text-lg leading-6 font-medium text-gray-900">个人地址</h3>
+          <h3 class="text-lg leading-6 font-medium text-gray-900">地址列表</h3>
           <button
             @click="showAddAddressModal = true"
             class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors"
@@ -28,32 +12,6 @@
             添加地址
           </button>
         </div>
-        
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
-          <div class="text-center">
-            <div class="text-2xl font-bold text-blue-600">{{ addressCount }}</div>
-            <div class="text-sm text-gray-500">管理地址</div>
-          </div>
-          <div class="text-center">
-            <div class="text-2xl font-bold text-green-600">{{ formatWeiBalance(totalBalance) }}</div>
-            <div class="text-sm text-gray-500">总余额 (ETH)</div>
-          </div>
-          <div class="text-center">
-            <div class="text-2xl font-bold text-purple-600">{{ totalTransactions }}</div>
-            <div class="text-sm text-gray-500">总交易数</div>
-          </div>
-          <div class="text-center">
-            <div class="text-2xl font-bold text-orange-600">{{ addressesWithNotes }}</div>
-            <div class="text-sm text-gray-500">有备注地址</div>
-          </div>
-        </div>
-      </div>
-    </div>
-
-    <!-- 地址列表 -->
-    <div class="bg-white shadow rounded-lg">
-      <div class="px-4 py-5 sm:p-6">
-        <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">地址列表</h3>
         
         <!-- 加载状态 -->
         <div v-if="loading" class="text-center py-8">
@@ -619,11 +577,7 @@ const showEditAddressModal = ref(false)
 const addingAddress = ref(false)
 const updatingAddress = ref(false)
 
-// 地址统计
-const addressCount = ref(0)
-const totalBalance = ref('0')
-const totalTransactions = ref(0)
-const addressesWithNotes = ref(0)
+// 可用收益（用于交易提示）
 const availableEarnings = ref(8.2)
 
 // 合约相关
@@ -824,7 +778,6 @@ const loadAddresses = async () => {
     const response = await getPersonalAddresses()
     if (response.success) {
       addressesList.value = response.data || []
-      updateStats()
     } else {
       showError(response.message || '获取地址列表失败')
     }
@@ -834,21 +787,6 @@ const loadAddresses = async () => {
   } finally {
     loading.value = false
   }
-}
-
-// 更新统计数据
-const updateStats = () => {
-  addressCount.value = addressesList.value.length
-  
-  // 计算总余额（Wei）
-  const totalWei = addressesList.value.reduce((sum, addr) => {
-    const balance = parseFloat(addr.balance || '0')
-    return sum + balance
-  }, 0)
-  totalBalance.value = totalWei.toString()
-  
-  totalTransactions.value = addressesList.value.reduce((sum, addr) => sum + addr.transaction_count, 0)
-  addressesWithNotes.value = addressesList.value.filter(addr => addr.notes && addr.notes.trim() !== '').length
 }
 
 // 添加地址

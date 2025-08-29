@@ -25,6 +25,7 @@ type UserAddressService interface {
 	GetAddressByID(userID uint, addressID uint) (*dto.UserAddressResponse, error)
 	GetAddressTransactions(userID uint, address string, page, pageSize int, chain string) (*dto.AddressTransactionsResponse, error)
 	GetAllWalletAddresses() ([]dto.UserAddressResponse, error)
+	GetAllWalletAddressModels() ([]*models.UserAddress, error)
 	UpdateAddWalletBalance(ID uint, amount uint64) error
 	UpdateReduceWalletBalance(ID uint, amount uint64) error
 }
@@ -109,39 +110,9 @@ func (s *userAddressService) GetUserAddresses(userID uint) ([]dto.UserAddressRes
 
 	var responses []dto.UserAddressResponse
 	for _, addr := range addresses {
-		if addr.Type == "wallet" {
-			// 如果地址有创建高度，计算动态余额
-			if addr.BalanceHeight > 0 {
-				inWei, outWei, sumErr := s.transactionRepo.ComputeEthSumsWei(context.Background(), addr.Address, addr.BalanceHeight)
-				if sumErr == nil && addr.Balance != nil {
-					// 将字符串余额转换为float64进行计算
-					createdBalanceFloat, _ := new(big.Float).SetString(*addr.Balance)
-					if createdBalanceFloat != nil {
-						// 将Wei转换为ETH进行计算
-						weiToEth := new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil))
-						createdBalanceETH, _ := new(big.Float).Quo(createdBalanceFloat, weiToEth).Float64()
-
-						dynamicBalance := s.computeEthDynamicBalance(createdBalanceETH, inWei, outWei)
-
-						// 将计算结果转换回Wei字符串
-						dynamicBalanceWei := new(big.Float).Mul(new(big.Float).SetFloat64(dynamicBalance), weiToEth)
-						dynamicBalanceString := dynamicBalanceWei.Text('f', 0)
-
-						resp := s.convertToResponse(&addr)
-						resp.Balance = &dynamicBalanceString
-						responses = append(responses, *resp)
-					} else {
-						responses = append(responses, *s.convertToResponse(&addr))
-					}
-				} else {
-					responses = append(responses, *s.convertToResponse(&addr))
-				}
-			} else {
-				responses = append(responses, *s.convertToResponse(&addr))
-			}
-		} else {
-			responses = append(responses, *s.convertToResponse(&addr))
-		}
+		// 直接返回存储的余额，不进行动态计算
+		// 余额现在由交易处理和合约解析自动维护
+		responses = append(responses, *s.convertToResponse(&addr))
 	}
 
 	return responses, nil
@@ -372,38 +343,6 @@ func (s *userAddressService) GetAddressTransactions(userID uint, address string,
 	}, nil
 }
 
-// computeEthDynamicBalance 基于创建高度余额和自创建高度以来的收支（Wei）计算当前余额（ETH）
-func (s *userAddressService) computeEthDynamicBalance(createdBalanceETH float64, inWei string, outWei string) float64 {
-	// 将 Wei 字符串转为大整数
-	inBigInt := new(big.Int)
-	outBigInt := new(big.Int)
-	if _, ok := inBigInt.SetString(inWei, 10); !ok {
-		inBigInt = big.NewInt(0)
-	}
-	if _, ok := outBigInt.SetString(outWei, 10); !ok {
-		outBigInt = big.NewInt(0)
-	}
-
-	// 计算净变化（Wei）
-	netWei := new(big.Int).Sub(inBigInt, outBigInt)
-
-	// 将 createdBalanceETH 转为 Wei：createdBalanceETH * 1e18
-	baseWei := new(big.Float).Mul(new(big.Float).SetFloat64(createdBalanceETH), new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil)))
-
-	// 将 netWei 转为 big.Float
-	netWeiFloat := new(big.Float).SetInt(netWei)
-
-	// 当前余额 Wei = baseWei + netWei
-	currentWei := new(big.Float).Add(baseWei, netWeiFloat)
-
-	// 转为 ETH：/ 1e18
-	currentETHFloat := new(big.Float).Quo(currentWei, new(big.Float).SetInt(new(big.Int).Exp(big.NewInt(10), big.NewInt(18), nil)))
-
-	// 转为 float64 返回
-	currentETH, _ := currentETHFloat.Float64()
-	return currentETH
-}
-
 // GetAddressesByAuthorizedAddress 根据授权地址查询地址列表（高效JSON查询）
 func (s *userAddressService) GetAddressesByAuthorizedAddress(authorizedAddr string) ([]dto.UserAddressResponse, error) {
 	// 使用原生SQL进行JSON查询，性能更好
@@ -455,6 +394,11 @@ func (s *userAddressService) GetAllWalletAddresses() ([]dto.UserAddressResponse,
 		responses = append(responses, *s.convertToResponse(&addr))
 	}
 	return responses, nil
+}
+
+// GetAllWalletAddressModels 获取所有钱包类型的地址模型（用于内部处理）
+func (s *userAddressService) GetAllWalletAddressModels() ([]*models.UserAddress, error) {
+	return s.userAddressRepo.GetByType("wallet")
 }
 func (s *userAddressService) UpdateAddWalletBalance(ID uint, amount uint64) error {
 	address, err := s.userAddressRepo.GetByID(ID)
