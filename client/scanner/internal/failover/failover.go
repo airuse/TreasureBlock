@@ -382,6 +382,20 @@ func (fm *FailoverManager) CallWithFailoverReceipt(operation string, clientCall 
 	return nil, fmt.Errorf("unexpected result type")
 }
 
+// CallWithFailoverReceipts 支持获取多个交易回执的故障转移调用方法
+func (fm *FailoverManager) CallWithFailoverReceipts(operation string, clientCall func(*ethclient.Client) ([]*types.Receipt, error)) ([]*types.Receipt, error) {
+	result, err := fm.ExecuteRequest(operation, func(client *ethclient.Client) (interface{}, error) {
+		return clientCall(client)
+	})
+	if err != nil {
+		return nil, err
+	}
+	if val, ok := result.([]*types.Receipt); ok {
+		return val, nil
+	}
+	return nil, fmt.Errorf("unexpected result type")
+}
+
 func (fm *FailoverManager) CallWithFailoverTransactions(operation string, clientCall func(*ethclient.Client) ([]map[string]interface{}, error)) ([]map[string]interface{}, error) {
 	result, err := fm.ExecuteRequest(operation, func(client *ethclient.Client) (interface{}, error) {
 		return clientCall(client)

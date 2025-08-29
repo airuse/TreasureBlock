@@ -14,6 +14,7 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/ethereum/go-ethereum/rpc"
 )
 
 // EthereumScanner 以太坊扫块器 - 使用官方go-ethereum包
@@ -336,8 +337,102 @@ func (es *EthereumScanner) batchGetTransactionReceipts(block *models.Block, tran
 		return nil
 	}
 
+	// 策略1: 优先尝试使用 BlockReceipts 一次性获取所有回执
+	if receipts, err := es.tryBlockReceipts(block.Height); err == nil {
+		return es.processBlockReceipts(block, transactions, receipts)
+	}
+
+	// 策略2: BlockReceipts 失败，回退到逐个获取 TransactionReceipt
+	return es.fallbackToIndividualReceipts(block, transactions, txHashes)
+}
+
+// tryBlockReceipts 尝试使用 BlockReceipts 获取整个区块的回执
+func (es *EthereumScanner) tryBlockReceipts(blockHeight uint64) ([]*types.Receipt, error) {
 	startTime := time.Now()
-	// fmt.Printf("[ETH Scanner] 🚀 Starting parallel fetch of %d transaction receipts...\n", len(txHashes))
+	failoverManager := failover.NewFailoverManager(es.localClient, es.externalClients)
+
+	receipts, err := failoverManager.CallWithFailoverReceipts("get block receipts", func(client *ethclient.Client) ([]*types.Receipt, error) {
+		// 使用正确的类型转换
+		blockNum := rpc.BlockNumber(blockHeight)
+		return client.BlockReceipts(context.Background(), rpc.BlockNumberOrHash{BlockNumber: &blockNum})
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to get block receipts: %w", err)
+	}
+
+	elapsed := time.Since(startTime)
+
+	stats := failoverManager.GetStats()
+	fmt.Printf("[ETH Scanner] %d 📊 BlockReceipts for Block-BBBBBB Fetch Complete:\n", blockHeight)
+	fmt.Printf("  ✅ Total Number: %d\n", len(receipts))
+	fmt.Printf("  ⏱️ Total time: %v\n", elapsed)
+	fmt.Printf("  📉 Stats: %+v\n", stats)
+
+	return receipts, nil
+}
+
+// processBlockReceipts 处理通过 BlockReceipts 获取的回执
+func (es *EthereumScanner) processBlockReceipts(block *models.Block, transactions []map[string]interface{}, receipts []*types.Receipt) error {
+	if len(receipts) == 0 {
+		fmt.Printf("[ETH Scanner] Warning: BlockReceipts returned empty receipts for block %d\n", block.Height)
+		return nil
+	}
+
+	// 创建哈希到交易的映射
+	hashToTxMap := make(map[string]int)
+	for i, tx := range transactions {
+		if hash, ok := tx["hash"].(string); ok {
+			hashToTxMap[hash] = i
+		}
+	}
+
+	// 处理所有回执
+	successCount := 0
+	for _, receipt := range receipts {
+		if receipt == nil {
+			continue
+		}
+
+		// 通过交易哈希找到对应的交易
+		txHash := receipt.TxHash.Hex()
+		if index, exists := hashToTxMap[txHash]; exists && index < len(transactions) {
+			tx := transactions[index]
+
+			// 设置交易状态
+			if receipt.Status == 1 {
+				tx["status"] = "success"
+			} else {
+				tx["status"] = "failed"
+			}
+
+			// 设置实际使用的gas
+			tx["gasUsed"] = receipt.GasUsed
+
+			// 使用交易回执中的真实EffectiveGasPrice
+			if receipt.EffectiveGasPrice != nil {
+				tx["effectiveGasPrice"] = receipt.EffectiveGasPrice.String()
+				tx["gasPrice"] = receipt.EffectiveGasPrice.String()
+
+				// 计算真实的交易费用
+				realFee := new(big.Int).Mul(receipt.EffectiveGasPrice, big.NewInt(int64(receipt.GasUsed)))
+				tx["realFee"] = realFee.String()
+			}
+
+			// 解析合约日志
+			es.parseContractLogs(tx, receipt)
+
+			// 保存完整的回执信息
+			tx["receipt"] = receipt
+			successCount++
+		}
+	}
+
+	return nil
+}
+
+// fallbackToIndividualReceipts 回退到逐个获取 TransactionReceipt
+func (es *EthereumScanner) fallbackToIndividualReceipts(block *models.Block, transactions []map[string]interface{}, txHashes []string) error {
+	startTime := time.Now() // 重新定义 startTime，避免作用域问题
 
 	// 创建哈希到交易的映射
 	hashToTxMap := make(map[string]int)
@@ -361,12 +456,13 @@ func (es *EthereumScanner) batchGetTransactionReceipts(block *models.Block, tran
 		maxConcurrency = 20 // 默认值
 	}
 
-	// fmt.Printf("[ETH Scanner] Using %d concurrent workers for %d receipts\n", maxConcurrency, len(txHashes))
+	fmt.Printf("[ETH Scanner] 🔄 Using %d concurrent workers for individual receipt fetching\n", maxConcurrency)
 
 	// 创建工作池
 	semaphore := make(chan struct{}, maxConcurrency)
 	results := make(chan receiptResult, len(txHashes))
 	failoverManager := failover.NewFailoverManager(es.localClient, es.externalClients)
+
 	// 启动所有并发获取任务
 	for i, txHash := range txHashes {
 		go func(hash string, idx int) {
@@ -429,9 +525,6 @@ func (es *EthereumScanner) batchGetTransactionReceipts(block *models.Block, tran
 				// 计算真实的交易费用
 				realFee := new(big.Int).Mul(result.receipt.EffectiveGasPrice, big.NewInt(int64(result.receipt.GasUsed)))
 				tx["realFee"] = realFee.String()
-
-				// fmt.Printf("[ETH Scanner] Tx %s: Updated gas price to %s wei, real fee: %s wei\n",
-				// 	result.hash, result.receipt.EffectiveGasPrice.String(), realFee.String())
 			}
 
 			// 关键修复：为所有交易保存完整的回执信息，不管有没有日志
@@ -445,8 +538,8 @@ func (es *EthereumScanner) batchGetTransactionReceipts(block *models.Block, tran
 	elapsed := time.Since(startTime)
 
 	stats := failoverManager.GetStats()
-	fmt.Printf("[ETH Scanner] %d 📊 Parallel Receipt Fetch Complete:\n", block.Height)
-	fmt.Printf("  ✅ Total Nmuber: %d\n", len(txHashes))
+	fmt.Printf("[ETH Scanner] %d 📊 TransactionReceipt for Transaction-TTTTTT  Fetch Complete:\n", block.Height)
+	fmt.Printf("  ✅ Success: %d, ❌ Failed: %d, 📊 Total: %d\n", successCount, failureCount, len(txHashes))
 	fmt.Printf("  ⏱️ Total time: %v (parallel with %d workers)\n", elapsed, maxConcurrency)
 	fmt.Printf("  📉 Stats: %+v\n", stats)
 
