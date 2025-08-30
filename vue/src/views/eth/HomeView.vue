@@ -1,6 +1,6 @@
 <script setup lang="ts">
 import { ref, onMounted, onUnmounted } from 'vue'
-import { getHomeStats } from '@/api/home'
+import { useAuthStore } from '@/stores/auth'
 import type { HomeOverview, HomeBlockSummary, HomeTransactionSummary } from '@/types'
 import { 
   formatTimestamp, 
@@ -103,6 +103,9 @@ const formatWeiToEth = (wei: number | string | undefined) => {
   return (numWei / 1e18).toFixed(6)
 }
 
+// 认证store
+const authStore = useAuthStore()
+
 // 加载首页数据
 const loadHomeData = async () => {
   loading.value = true
@@ -110,15 +113,37 @@ const loadHomeData = async () => {
   
   try {
     console.log('🔍 开始加载首页数据...')
-    const response = await getHomeStats({ chain: 'eth' })
+    
+    // 根据登录状态调用不同的API
+    let response
+    if (authStore.isAuthenticated) {
+      // 已登录用户：调用 /v1/ 下的API
+      const { home } = await import('@/api')
+      response = await home.getHomeStats({ chain: 'eth' })
+    } else {
+      // 未登录用户：调用 /no-auth/ 下的API
+      const { noAuth } = await import('@/api')
+      response = await noAuth.getHomeStats({ chain: 'eth' })
+    }
+    
     console.log('📡 API响应:', response)
     
     if (response.success && response.data) {
       console.log('✅ 数据加载成功，开始处理数据...')
-      // 安全地设置数据，确保数组不为null
-      stats.value = response.data.overview || {}
-      latestBlocks.value = response.data.latestBlocks || []
-      latestTransactions.value = response.data.latestTransactions || []
+      
+      // 处理不同的响应数据结构
+      if ('overview' in response.data) {
+        // 标准响应结构：{ overview, latestBlocks, latestTransactions }
+        stats.value = response.data.overview || {}
+        latestBlocks.value = response.data.latestBlocks || []
+        latestTransactions.value = response.data.latestTransactions || []
+      } else {
+        // 直接返回HomeOverview结构
+        stats.value = response.data as HomeOverview
+        latestBlocks.value = []
+        latestTransactions.value = []
+      }
+      
       console.log('📊 处理后的数据:', {
         stats: stats.value,
         blocks: latestBlocks.value,

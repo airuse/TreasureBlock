@@ -25,6 +25,7 @@ func SetupRoutes(
 	scannerHandler *handlers.ScannerHandler,
 	authHandler *handlers.AuthHandler,
 	userAddressHandler *handlers.UserAddressHandler,
+	userTransactionHandler *handlers.UserTransactionHandler,
 	baseConfigHandler *handlers.BaseConfigHandler,
 	homeHandler *handlers.HomeHandler,
 	earningsHandler *handlers.EarningsHandler,
@@ -107,15 +108,39 @@ func SetupRoutes(
 			addresses.DELETE("/:id", userAddressHandler.DeleteAddress)                // 删除地址
 			addresses.GET("/transactions", userAddressHandler.GetAddressTransactions) // 获取地址交易列表
 		}
+
+		// 用户交易管理
+		userTransactions := userAPI.Group("/transactions")
+		{
+			userTransactions.POST("", userTransactionHandler.CreateTransaction)                    // 创建交易
+			userTransactions.GET("", userTransactionHandler.GetUserTransactions)                   // 获取交易列表
+			userTransactions.GET("/stats", userTransactionHandler.GetUserTransactionStats)         // 获取交易统计
+			userTransactions.GET("/:id", userTransactionHandler.GetTransactionByID)                // 获取交易详情
+			userTransactions.PUT("/:id", userTransactionHandler.UpdateTransaction)                 // 更新交易
+			userTransactions.DELETE("/:id", userTransactionHandler.DeleteTransaction)              // 删除交易
+			userTransactions.POST("/:id/export", userTransactionHandler.ExportTransaction)         // 导出交易
+			userTransactions.POST("/:id/import-signature", userTransactionHandler.ImportSignature) // 导入签名
+			userTransactions.POST("/:id/send", userTransactionHandler.SendTransaction)             // 发送交易
+		}
 	}
 
 	// 创建公开API限流器（每小时100次请求）
-	publicRateLimiter := middleware.NewPublicRateLimiter(100, time.Hour)
+	publicRateLimiter := middleware.NewPublicRateLimiter(500, time.Hour)
 
 	// 不需要JWT认证的API路由，仅限查看区块等信息（带限流保护）
 	noAuthAPI := api.Group("/no-auth")
 	noAuthAPI.Use(publicRateLimiter.PublicRateLimitMiddleware()) // 添加限流中间件
 	{
+		// 首页相关路由（公开）
+		home := noAuthAPI.Group("/home")
+		{
+			home.GET("/stats", homeHandler.GetHomeStats) // 获取首页统计数据
+		}
+		contracts := noAuthAPI.Group("/contracts")
+		{
+			contracts.GET("", contractHandler.GetAllContracts) // 获取所有合约
+		}
+
 		noAuthAPI.GET("/blocks", blockHandler.ListBlocksPublic)                                                // 限制最多20个区块
 		noAuthAPI.GET("/blocks/height/:height", blockHandler.GetBlockByHeightPublic)                           // 根据高度获取区块详情（公开接口）
 		noAuthAPI.GET("/blocks/search", blockHandler.SearchBlocksPublic)                                       // 搜索区块（公开接口）

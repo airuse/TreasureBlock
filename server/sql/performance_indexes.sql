@@ -30,3 +30,36 @@ ON `blocks` (chain, deleted_at);
 CREATE INDEX IF NOT EXISTS idx_transaction_gas_price_chain_ctime 
 ON `transaction` (chain, ctime) 
 WHERE gas_price IS NOT NULL AND gas_price != '' AND gas_price != '0';
+
+-- 7. 新增：为首页统计查询优化的复合索引
+-- 优化 chain + ctime + amount + gas_price 的组合查询
+CREATE INDEX IF NOT EXISTS idx_transaction_home_stats 
+ON `transaction` (chain, ctime, amount, gas_price) 
+WHERE amount IS NOT NULL AND amount != '' AND gas_price IS NOT NULL AND gas_price != '' AND gas_price != '0';
+
+-- 8. 新增：为区块验证状态查询优化
+-- 优化 chain + is_verified + height 的组合查询
+CREATE INDEX IF NOT EXISTS idx_block_verified_chain_height 
+ON `blocks` (chain, is_verified, height) 
+WHERE is_verified = 1;
+
+-- 9. 新增：为区块基础费用查询优化
+-- 优化 chain + base_fee + height 的组合查询
+CREATE INDEX IF NOT EXISTS idx_block_base_fee_chain_height 
+ON `blocks` (chain, base_fee, height) 
+WHERE base_fee IS NOT NULL AND base_fee != '';
+
+-- 10. 新增：为交易表的时间范围查询优化
+-- 优化 chain + ctime 的范围查询
+CREATE INDEX IF NOT EXISTS idx_transaction_chain_ctime_range 
+ON `transaction` (chain, ctime);
+
+-- 11. 新增：为币种配置查询优化
+-- 优化 chain_name + status 的组合查询
+CREATE INDEX IF NOT EXISTS idx_coin_config_chain_status 
+ON `coin_config` (chain_name, status);
+
+-- 12. 新增：为交易表的高度查询优化
+-- 优化 chain + height + block_index 的组合查询
+CREATE INDEX IF NOT EXISTS idx_transaction_chain_height_index 
+ON `transaction` (chain, height, block_index);

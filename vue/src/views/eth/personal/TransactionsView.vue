@@ -20,10 +20,14 @@
     <div class="bg-white shadow rounded-lg">
       <div class="px-4 py-5 sm:p-6">
         <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">交易概览</h3>
-        <div class="grid grid-cols-1 md:grid-cols-5 gap-6">
+        <div class="grid grid-cols-1 md:grid-cols-4 lg:grid-cols-8 gap-4">
           <div class="text-center">
             <div class="text-2xl font-bold text-gray-600">{{ totalTransactions }}</div>
             <div class="text-sm text-gray-500">总交易</div>
+          </div>
+          <div class="text-center">
+            <div class="text-2xl font-bold text-gray-500">{{ draftCount }}</div>
+            <div class="text-sm text-gray-500">草稿</div>
           </div>
           <div class="text-center">
             <div class="text-2xl font-bold text-yellow-600">{{ unsignedCount }}</div>
@@ -38,8 +42,16 @@
             <div class="text-sm text-gray-500">在途</div>
           </div>
           <div class="text-center">
+            <div class="text-2xl font-bold text-purple-600">{{ packedCount }}</div>
+            <div class="text-sm text-gray-500">已打包</div>
+          </div>
+          <div class="text-center">
             <div class="text-2xl font-bold text-green-600">{{ confirmedCount }}</div>
             <div class="text-sm text-gray-500">已确认</div>
+          </div>
+          <div class="text-center">
+            <div class="text-2xl font-bold text-red-600">{{ failedCount }}</div>
+            <div class="text-sm text-gray-500">失败</div>
           </div>
         </div>
       </div>
@@ -53,12 +65,20 @@
           <div class="flex space-x-2">
             <select v-model="selectedStatus" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
               <option value="">全部状态</option>
+              <option value="draft">草稿</option>
               <option value="unsigned">未签名</option>
               <option value="unsent">未发送</option>
               <option value="in_progress">在途</option>
               <option value="packed">已打包</option>
               <option value="confirmed">已确认</option>
+              <option value="failed">失败</option>
             </select>
+            <button
+              @click="showCreateModal = true"
+              class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors"
+            >
+              新建交易
+            </button>
             <button
               @click="showImportModal = true"
               class="px-4 py-2 bg-green-600 text-white text-sm font-medium rounded-md hover:bg-green-700 transition-colors"
@@ -85,17 +105,17 @@
               <tr v-for="tx in filteredTransactions" :key="tx.id" class="hover:bg-gray-50">
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                   <code class="bg-gray-100 px-2 py-1 rounded text-xs font-mono">
-                    {{ tx.hash ? tx.hash.substring(0, 10) + '...' + tx.hash.substring(tx.hash.length - 8) : '未生成' }}
+                    {{ tx.tx_hash ? tx.tx_hash.substring(0, 10) + '...' + tx.tx_hash.substring(tx.tx_hash.length - 8) : '未生成' }}
                   </code>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                   <code class="bg-gray-100 px-2 py-1 rounded text-xs font-mono">
-                    {{ tx.from.substring(0, 10) }}...{{ tx.from.substring(tx.from.length - 8) }}
+                    {{ tx.from_address.substring(0, 10) }}...{{ tx.from_address.substring(tx.from_address.length - 8) }}
                   </code>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                   <code class="bg-gray-100 px-2 py-1 rounded text-xs font-mono">
-                    {{ tx.to.substring(0, 10) }}...{{ tx.to.substring(tx.to.length - 8) }}
+                    {{ tx.to_address.substring(0, 10) }}...{{ tx.to_address.substring(tx.to_address.length - 8) }}
                   </code>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
@@ -107,11 +127,11 @@
                   </span>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {{ formatTime(tx.timestamp) }}
+                  {{ formatTime(tx.created_at) }}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                   <button
-                    v-if="tx.status === 'unsigned'"
+                    v-if="tx.status === 'draft' || tx.status === 'unsigned'"
                     @click="exportTransaction(tx)"
                     class="text-blue-600 hover:text-blue-900"
                   >
@@ -125,16 +145,9 @@
                     发送交易
                   </button>
                   <button
-                    v-if="tx.status === 'in_progress' || tx.status === 'packed'"
+                    v-if="tx.status === 'in_progress' || tx.status === 'packed' || tx.status === 'confirmed' || tx.status === 'failed'"
                     @click="viewTransaction(tx)"
                     class="text-purple-600 hover:text-purple-900"
-                  >
-                    查看详情
-                  </button>
-                  <button
-                    v-if="tx.status === 'confirmed'"
-                    @click="viewTransaction(tx)"
-                    class="text-gray-600 hover:text-gray-900"
                   >
                     查看详情
                   </button>
@@ -169,15 +182,43 @@
       </div>
     </div>
 
+    <!-- 新建交易模态框 -->
+    <CreateTransactionModal
+      :show="showCreateModal"
+      @close="showCreateModal = false"
+      @created="handleTransactionCreated"
+    />
+
+    <!-- 发送交易模态框 -->
+    <SendTransactionModal
+      v-if="selectedTransaction"
+      :show="showSendModal"
+      :transaction="selectedTransaction"
+      @close="showSendModal = false"
+      @sent="handleTransactionSent"
+    />
+
     <!-- 导入签名模态框 -->
     <div v-if="showImportModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div class="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4">
+      <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4">
         <div class="px-6 py-4 border-b border-gray-200">
           <h3 class="text-lg font-medium text-gray-900">导入签名数据</h3>
         </div>
         
         <div class="px-6 py-4">
           <div class="space-y-4">
+            <!-- 选择交易 -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">选择要导入签名的交易</label>
+              <select v-model="selectedImportTransactionId" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                <option value="">请选择交易</option>
+                <option v-for="tx in transactionsList.filter(t => t.status === 'unsigned')" :key="tx.id" :value="tx.id">
+                  ID: {{ tx.id }} - {{ tx.from_address.substring(0, 10) }}... → {{ tx.to_address.substring(0, 10) }}... ({{ tx.amount }} {{ tx.symbol }})
+                </option>
+              </select>
+            </div>
+            
+            <!-- 签名数据 -->
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-1">签名数据</label>
               <textarea
@@ -187,6 +228,7 @@
                 placeholder="请粘贴从离线程序导出的签名数据..."
               ></textarea>
             </div>
+            
             <div class="bg-blue-50 border border-blue-200 rounded-md p-3">
               <div class="flex">
                 <div class="flex-shrink-0">
@@ -213,7 +255,7 @@
           </button>
           <button
             @click="importSignatureData"
-            :disabled="!importSignature.trim()"
+            :disabled="!importSignature.trim() || !selectedImportTransactionId"
             class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
           >
             导入签名
@@ -226,94 +268,36 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import type { PersonalTransaction } from '@/types'
+import type { UserTransaction, UserTransactionStatsResponse } from '@/types'
+import CreateTransactionModal from '@/components/eth/personal/CreateTransactionModal.vue'
+import SendTransactionModal from '@/components/eth/personal/SendTransactionModal.vue'
+import { getUserTransactions, getUserTransactionStats, exportTransaction as exportTransactionAPI, sendTransaction as sendTransactionAPI, importSignature as importSignatureAPI } from '@/api/user-transactions'
 
 // 响应式数据
+const showCreateModal = ref(false)
 const showImportModal = ref(false)
+const showSendModal = ref(false)
 const selectedStatus = ref('')
 const currentPage = ref(1)
 const pageSize = ref(10)
 const totalItems = ref(0)
 const totalPages = ref(0)
 const importSignature = ref('')
+const selectedTransaction = ref<UserTransaction | null>(null)
+const selectedImportTransactionId = ref<number | ''>('')
 
 // 交易统计
-const totalTransactions = ref(25)
-const unsignedCount = ref(3)
-const unsentCount = ref(2)
-const inProgressCount = ref(1)
-const confirmedCount = ref(19)
+const totalTransactions = ref(0)
+const unsignedCount = ref(0)
+const unsentCount = ref(0)
+const inProgressCount = ref(0)
+const confirmedCount = ref(0)
+const draftCount = ref(0)
+const packedCount = ref(0)
+const failedCount = ref(0)
 
 // 交易列表
-const transactionsList = ref<PersonalTransaction[]>([
-  {
-    id: 1,
-    hash: '0x1234567890abcdef1234567890abcdef1234567890abcdef1234567890abcdef',
-    from: '0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6',
-    to: '0x8ba1f109551bD432803012645Hac136c22C177e9',
-    fromAddress: '0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6',
-    toAddress: '0x8ba1f109551bD432803012645Hac136c22C177e9',
-    amount: 0.1,
-    fee: 0.00042, // gasPrice * gasUsed / 1e9
-    gasPrice: 20,
-    gasUsed: 21000,
-    status: 'confirmed',
-    timestamp: new Date('2024-01-15T10:30:00Z'),
-    confirmations: 12
-  },
-  {
-    id: 2,
-    hash: null,
-    from: '0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6',
-    to: '0x1234567890123456789012345678901234567890',
-    fromAddress: '0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6',
-    toAddress: '0x1234567890123456789012345678901234567890',
-    amount: 0.05,
-    fee: 0.00042,
-    status: 'unsent',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 4),
-    confirmations: 0
-  },
-  {
-    id: 3,
-    hash: '0x1234567890abcdef1234567890abcdef12345678',
-    from: '0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6',
-    to: '0x8ba1f109551bD432803012645Hac136c22C177e9',
-    fromAddress: '0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6',
-    toAddress: '0x8ba1f109551bD432803012645Hac136c22C177e9',
-    amount: 0.2,
-    fee: 0.00042,
-    status: 'in_progress',
-    timestamp: new Date(Date.now() - 1000 * 60 * 30),
-    confirmations: 0
-  },
-  {
-    id: 4,
-    hash: '0xabcdef1234567890abcdef1234567890abcdef12',
-    from: '0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6',
-    to: '0x1234567890123456789012345678901234567890',
-    fromAddress: '0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6',
-    toAddress: '0x1234567890123456789012345678901234567890',
-    amount: 0.15,
-    fee: 0.00042,
-    status: 'packed',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24),
-    confirmations: 0
-  },
-  {
-    id: 5,
-    hash: '0x567890abcdef1234567890abcdef1234567890ab',
-    from: '0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6',
-    to: '0x8ba1f109551bD432803012645Hac136c22C177e9',
-    fromAddress: '0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6',
-    toAddress: '0x8ba1f109551bD432803012645Hac136c22C177e9',
-    amount: 0.3,
-    fee: 0.00042,
-    status: 'confirmed',
-    timestamp: new Date(Date.now() - 1000 * 60 * 60 * 24 * 3),
-    confirmations: 6
-  }
-])
+const transactionsList = ref<UserTransaction[]>([])
 
 // 计算属性
 const filteredTransactions = computed(() => {
@@ -326,11 +310,13 @@ const filteredTransactions = computed(() => {
 // 获取状态样式
 const getStatusClass = (status: string) => {
   switch (status) {
-    case 'unsigned': return 'bg-gray-100 text-gray-800'
+    case 'draft': return 'bg-gray-100 text-gray-800'
+    case 'unsigned': return 'bg-yellow-100 text-yellow-800'
     case 'unsent': return 'bg-blue-100 text-blue-800'
-    case 'in_progress': return 'bg-yellow-100 text-yellow-800'
-    case 'packed': return 'bg-orange-100 text-orange-800'
+    case 'in_progress': return 'bg-orange-100 text-orange-800'
+    case 'packed': return 'bg-purple-100 text-purple-800'
     case 'confirmed': return 'bg-green-100 text-green-800'
+    case 'failed': return 'bg-red-100 text-red-800'
     default: return 'bg-gray-100 text-gray-800'
   }
 }
@@ -338,19 +324,21 @@ const getStatusClass = (status: string) => {
 // 获取状态文本
 const getStatusText = (status: string) => {
   switch (status) {
+    case 'draft': return '草稿'
     case 'unsigned': return '未签名'
     case 'unsent': return '未发送'
     case 'in_progress': return '在途'
     case 'packed': return '已打包'
     case 'confirmed': return '已确认'
+    case 'failed': return '失败'
     default: return '未知'
   }
 }
 
 // 格式化时间
-const formatTime = (timestamp: Date | undefined) => {
+const formatTime = (timestamp: string | undefined) => {
   if (!timestamp) return '未知时间'
-  return timestamp.toLocaleString('zh-CN', {
+  return new Date(timestamp).toLocaleString('zh-CN', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
@@ -360,29 +348,108 @@ const formatTime = (timestamp: Date | undefined) => {
 }
 
 // 导出交易
-const exportTransaction = (tx: PersonalTransaction) => {
-  // TODO: 实现导出交易功能
-  console.log('导出交易:', tx)
+const exportTransaction = async (tx: UserTransaction) => {
+  try {
+    const response = await exportTransactionAPI(tx.id)
+    if (response.success) {
+      // 创建下载链接
+      const dataStr = JSON.stringify(response.data, null, 2)
+      const dataBlob = new Blob([dataStr], { type: 'application/json' })
+      const url = URL.createObjectURL(dataBlob)
+      const link = document.createElement('a')
+      link.href = url
+      link.download = `transaction_${tx.id}_${tx.chain}_${tx.symbol}.json`
+      document.body.appendChild(link)
+      link.click()
+      document.body.removeChild(link)
+      URL.revokeObjectURL(url)
+      
+      console.log('导出交易成功:', response.data)
+      alert('交易导出成功！文件已下载到本地。')
+    } else {
+      alert('导出交易失败: ' + response.message)
+    }
+  } catch (error) {
+    console.error('导出交易失败:', error)
+    alert('导出交易失败，请重试')
+  }
 }
 
 // 发送交易
-const sendTransaction = (tx: PersonalTransaction) => {
-  // TODO: 实现发送交易功能
-  console.log('发送交易:', tx)
+const sendTransaction = (tx: UserTransaction) => {
+  selectedTransaction.value = tx
+  showSendModal.value = true
 }
 
 // 查看交易
-const viewTransaction = (tx: PersonalTransaction) => {
-  // TODO: 实现查看交易详情功能
-  console.log('查看交易:', tx)
+const viewTransaction = (tx: UserTransaction) => {
+  // 显示交易详情
+  console.log('查看交易详情:', tx)
+  const details = `交易详情:
+  
+ID: ${tx.id}
+状态: ${getStatusText(tx.status)}
+链类型: ${tx.chain.toUpperCase()}
+币种: ${tx.symbol}
+金额: ${tx.amount} ${tx.symbol}
+发送地址: ${tx.from_address}
+接收地址: ${tx.to_address}
+Gas限制: ${tx.gas_limit || '未设置'}
+Gas价格: ${tx.gas_price || '未设置'} Gwei
+Nonce: ${tx.nonce || '自动获取'}
+交易哈希: ${tx.tx_hash || '未生成'}
+区块高度: ${tx.block_height || '未确认'}
+确认数: ${tx.confirmations || 0}
+备注: ${tx.remark || '无'}
+创建时间: ${formatTime(tx.created_at)}
+更新时间: ${formatTime(tx.updated_at)}`
+  
+  alert(details)
 }
 
 // 导入签名数据
-const importSignatureData = () => {
-  // TODO: 实现导入签名功能
-  console.log('导入签名:', importSignature.value)
-  showImportModal.value = false
-  importSignature.value = ''
+const importSignatureData = async () => {
+  try {
+    if (!selectedImportTransactionId.value) {
+      alert('请选择要导入签名的交易')
+      return
+    }
+    
+    const id = selectedImportTransactionId.value as number
+    
+    // 调用导入签名API
+    const response = await importSignatureAPI(id, { id, signed_tx: importSignature.value })
+    if (response.success) {
+      console.log('导入签名成功:', response.data)
+      alert('导入签名成功！')
+      loadTransactions()
+      loadTransactionStats()
+      showImportModal.value = false
+      importSignature.value = ''
+      selectedImportTransactionId.value = ''
+    } else {
+      alert('导入签名失败: ' + response.message)
+    }
+  } catch (error) {
+    console.error('导入签名失败:', error)
+    alert('导入签名失败，请重试')
+  }
+}
+
+// 处理交易创建成功
+const handleTransactionCreated = (transaction: any) => {
+  console.log('交易创建成功:', transaction)
+  // 刷新交易列表和统计
+  loadTransactions()
+  loadTransactionStats()
+}
+
+// 处理交易发送成功
+const handleTransactionSent = (transaction: any) => {
+  console.log('交易发送成功:', transaction)
+  // 刷新交易列表和统计
+  loadTransactions()
+  loadTransactionStats()
 }
 
 // 分页方法
@@ -402,9 +469,42 @@ const nextPage = () => {
 
 // 加载交易数据
 const loadTransactions = async () => {
-  // TODO: 从API加载真实数据
-  totalItems.value = 25
-  totalPages.value = Math.ceil(totalItems.value / pageSize.value)
+  try {
+    const response = await getUserTransactions({
+      page: currentPage.value,
+      page_size: pageSize.value,
+      status: selectedStatus.value
+    })
+    
+    if (response.success) {
+      transactionsList.value = response.data.transactions
+      totalItems.value = response.data.total
+      totalPages.value = Math.ceil(totalItems.value / pageSize.value)
+    }
+  } catch (error) {
+    console.error('加载交易数据失败:', error)
+  }
+}
+
+// 加载交易统计
+const loadTransactionStats = async () => {
+  try {
+    const response = await getUserTransactionStats()
+    
+    if (response.success) {
+      const stats = response.data
+      totalTransactions.value = stats.total_transactions
+      draftCount.value = stats.draft_count
+      unsignedCount.value = stats.unsigned_count
+      unsentCount.value = stats.unsent_count
+      inProgressCount.value = stats.in_progress_count
+      packedCount.value = stats.packed_count
+      confirmedCount.value = stats.confirmed_count
+      failedCount.value = stats.failed_count
+    }
+  } catch (error) {
+    console.error('加载交易统计失败:', error)
+  }
 }
 
 // 监听状态筛选变化
@@ -415,5 +515,6 @@ watch(selectedStatus, () => {
 
 onMounted(() => {
   loadTransactions()
+  loadTransactionStats()
 })
 </script>

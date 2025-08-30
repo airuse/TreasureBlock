@@ -107,6 +107,7 @@ func New() *Server {
 	parserConfigHandler := handlers.NewParserConfigHandler(parserConfigService)
 	homeHandler := handlers.NewHomeHandler(blockService, txService, statsService)
 	earningsHandler := handlers.NewEarningsHandler(earningsService)
+	userTransactionHandler := handlers.NewUserTransactionHandler()
 	contractParseResultHandler := handlers.NewContractParseResultHandler(contractParseResultService)
 
 	// 启动WebSocket处理器
@@ -125,6 +126,7 @@ func New() *Server {
 		scannerHandler,
 		authHandler,
 		userAddressHandler,
+		userTransactionHandler,
 		baseConfigHandler,
 		homeHandler,
 		earningsHandler,

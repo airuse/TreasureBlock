@@ -473,11 +473,9 @@ const loadEarnings = async () => {
       
       // 安全检查：后端返回的是 {pagination: {...}, records: Array}
       if (!recordsResponse.data || !Array.isArray(recordsResponse.data.records)) {
-        console.error('❌ 收益记录数据格式错误:', recordsResponse.data)
         earningsList.value = []
         totalItems.value = 0
         totalPages.value = 0
-        showError('收益记录数据格式错误')
         return
       }
       

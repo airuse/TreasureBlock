@@ -1,0 +1,271 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "游客模式API",
+    "version": "v1",
+    "description": "未登录用户可访问的公开API接口"
+  },
+  "paths": {
+    "/api/no-auth/blocks": {
+      "get": {
+        "summary": "获取区块列表（游客模式）",
+        "description": "获取区块列表，限制最多100个区块",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "页码",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "description": "每页大小，最大100",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 25,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "chain",
+            "in": "query",
+            "description": "区块链名称",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["eth", "btc"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "data": [
+                    {
+                      "height": 23203615,
+                      "hash": "0x1234567890abcdef...",
+                      "timestamp": 1692809615,
+                      "transactions": 232,
+                      "size": 110400,
+                      "gasUsed": 18751559,
+                      "gasLimit": 44999957,
+                      "miner": "0xdadB0d80178819F2319190D340ce9A924f783711",
+                      "miner_tip_eth": "0.012293"
+                    }
+                  ],
+                  "pagination": {
+                    "page": 1,
+                    "page_size": 25,
+                    "total": 100
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/no-auth/blocks/search": {
+      "get": {
+        "summary": "搜索区块（游客模式）",
+        "description": "搜索区块，限制最多20个结果",
+        "parameters": [
+          {
+            "name": "query",
+            "in": "query",
+            "description": "搜索关键词",
+            "required": true,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "page",
+            "in": "query",
+            "description": "页码",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "description": "每页大小，最大20",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 20,
+              "maximum": 20
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "data": [
+                    {
+                      "height": 23203615,
+                      "hash": "0x1234567890abcdef...",
+                      "timestamp": 1692809615,
+                      "transactions": 232
+                    }
+                  ],
+                  "pagination": {
+                    "page": 1,
+                    "page_size": 20,
+                    "total": 5
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/no-auth/home/stats": {
+      "get": {
+        "summary": "获取首页统计数据（游客模式）",
+        "description": "获取首页基础统计数据",
+        "parameters": [
+          {
+            "name": "chain",
+            "in": "query",
+            "description": "区块链名称",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["eth", "btc"]
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "data": {
+                    "totalBlocks": 18456789,
+                    "totalTransactions": 1234567890,
+                    "baseFee": 15000000000,
+                    "dailyVolume": 5000000000000000000000000,
+                    "avgGasPrice": 20000000000,
+                    "avgBlockTime": 12.5
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/no-auth/contracts": {
+      "get": {
+        "summary": "获取合约列表（游客模式）",
+        "description": "获取合约列表，限制最多100个",
+        "parameters": [
+          {
+            "name": "page",
+            "in": "query",
+            "description": "页码",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 1
+            }
+          },
+          {
+            "name": "page_size",
+            "in": "query",
+            "description": "每页大小，最大100",
+            "required": false,
+            "schema": {
+              "type": "integer",
+              "default": 25,
+              "maximum": 100
+            }
+          },
+          {
+            "name": "chainName",
+            "in": "query",
+            "description": "区块链名称",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          },
+          {
+            "name": "contractType",
+            "in": "query",
+            "description": "合约类型",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["erc20", "erc721", "erc1155", "defi", "dex", "lending", "other"]
+            }
+          },
+          {
+            "name": "status",
+            "in": "query",
+            "description": "状态",
+            "required": false,
+            "schema": {
+              "type": "string",
+              "enum": ["active", "inactive", "paused"]
+            }
+          },
+          {
+            "name": "search",
+            "in": "query",
+            "description": "搜索关键词",
+            "required": false,
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "成功",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "data": [
+                    {
+                      "address": "0x1234567890abcdef...",
+                      "name": "USDT Token",
+                      "symbol": "USDT",
+                      "contract_type": "ERC20",
+                      "decimals": 6,
+                      "status": 1,
+                      "verified": true
+                    }
+                  ],
+                  "count": 50
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

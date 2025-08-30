@@ -76,8 +76,11 @@ func (h *AuthHandler) Login(c *gin.Context) {
 	response, err := h.authService.Login(&req)
 	if err != nil {
 		statusCode := http.StatusInternalServerError
-		if err.Error() == "用户名或密码错误" || err.Error() == "用户账户已被禁用" {
-			statusCode = http.StatusUnauthorized
+		if err.Error() == "用户名或密码错误" {
+			statusCode = 400
+		}
+		if err.Error() == "用户账户已被禁用" {
+			statusCode = 400
 		}
 		utils.ErrorResponse(c, statusCode, err.Error(), nil)
 		return

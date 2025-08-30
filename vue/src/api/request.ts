@@ -51,6 +51,8 @@ request.interceptors.response.use(
     // 处理特定错误状态
     if (error.response?.status === 429) {
       console.warn('⚠️ 请求频率限制')
+      // 统一处理限流错误，显示用户友好的提示
+      showRateLimitError()
     } else if (error.response?.status === 401) {
       console.warn('⚠️ 认证失败，请重新登录')
       // 可以在这里处理token过期逻辑
@@ -62,5 +64,16 @@ request.interceptors.response.use(
     return Promise.reject(error)
   }
 )
+
+// 显示限流错误的函数
+function showRateLimitError() {
+  // 动态导入toast组件，避免循环依赖
+  import('@/composables/useToast').then(({ showError }) => {
+    showError('请求过于频繁，请稍后再试')
+  }).catch(() => {
+    // 如果导入失败，使用console.warn作为备选方案
+    console.warn('⚠️ 请求过于频繁，请稍后再试')
+  })
+}
 
 export default request

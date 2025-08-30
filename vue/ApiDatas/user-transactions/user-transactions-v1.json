@@ -1,0 +1,148 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "用户交易API",
+    "version": "v1",
+    "description": "用户交易管理相关接口"
+  },
+  "paths": {
+    "/user/transactions": {
+      "post": {
+        "summary": "创建用户交易",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "创建交易成功",
+                  "data": {
+                    "id": 1,
+                    "user_id": 1,
+                    "chain": "eth",
+                    "symbol": "ETH",
+                    "from_address": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+                    "to_address": "0x8ba1f109551bD432803012645Hac136c22C177e9",
+                    "amount": "0.1",
+                    "fee": "0.00042",
+                    "gas_limit": 21000,
+                    "gas_price": "20",
+                    "nonce": 0,
+                    "status": "draft",
+                    "tx_hash": null,
+                    "block_height": null,
+                    "confirmations": 0,
+                    "error_msg": null,
+                    "remark": "测试交易",
+                    "created_at": "2024-01-15T10:30:00Z",
+                    "updated_at": "2024-01-15T10:30:00Z"
+                  }
+                }
+              }
+            }
+          }
+        }
+      },
+      "get": {
+        "summary": "获取用户交易列表",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "获取交易列表成功",
+                  "data": {
+                    "transactions": [
+                      {
+                        "id": 1,
+                        "user_id": 1,
+                        "chain": "eth",
+                        "symbol": "ETH",
+                        "from_address": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+                        "to_address": "0x8ba1f109551bD432803012645Hac136c22C177e9",
+                        "amount": "0.1",
+                        "fee": "0.00042",
+                        "gas_limit": 21000,
+                        "gas_price": "20",
+                        "nonce": 0,
+                        "status": "draft",
+                        "tx_hash": null,
+                        "block_height": null,
+                        "confirmations": 0,
+                        "error_msg": null,
+                        "remark": "测试交易1",
+                        "created_at": "2024-01-15T10:30:00Z",
+                        "updated_at": "2024-01-15T10:30:00Z"
+                      }
+                    ],
+                    "total": 25,
+                    "page": 1,
+                    "page_size": 10,
+                    "has_more": true
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/user/transactions/stats": {
+      "get": {
+        "summary": "获取用户交易统计",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "获取统计信息成功",
+                  "data": {
+                    "total_transactions": 25,
+                    "draft_count": 2,
+                    "unsigned_count": 3,
+                    "unsent_count": 2,
+                    "in_progress_count": 1,
+                    "packed_count": 1,
+                    "confirmed_count": 16,
+                    "failed_count": 0
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/user/transactions/{id}/export": {
+      "post": {
+        "summary": "导出交易",
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "导出交易成功",
+                  "data": {
+                    "unsigned_tx": "{\"chain\":\"eth\",\"symbol\":\"ETH\",\"from\":\"0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6\",\"to\":\"0x8ba1f109551bD432803012645Hac136c22C177e9\",\"amount\":\"0.1\",\"fee\":\"0.00042\",\"gasLimit\":21000,\"gasPrice\":\"20\",\"nonce\":0}",
+                    "chain": "eth",
+                    "symbol": "ETH",
+                    "from_address": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+                    "to_address": "0x8ba1f109551bD432803012645Hac136c22C177e9",
+                    "amount": "0.1",
+                    "fee": "0.00042",
+                    "gas_limit": 21000,
+                    "gas_price": "20",
+                    "nonce": 0
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

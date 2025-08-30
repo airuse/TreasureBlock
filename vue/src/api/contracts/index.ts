@@ -54,7 +54,7 @@ export function getContracts(data: GetContractsRequest): Promise<PaginatedRespon
   
   console.log('🌐 使用真实API - getContracts')
   return request({
-    url: '/api/v1/contracts',
+    url: '/api/no-auth/contracts',
     method: 'GET',
     params: data
   })

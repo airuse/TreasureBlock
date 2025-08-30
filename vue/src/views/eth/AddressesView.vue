@@ -8,6 +8,7 @@
           共 {{ totalAddresses.toLocaleString() }} 个系统地址
         </div>
         <button 
+          v-if="isAdmin"
           @click="showAddAddressModal = true"
           class="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
         >
@@ -1467,7 +1468,7 @@
 
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
-import { getContracts, createOrUpdateContract, getContractByAddress } from '@/api/contracts'
+import { useAuthStore } from '@/stores/auth'
 import { getCoinConfigMaintenance, createCoinConfig } from '@/api/coinconfig'
 import { batchSaveParserConfigs, type ParserConfig } from '@/api/parser-configs'
 import { showSuccess, showError } from '@/composables/useToast'
@@ -1572,6 +1573,9 @@ const coinConfigData = ref({
   description: '',
   parser_configs: [] as any[]
 })
+
+// 认证store
+const authStore = useAuthStore()
 
 // 导入类型
 import type { Contract } from '@/types'
@@ -1710,12 +1714,34 @@ const editAddress = async (address: Address) => {
     // 显示加载状态
     showEditModal.value = true
     
-    // 重新从后端查询最新的合约信息
-    const response = await getContractByAddress(address.hash)
+    // 根据登录状态调用不同的API
+    let response
+    if (authStore.isAuthenticated) {
+      // 已登录用户：调用 /v1/ 下的API
+      const { contracts } = await import('@/api')
+      response = await contracts.getContractByAddress(address.hash)
+    } else {
+      // 未登录用户：调用 /no-auth/ 下的API
+      const { noAuth } = await import('@/api')
+      response = await noAuth.getContracts({ 
+        chainName: 'eth',
+        search: address.hash,
+        page: 1,
+        page_size: 1
+      })
+      // 转换响应格式以匹配getContractByAddress的格式
+      if (response.success && response.data && response.data.length > 0) {
+        response = {
+          success: true,
+          data: response.data[0]
+        }
+      }
+    }
     
-    if (response.success && response.data) {
-      const latestContract = response.data
-      console.log('获取到最新合约数据:', latestContract)
+          if (response.success && response.data) {
+        // 确保latestContract是单个合约对象
+        const latestContract = Array.isArray(response.data) ? response.data[0] : response.data
+        console.log('获取到最新合约数据:', latestContract)
       
       // 解析最新数据
       let interfacesList: string[] = []
@@ -2044,8 +2070,17 @@ const saveEdit = async () => {
       metadata: contractData.metadata
     })
     
-    // 调用真实API保存数据
-    const response = await createOrUpdateContract(contractData)
+    // 根据登录状态调用不同的API
+    let response
+    if (authStore.isAuthenticated) {
+      // 已登录用户：调用 /v1/ 下的API
+      const { contracts } = await import('@/api')
+      response = await contracts.createOrUpdateContract(contractData)
+    } else {
+      // 未登录用户无法编辑合约
+      showError('游客模式下无法编辑合约，请先登录')
+      return
+    }
     
     if (response.success) {
       console.log('保存成功:', response.data)
@@ -2574,8 +2609,17 @@ const saveAdd = async () => {
       contract_logo: newAddress.value.contractLogo || ''
     }
     
-    // 调用真实API保存数据
-    const response = await createOrUpdateContract(contractData)
+    // 根据登录状态调用不同的API
+    let response
+    if (authStore.isAuthenticated) {
+      // 已登录用户：调用 /v1/ 下的API
+      const { contracts } = await import('@/api')
+      response = await contracts.createOrUpdateContract(contractData)
+    } else {
+      // 未登录用户无法添加合约
+      showError('游客模式下无法添加合约，请先登录')
+      return
+    }
     
     if (response.success) {
       console.log('添加成功:', response.data)
@@ -2648,7 +2692,17 @@ const loadData = async () => {
       search: searchQuery.value || undefined
     }
     
-    const response = await getContracts(params) as unknown as ContractsResponse
+    // 根据登录状态调用不同的API
+    let response
+    if (authStore.isAuthenticated) {
+      // 已登录用户：调用 /v1/ 下的API
+      const { contracts } = await import('@/api')
+      response = await contracts.getContracts(params) as unknown as ContractsResponse
+    } else {
+      // 未登录用户：调用 /no-auth/ 下的API
+      const { noAuth } = await import('@/api')
+      response = await noAuth.getContracts(params) as unknown as ContractsResponse
+    }
     
     if (response.success) {
       // 转换API数据为页面需要的格式

@@ -185,7 +185,8 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import { useChainWebSocket } from '@/composables/useWebSocket'
 import { useAuthStore } from '@/stores/auth'
-import { blocks as blocksApi } from '@/api'
+import { useApiSelector } from '@/api/apiSelector'
+import { showError, showWarning } from '@/composables/useToast'
 
 // 认证store
 const authStore = useAuthStore()
@@ -288,6 +289,7 @@ const loadData = async () => {
     // 根据登录状态调用不同的API
     if (authStore.isAuthenticated) {
       // 已登录用户：调用 /v1/ 下的API
+      const { blocks: blocksApi } = await import('@/api')
       const response = await blocksApi.getBlocks({ 
         page: currentPage.value, 
         page_size: pageSize.value, 
@@ -334,13 +336,17 @@ const loadData = async () => {
         totalBlocks.value = totalCount
       } else {
         console.error('Failed to load blocks:', response?.message)
+        
+        showError(`加载区块失败：${response?.message || '未知错误'}`)
+        
         // 如果API调用失败，使用默认数据
         totalBlocks.value = 18456789
         blocks.value = []
       }
     } else {
       // 未登录用户：调用 /no-auth/ 下的API（有限制）
-      const response = await blocksApi.getBlocksPublic({ 
+      const { noAuth } = await import('@/api')
+      const response = await noAuth.getBlocks({ 
         page: currentPage.value, 
         page_size: Math.min(pageSize.value, 100), // 使用动态分页大小，但限制最大100个
         chain: 'eth' 
@@ -433,12 +439,23 @@ let unsubscribeBlocks: (() => void) | null = null
 let unsubscribeStats: (() => void) | null = null
 
 function handleBlockCountUpdate(message: any) {
-  if (message.data && typeof message.data.totalBlocks === 'number') {
+  // 游客模式下不更新总区块数，保持限制在100个
+  if (authStore.isAuthenticated && message.data && typeof message.data.totalBlocks === 'number') {
     totalBlocks.value = message.data.totalBlocks
   }
 }
 
 function handleNewBlock(message: any) {
+  // 游客模式下不接收新区块推送
+  if (!authStore.isAuthenticated) {
+    return
+  }
+  
+  // 搜索状态下不接收新区块推送
+  if (searchQuery.value.trim()) {
+    return
+  }
+  
   // 只在第一页才处理新区块
   if (currentPage.value === 1 && message.data) {
     const newBlockHeight = message.data.height || message.data.number
@@ -472,8 +489,8 @@ function handleNewBlock(message: any) {
     // 2. 在列表头部插入最新区块
     blocks.value.unshift(newBlock)
     
-    // 3. 更新总数（如果后端没有实时更新）
-    if (totalBlocks.value > 0) {
+    // 3. 更新总数（如果后端没有实时更新）- 仅限已登录用户
+    if (authStore.isAuthenticated && totalBlocks.value > 0) {
       totalBlocks.value++
     }
   }
@@ -515,7 +532,8 @@ function handleBlockUpdate(message: any) {
 }
 
 function handleStatsUpdate(message: any) {
-  if (message.data && typeof message.data.totalBlocks === 'number') {
+  // 游客模式下不更新总区块数，保持限制在100个
+  if (authStore.isAuthenticated && message.data && typeof message.data.totalBlocks === 'number') {
     totalBlocks.value = message.data.totalBlocks
   }
 }
@@ -575,40 +593,42 @@ watch(searchQuery, (newQuery) => {
 const performSearch = async (query: string) => {
   try {
     isLoading.value = true
-    // 根据登录状态调用不同的搜索API
-    if (authStore.isAuthenticated) {
-      // 已登录用户：调用 /v1/ 下的搜索API
-      const response = await blocksApi.searchBlocks({ 
-        query: query,
-        page: 1, 
-        page_size: pageSize.value
-      })
-      
-      if (response && response.success === true) {
-        handleSearchResults(response.data, query)
+          // 根据登录状态调用不同的搜索API
+      if (authStore.isAuthenticated) {
+        // 已登录用户：调用 /v1/ 下的搜索API
+        const { blocks: blocksApi } = await import('@/api')
+        const response = await blocksApi.searchBlocks({ 
+          query: query,
+          page: 1, 
+          page_size: pageSize.value
+        })
+        
+        if (response && response.success === true) {
+          handleSearchResults(response.data, query)
+        } else {
+          // 搜索失败时显示空结果
+          blocks.value = []
+          totalBlocks.value = 0
+        }
       } else {
-        // 搜索失败时显示空结果
-        blocks.value = []
-        totalBlocks.value = 0
+        // 未登录用户：调用 /no-auth/ 下的搜索API
+        console.log('👤 未登录用户，调用 /no-auth/ API 搜索区块')
+        const { noAuth } = await import('@/api')
+        const response = await noAuth.searchBlocks({ 
+          query: query,
+          page: 1, 
+          page_size: Math.min(pageSize.value, 20) // 限制为20个
+        })
+        
+        if (response && response.success === true) {
+          handleSearchResults(response.data, query)
+        } else {
+          console.error('搜索失败:', response?.message)
+          // 搜索失败时显示空结果
+          blocks.value = []
+          totalBlocks.value = 0
+        }
       }
-    } else {
-      // 未登录用户：调用 /no-auth/ 下的搜索API
-      console.log('👤 未登录用户，调用 /no-auth/ API 搜索区块')
-      const response = await blocksApi.searchBlocksPublic({ 
-        query: query,
-        page: 1, 
-        page_size: Math.min(pageSize.value, 20) // 限制为20个
-      })
-      
-      if (response && response.success === true) {
-        handleSearchResults(response.data, query)
-      } else {
-        console.error('搜索失败:', response?.message)
-        // 搜索失败时显示空结果
-        blocks.value = []
-        totalBlocks.value = 0
-      }
-    }
   } catch (error) {
     console.error('搜索出错:', error)
     // 搜索出错时显示空结果

@@ -1,7 +1,6 @@
 // 导入所有模块
 import * as blocks from './blocks'
 import * as transactions from './transactions'
-
 import * as stats from './stats'
 import * as auth from './auth'
 import * as user from './user'
@@ -11,6 +10,8 @@ import * as parserConfigs from './parser-configs'
 import * as home from './home'
 import * as earnings from './earnings'
 import * as personalAddresses from './personal-addresses'
+import * as noAuth from './no-auth'
+import * as userTransactions from './user-transactions'
 
 // 统一导出所有API模块
 export {
@@ -24,7 +25,9 @@ export {
   parserConfigs,
   home,
   earnings,
-  personalAddresses
+  personalAddresses,
+  noAuth,
+  userTransactions
 }
 
 // 默认导出所有模块
@@ -39,5 +42,7 @@ export default {
   parserConfigs,
   home,
   earnings,
-  personalAddresses
+  personalAddresses,
+  noAuth,
+  userTransactions
 }
