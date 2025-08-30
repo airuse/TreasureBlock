@@ -3,7 +3,7 @@
     <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
       <div class="px-6 py-4 border-b border-gray-200">
         <div class="flex items-center justify-between">
-          <h3 class="text-lg font-medium text-gray-900">新建交易</h3>
+          <h3 class="text-lg font-medium text-gray-900">{{ isEditMode ? '编辑交易' : '新建交易' }}</h3>
           <button
             @click="$emit('close')"
             class="text-gray-400 hover:text-gray-600 transition-colors"
@@ -235,20 +235,13 @@
         </div>
 
         <!-- 操作按钮 -->
-        <div class="flex justify-end space-x-3 mt-6 pt-4 border-t border-gray-200">
-          <button
-            type="button"
-            @click="$emit('close')"
-            class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50 transition-colors"
-          >
-            取消
-          </button>
+        <div class="flex justify-end mt-6 pt-4 border-t border-gray-200">
           <button
             type="submit"
             :disabled="isSubmitting"
-            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            class="px-6 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
           >
-            {{ isSubmitting ? '创建中...' : '创建交易' }}
+            {{ isSubmitting ? (isEditMode ? '更新中...' : '创建中...') : (isEditMode ? '更新交易' : '创建交易') }}
           </button>
         </div>
       </form>
@@ -258,7 +251,7 @@
 
 <script setup lang="ts">
 import { ref, watch, computed, onMounted } from 'vue'
-import { createUserTransaction } from '@/api/user-transactions'
+import { createUserTransaction, updateUserTransaction } from '@/api/user-transactions'
 import { getPersonalAddresses } from '@/api/personal-addresses'
 import { listCoinConfigs } from '@/api/coinconfig'
 import type { CreateUserTransactionRequest } from '@/types'
@@ -279,11 +272,14 @@ interface ERC20Token {
 
 interface Props {
   show: boolean
+  transaction?: any // 编辑模式下的交易数据
+  isEditMode?: boolean // 是否为编辑模式
 }
 
 interface Emits {
   (e: 'close'): void
   (e: 'created', transaction: any): void
+  (e: 'updated', transaction: any): void
 }
 
 const props = defineProps<Props>()
@@ -302,6 +298,44 @@ const form = ref<CreateUserTransactionRequest>({
   nonce: undefined, // Nonce自动获取
   remark: ''
 })
+
+// 编辑模式下初始化表单数据
+const initEditForm = () => {
+  if (props.isEditMode && props.transaction) {
+    const tx = props.transaction
+    form.value = {
+      chain: tx.chain || 'eth',
+      symbol: tx.symbol || 'ETH',
+      from_address: tx.from_address || '',
+      to_address: tx.to_address || '',
+      amount: tx.amount || '',
+      fee: tx.fee || '0',
+      gas_limit: tx.gas_limit,
+      gas_price: tx.gas_price,
+      nonce: tx.nonce,
+      remark: tx.remark || '',
+      transaction_type: tx.transaction_type,
+      contract_operation_type: tx.contract_operation_type,
+      token_contract_address: tx.token_contract_address
+    }
+    
+    // 设置交易类型
+    if (tx.transaction_type === 'token') {
+      transactionType.value = 'erc20'
+      // 设置代币相关信息
+      if (tx.token_contract_address) {
+        // 查找并设置选中的代币
+        const token = tokens.value.find(t => t.contract_address === tx.token_contract_address)
+        if (token) {
+          selectedToken.value = token
+        }
+      }
+      if (tx.contract_operation_type) {
+        contractOperationType.value = tx.contract_operation_type as any
+      }
+    }
+  }
+}
 
 // 提交状态
 const isSubmitting = ref(false)
@@ -578,15 +612,20 @@ const handleContractOperationTypeChange = () => {
   switch (contractOperationType.value) {
     case 'transfer':
       // 转账：需要发送地址、接收地址、金额
+      // 确保接收地址字段可见
       break
     case 'approve':
       // 授权：需要授权地址、金额
+      // 确保接收地址字段可见
       break
     case 'transferFrom':
       // 授权转账：需要发送地址、接收地址、金额
+      // 确保接收地址字段可见
       break
     case 'balanceOf':
-      // 查询余额：只需要查询地址
+      // 查询余额：只需要查询地址，清空接收地址和金额
+      form.value.to_address = ''
+      form.value.amount = ''
       break
   }
 }
@@ -663,6 +702,20 @@ const handleSubmit = async () => {
       return
     }
     
+    // 根据操作类型验证其他字段
+    if (contractOperationType.value !== 'balanceOf') {
+      // 非查询余额操作需要接收地址和金额
+      if (!form.value.to_address) {
+        alert('请选择接收地址')
+        return
+      }
+      
+      if (!form.value.amount) {
+        alert('请输入交易金额')
+        return
+      }
+    }
+    
     // 构建完整的提交数据
     const submitData = {
       ...form.value,
@@ -675,22 +728,32 @@ const handleSubmit = async () => {
     
     console.log('提交的交易数据:', submitData)
     
-    // 调用API创建交易
-    const response = await createUserTransaction(submitData)
+    let response
+    if (props.isEditMode && props.transaction) {
+      // 编辑模式：更新交易
+      response = await updateUserTransaction(props.transaction.id, submitData)
+    } else {
+      // 创建模式：创建新交易
+      response = await createUserTransaction(submitData)
+    }
     
     if (response.success) {
-      // 创建成功，触发事件
-      emit('created', response.data)
+      // 操作成功，触发事件
+      if (props.isEditMode) {
+        emit('updated', response.data)
+      } else {
+        emit('created', response.data)
+      }
       emit('close')
       
       // 重置表单
       resetForm()
     } else {
-      alert('创建交易失败: ' + response.message)
+      alert((props.isEditMode ? '更新' : '创建') + '交易失败: ' + response.message)
     }
   } catch (error) {
-    console.error('创建交易失败:', error)
-    alert('创建交易失败，请重试')
+    console.error((props.isEditMode ? '更新' : '创建') + '交易失败:', error)
+    alert((props.isEditMode ? '更新' : '创建') + '交易失败，请重试')
   } finally {
     isSubmitting.value = false
   }
@@ -719,5 +782,6 @@ onMounted(() => {
   loadAddresses()
   loadTokens()
   initEthFields()
+  initEditForm() // 在组件挂载时初始化编辑模式下的表单数据
 })
 </script>

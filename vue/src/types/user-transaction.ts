@@ -19,6 +19,13 @@ export interface UserTransaction {
   remark: string
   created_at: string
   updated_at: string
+  
+  // ERC-20代币交易相关字段
+  transaction_type?: string
+  contract_operation_type?: string
+  token_contract_address?: string
+  token_name?: string
+  token_decimals?: number
 }
 
 // 创建用户交易请求

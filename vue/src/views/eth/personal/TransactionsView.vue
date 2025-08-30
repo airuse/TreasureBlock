@@ -93,9 +93,10 @@
             <thead class="bg-gray-50">
               <tr>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">交易哈希</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">交易类型</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">发送地址</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">接收地址</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">金额 (ETH)</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">金额</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">创建时间</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
@@ -104,22 +105,49 @@
             <tbody class="bg-white divide-y divide-gray-200">
               <tr v-for="tx in filteredTransactions" :key="tx.id" class="hover:bg-gray-50">
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  <code class="bg-gray-100 px-2 py-1 rounded text-xs font-mono">
-                    {{ tx.tx_hash ? tx.tx_hash.substring(0, 10) + '...' + tx.tx_hash.substring(tx.tx_hash.length - 8) : '未生成' }}
+                  <code v-if="tx.tx_hash" 
+                        class="bg-gray-100 px-2 py-1 rounded text-xs font-mono cursor-pointer hover:bg-gray-200 transition-colors"
+                        :title="tx.tx_hash"
+                        @click="copyToClipboard(tx.tx_hash)">
+                    {{ tx.tx_hash.substring(0, 10) + '...' + tx.tx_hash.substring(tx.tx_hash.length - 8) }}
                   </code>
+                  <span v-else class="text-gray-400">未生成</span>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  <code class="bg-gray-100 px-2 py-1 rounded text-xs font-mono">
+                  <div class="flex flex-col">
+                    <span class="font-medium">{{ getTransactionTypeText(tx) }}</span>
+                    <span v-if="tx.transaction_type === 'token' && tx.token_contract_address" 
+                          class="text-xs text-gray-500 font-mono cursor-pointer hover:text-gray-700 transition-colors"
+                          :title="tx.token_contract_address"
+                          @click="copyToClipboard(tx.token_contract_address)">
+                      {{ tx.token_contract_address.substring(0, 8) }}...{{ tx.token_contract_address.substring(tx.token_contract_address.length - 6) }}
+                    </span>
+                    <span v-if="tx.contract_operation_type" class="text-xs text-blue-600">
+                      {{ getContractOperationText(tx.contract_operation_type) }}
+                    </span>
+                  </div>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  <code class="bg-gray-100 px-2 py-1 rounded text-xs font-mono cursor-pointer hover:bg-gray-200 transition-colors" 
+                        :title="tx.from_address"
+                        @click="copyToClipboard(tx.from_address)">
                     {{ tx.from_address.substring(0, 10) }}...{{ tx.from_address.substring(tx.from_address.length - 8) }}
                   </code>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  <code class="bg-gray-100 px-2 py-1 rounded text-xs font-mono">
+                  <code class="bg-gray-100 px-2 py-1 rounded text-xs font-mono cursor-pointer hover:bg-gray-200 transition-colors" 
+                        :title="tx.to_address"
+                        @click="copyToClipboard(tx.to_address)">
                     {{ tx.to_address.substring(0, 10) }}...{{ tx.to_address.substring(tx.to_address.length - 8) }}
                   </code>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                  {{ tx.amount }}
+                  <div class="flex flex-col">
+                    <span>{{ formatAmount(tx.amount, tx.symbol, tx.token_decimals) }} {{ tx.symbol }}</span>
+                    <span v-if="tx.transaction_type === 'token' && tx.token_name" class="text-xs text-gray-500">
+                      {{ tx.token_name }}
+                    </span>
+                  </div>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap">
                   <span :class="getStatusClass(tx.status)" class="inline-flex px-2 py-1 text-xs font-semibold rounded-full">
@@ -130,6 +158,13 @@
                   {{ formatTime(tx.created_at) }}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
+                  <button
+                    v-if="tx.status === 'draft' || tx.status === 'unsigned'"
+                    @click="editTransaction(tx)"
+                    class="text-indigo-600 hover:text-indigo-900"
+                  >
+                    编辑
+                  </button>
                   <button
                     v-if="tx.status === 'draft' || tx.status === 'unsigned'"
                     @click="exportTransaction(tx)"
@@ -185,8 +220,11 @@
     <!-- 新建交易模态框 -->
     <CreateTransactionModal
       :show="showCreateModal"
-      @close="showCreateModal = false"
+      :isEditMode="isEditMode"
+      :transaction="selectedTransaction"
+      @close="handleModalClose"
       @created="handleTransactionCreated"
+      @updated="handleTransactionUpdated"
     />
 
     <!-- 发送交易模态框 -->
@@ -285,6 +323,7 @@ const totalPages = ref(0)
 const importSignature = ref('')
 const selectedTransaction = ref<UserTransaction | null>(null)
 const selectedImportTransactionId = ref<number | ''>('')
+const isEditMode = ref(false) // 是否为编辑模式
 
 // 交易统计
 const totalTransactions = ref(0)
@@ -335,6 +374,38 @@ const getStatusText = (status: string) => {
   }
 }
 
+// 获取交易类型文本
+const getTransactionTypeText = (tx: UserTransaction) => {
+  // 如果是查询余额操作，显示为"查询余额"
+  if (tx.contract_operation_type === 'balanceOf') {
+    return `${tx.symbol} 查询余额`
+  }
+  
+  if (tx.transaction_type === 'coin' || tx.transaction_type === 'native') {
+    return 'ETH 转账'
+  } else if (tx.transaction_type === 'token') {
+    return `${tx.symbol} 代币转账`
+  } else if (tx.symbol === 'ETH') {
+    return 'ETH 转账'
+  } else {
+    return `${tx.symbol} 代币转账`
+  }
+}
+
+// 获取合约操作类型文本
+const getContractOperationText = (type: string) => {
+  switch (type) {
+    case 'transfer': return '转账'
+    case 'approve': return '授权'
+    case 'transferFrom': return '代币转移'
+    case 'mint': return '铸造'
+    case 'burn': return '销毁'
+    case 'setApprovalForAll': return '设置授权'
+    case 'transferOwnership': return '转让所有权'
+    default: return type
+  }
+}
+
 // 格式化时间
 const formatTime = (timestamp: string | undefined) => {
   if (!timestamp) return '未知时间'
@@ -345,6 +416,102 @@ const formatTime = (timestamp: string | undefined) => {
     hour: '2-digit',
     minute: '2-digit'
   })
+}
+
+// 格式化金额
+const formatAmount = (amount: string, symbol: string, decimals: number | undefined) => {
+  const numAmount = parseFloat(amount)
+  if (isNaN(numAmount)) return amount
+  
+  console.log(`格式化金额: amount=${amount}, symbol=${symbol}, decimals=${decimals}, numAmount=${numAmount}`)
+  
+  // 如果明确提供了精度，使用提供的精度
+  if (decimals !== undefined && decimals >= 0) {
+    const factor = Math.pow(10, decimals)
+    const readableAmount = numAmount / factor
+    const result = readableAmount.toFixed(Math.min(decimals, 8))
+    console.log(`使用提供精度: factor=${factor}, readableAmount=${readableAmount}, result=${result}`)
+    return result
+  }
+  
+  // 如果没有提供精度，根据币种和数值特征智能判断
+  if (symbol === 'ETH') {
+    // ETH使用18位精度
+    const factor = Math.pow(10, 18)
+    const readableAmount = numAmount / factor
+    const result = readableAmount.toFixed(8)
+    console.log(`ETH精度: factor=${factor}, readableAmount=${readableAmount}, result=${result}`)
+    return result
+  } else if (symbol === 'USDC' || symbol === 'USDT') {
+    // USDC/USDT使用6位精度
+    const factor = Math.pow(10, 6)
+    const readableAmount = numAmount / factor
+    const result = readableAmount.toFixed(6)
+    console.log(`USDC/USDT精度: factor=${factor}, readableAmount=${readableAmount}, result=${result}`)
+    return result
+  } else if (symbol === 'DAI') {
+    // DAI使用18位精度
+    const factor = Math.pow(10, 18)
+    const readableAmount = numAmount / factor
+    const result = readableAmount.toFixed(8)
+    console.log(`DAI精度: factor=${factor}, readableAmount=${readableAmount}, result=${result}`)
+    return result
+  } else {
+    // 其他代币，尝试智能判断精度
+    // 如果数值很大（超过10^12），可能是原始精度，需要转换
+    if (numAmount > Math.pow(10, 12)) {
+      // 尝试常见的精度：6, 8, 18
+      const possibleDecimals = [6, 8, 18]
+      for (const dec of possibleDecimals) {
+        const factor = Math.pow(10, dec)
+        const readableAmount = numAmount / factor
+        // 如果转换后的数值在合理范围内（0.000001 到 1000000），使用这个精度
+        if (readableAmount >= 0.000001 && readableAmount <= 1000000) {
+          const result = readableAmount.toFixed(Math.min(dec, 8))
+          console.log(`智能判断精度: 使用${dec}位精度, factor=${factor}, readableAmount=${readableAmount}, result=${result}`)
+          return result
+        }
+      }
+    }
+    
+    // 如果无法确定，直接返回原始值
+    console.log(`无法确定精度，返回原始值: ${amount}`)
+    return amount
+  }
+}
+
+// 复制到剪贴板
+const copyToClipboard = async (text: string) => {
+  try {
+    await navigator.clipboard.writeText(text)
+    // 使用更友好的提示方式
+    const toast = document.createElement('div')
+    toast.className = 'fixed top-4 right-4 bg-green-500 text-white px-4 py-2 rounded-md shadow-lg z-50 transition-opacity duration-300'
+    toast.textContent = '地址已复制到剪贴板！'
+    document.body.appendChild(toast)
+    
+    // 3秒后自动消失
+    setTimeout(() => {
+      toast.style.opacity = '0'
+      setTimeout(() => {
+        document.body.removeChild(toast)
+      }, 300)
+    }, 3000)
+  } catch (err) {
+    console.error('复制失败:', err)
+    // 降级方案：使用传统方法
+    const textArea = document.createElement('textarea')
+    textArea.value = text
+    document.body.appendChild(textArea)
+    textArea.select()
+    try {
+      document.execCommand('copy')
+      alert('地址已复制到剪贴板！')
+    } catch (fallbackErr) {
+      alert('复制失败，请手动复制：' + text)
+    }
+    document.body.removeChild(textArea)
+  }
 }
 
 // 导出交易
@@ -385,15 +552,16 @@ const sendTransaction = (tx: UserTransaction) => {
 const viewTransaction = (tx: UserTransaction) => {
   // 显示交易详情
   console.log('查看交易详情:', tx)
-  const details = `交易详情:
   
+  let details = `交易详情:
+
 ID: ${tx.id}
 状态: ${getStatusText(tx.status)}
 链类型: ${tx.chain.toUpperCase()}
 币种: ${tx.symbol}
-金额: ${tx.amount} ${tx.symbol}
-发送地址: ${tx.from_address}
-接收地址: ${tx.to_address}
+${tx.contract_operation_type === 'balanceOf' ? '查询地址' : '发送地址'}: ${tx.from_address}
+${tx.contract_operation_type === 'balanceOf' ? '' : `接收地址: ${tx.to_address}
+金额: ${formatAmount(tx.amount, tx.symbol, tx.token_decimals)} ${tx.symbol}`}
 Gas限制: ${tx.gas_limit || '未设置'}
 Gas价格: ${tx.gas_price || '未设置'} Gwei
 Nonce: ${tx.nonce || '自动获取'}
@@ -403,8 +571,32 @@ Nonce: ${tx.nonce || '自动获取'}
 备注: ${tx.remark || '无'}
 创建时间: ${formatTime(tx.created_at)}
 更新时间: ${formatTime(tx.updated_at)}`
+
+  // 添加ERC-20相关信息
+  if (tx.transaction_type === 'token') {
+    details += `
+
+=== ERC-20 代币信息 ===
+交易类型: 代币转账
+合约操作: ${getContractOperationText(tx.contract_operation_type || '')}
+代币合约地址: ${tx.token_contract_address || '未设置'}
+代币名称: ${tx.token_name || '未设置'}
+代币精度: ${tx.token_decimals || '未设置'}`
+  } else {
+    details += `
+
+=== 交易类型 ===
+交易类型: ETH转账`
+  }
   
   alert(details)
+}
+
+// 编辑交易
+const editTransaction = (tx: UserTransaction) => {
+  selectedTransaction.value = tx
+  isEditMode.value = true
+  showCreateModal.value = true // 使用新建交易模态框进行编辑
 }
 
 // 导入签名数据
@@ -442,6 +634,8 @@ const handleTransactionCreated = (transaction: any) => {
   // 刷新交易列表和统计
   loadTransactions()
   loadTransactionStats()
+  isEditMode.value = false // 关闭编辑模式
+  selectedTransaction.value = null // 清除选中的交易
 }
 
 // 处理交易发送成功
@@ -450,6 +644,23 @@ const handleTransactionSent = (transaction: any) => {
   // 刷新交易列表和统计
   loadTransactions()
   loadTransactionStats()
+}
+
+// 处理模态框关闭
+const handleModalClose = () => {
+  showCreateModal.value = false
+  isEditMode.value = false
+  selectedTransaction.value = null
+}
+
+// 处理交易更新
+const handleTransactionUpdated = (transaction: any) => {
+  console.log('交易更新成功:', transaction)
+  // 刷新交易列表和统计
+  loadTransactions()
+  loadTransactionStats()
+  isEditMode.value = false // 关闭编辑模式
+  selectedTransaction.value = null // 清除选中的交易
 }
 
 // 分页方法
@@ -511,6 +722,15 @@ const loadTransactionStats = async () => {
 watch(selectedStatus, () => {
   currentPage.value = 1
   loadTransactions()
+})
+
+// 监听模态框状态变化
+watch(showCreateModal, (newVal) => {
+  if (!newVal) {
+    // 模态框关闭时重置编辑状态
+    isEditMode.value = false
+    selectedTransaction.value = null
+  }
 })
 
 onMounted(() => {
