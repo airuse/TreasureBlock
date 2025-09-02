@@ -26,6 +26,16 @@ export interface UserTransaction {
   token_contract_address?: string
   token_name?: string
   token_decimals?: number
+  
+  // QR码导出相关字段
+  chain_id?: string
+  tx_data?: string
+  access_list?: string
+  
+  // 签名组件
+  v?: string
+  r?: string
+  s?: string
 }
 
 // 创建用户交易请求
@@ -80,12 +90,20 @@ export interface ExportTransactionResponse {
   gas_limit?: number
   gas_price?: string
   nonce?: number
+  
+  // QR码数据
+  chain_id?: string
+  tx_data?: string
+  access_list?: string
 }
 
 // 导入签名请求
 export interface ImportSignatureRequest {
   id: number
   signed_tx: string
+  v?: string | null
+  r?: string | null
+  s?: string | null
 }
 
 // 发送交易请求

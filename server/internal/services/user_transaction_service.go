@@ -1,6 +1,7 @@
 package services
 
 import (
+	"blockChainBrowser/server/config"
 	"blockChainBrowser/server/internal/dto"
 	"blockChainBrowser/server/internal/models"
 	"blockChainBrowser/server/internal/repository"
@@ -8,6 +9,9 @@ import (
 	"errors"
 	"fmt"
 	"strconv"
+
+	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/ethclient"
 )
 
 // UserTransactionService 用户交易服务接口
@@ -161,12 +165,46 @@ func (s *userTransactionService) ExportTransaction(ctx context.Context, id uint,
 		return nil, errors.New("当前状态的交易无法导出")
 	}
 
+	// 获取发送地址的当前nonce（如果交易中没有设置nonce）
+	currentNonce := userTx.Nonce
+	if currentNonce == nil {
+		// 使用ethclient获取地址的当前nonce
+		nonce, err := s.getAddressNonce(ctx, userTx.FromAddress)
+		if err != nil {
+			// 如果获取nonce失败，使用默认值0
+			fmt.Printf("获取地址nonce失败: %v，使用默认值0\n", err)
+			defaultNonce := uint64(0)
+			currentNonce = &defaultNonce
+		} else {
+			currentNonce = &nonce
+		}
+
+		// 更新交易记录中的nonce
+		userTx.Nonce = currentNonce
+	}
+
 	// 生成未签名交易数据（这里简化处理，实际应该调用区块链SDK）
 	unsignedTx := s.generateUnsignedTx(userTx)
 
-	// 更新交易状态为未签名
+	// 生成QR码数据
+	chainID := "1" // 以太坊主网
+	if userTx.Chain != "eth" {
+		chainID = userTx.Chain
+	}
+
+	// 生成交易数据（这里需要调用前端相同的逻辑，暂时使用占位符）
+	txData := s.generateTxData(userTx)
+
+	// 生成AccessList（如果是代币交易）
+	accessList := s.generateAccessList(userTx)
+
+	// 更新交易状态为未签名，并保存QR码数据
 	userTx.Status = "unsigned"
 	userTx.UnsignedTx = &unsignedTx
+	userTx.ChainID = &chainID
+	userTx.TxData = &txData
+	userTx.AccessList = &accessList
+
 	if err := s.userTxRepo.Update(ctx, userTx); err != nil {
 		return nil, fmt.Errorf("更新交易状态失败: %w", err)
 	}
@@ -181,7 +219,10 @@ func (s *userTransactionService) ExportTransaction(ctx context.Context, id uint,
 		Fee:         userTx.Fee,
 		GasLimit:    userTx.GasLimit,
 		GasPrice:    userTx.GasPrice,
-		Nonce:       userTx.Nonce,
+		Nonce:       currentNonce, // 使用获取到的nonce
+		ChainID:     &chainID,
+		TxData:      &txData,
+		AccessList:  &accessList,
 	}, nil
 }
 
@@ -200,6 +241,17 @@ func (s *userTransactionService) ImportSignature(ctx context.Context, id uint, u
 	// 更新签名数据
 	userTx.SignedTx = &req.SignedTx
 	userTx.Status = "unsent" // 状态变为未发送
+
+	// 保存签名组件
+	if req.V != nil {
+		userTx.V = req.V
+	}
+	if req.R != nil {
+		userTx.R = req.R
+	}
+	if req.S != nil {
+		userTx.S = req.S
+	}
 
 	// 保存更新
 	if err := s.userTxRepo.Update(ctx, userTx); err != nil {
@@ -297,6 +349,16 @@ func (s *userTransactionService) convertToResponse(userTx *models.UserTransactio
 		TransactionType:       userTx.TransactionType,
 		ContractOperationType: userTx.ContractOperationType,
 		TokenContractAddress:  userTx.TokenContractAddress,
+
+		// QR码导出相关字段
+		ChainID:    userTx.ChainID,
+		TxData:     userTx.TxData,
+		AccessList: userTx.AccessList,
+
+		// 签名组件
+		V: userTx.V,
+		R: userTx.R,
+		S: userTx.S,
 	}
 }
 
@@ -349,4 +411,84 @@ func (s *userTransactionService) uint64ToString(u *uint64) string {
 		return "null"
 	}
 	return strconv.FormatUint(*u, 10)
+}
+
+// getAddressNonce 获取地址的当前nonce
+func (s *userTransactionService) getAddressNonce(ctx context.Context, address string) (uint64, error) {
+	// 从配置文件获取ETH RPC URL
+	chainConfig, exists := config.AppConfig.Blockchain.Chains["eth"]
+	if !exists || chainConfig.RPCURL == "" {
+		return 0, fmt.Errorf("未配置ETH RPC URL")
+	}
+
+	// 连接ETH客户端
+	client, err := ethclient.Dial(chainConfig.RPCURL)
+	if err != nil {
+		return 0, fmt.Errorf("连接ETH RPC失败: %w", err)
+	}
+	defer client.Close()
+
+	// 获取地址的当前nonce
+	nonce, err := client.NonceAt(ctx, common.HexToAddress(address), nil)
+	if err != nil {
+		return 0, fmt.Errorf("获取地址nonce失败: %w", err)
+	}
+
+	return nonce, nil
+}
+
+// generateTxData 生成交易数据（十六进制格式）
+func (s *userTransactionService) generateTxData(userTx *models.UserTransaction) string {
+	// 根据交易类型生成不同的数据
+	if userTx.TransactionType == "token" && userTx.TokenContractAddress != "" {
+		switch userTx.ContractOperationType {
+		case "balanceOf":
+			// balanceOf(address) 函数选择器: 0x70a08231
+			return fmt.Sprintf("0x70a08231%s", s.padAddress(userTx.FromAddress))
+		case "transfer":
+			// transfer(address,uint256) 函数选择器: 0xa9059cbb
+			amountHex := s.convertAmountToHex(userTx.Amount)
+			return fmt.Sprintf("0xa9059cbb%s%s", s.padAddress(userTx.ToAddress), amountHex)
+		case "approve":
+			// approve(address,uint256) 函数选择器: 0x095ea7b3
+			amountHex := s.convertAmountToHex(userTx.Amount)
+			return fmt.Sprintf("0x095ea7b3%s%s", s.padAddress(userTx.ToAddress), amountHex)
+		case "transferFrom":
+			// transferFrom(address,address,uint256) 函数选择器: 0x23b872dd
+			amountHex := s.convertAmountToHex(userTx.Amount)
+			return fmt.Sprintf("0x23b872dd%s%s%s", s.padAddress(userTx.FromAddress), s.padAddress(userTx.ToAddress), amountHex)
+		}
+	}
+
+	// ETH转账，data为空
+	return "0x"
+}
+
+// generateAccessList 生成AccessList
+func (s *userTransactionService) generateAccessList(userTx *models.UserTransaction) string {
+	// 如果是代币交易，生成AccessList
+	if userTx.TransactionType == "token" && userTx.TokenContractAddress != "" {
+		// 简化处理，返回空的AccessList
+		// TODO: 实现完整的AccessList生成逻辑
+		return "[]"
+	}
+
+	return "[]"
+}
+
+// padAddress 将地址填充为32字节
+func (s *userTransactionService) padAddress(address string) string {
+	// 移除0x前缀并填充到64个字符（32字节）
+	cleanAddr := address
+	if len(address) > 2 && address[:2] == "0x" {
+		cleanAddr = address[2:]
+	}
+	return fmt.Sprintf("%064s", cleanAddr)
+}
+
+// convertAmountToHex 将金额转换为十六进制格式
+func (s *userTransactionService) convertAmountToHex(amount string) string {
+	// 简化处理，将字符串转换为数字再转十六进制
+	// TODO: 实现完整的金额转换逻辑
+	return fmt.Sprintf("%064s", "0")
 }

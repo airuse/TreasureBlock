@@ -32,6 +32,16 @@ type UserTransaction struct {
 	UnsignedTx *string `json:"unsigned_tx" gorm:"type:longtext;comment:未签名交易数据"`
 	SignedTx   *string `json:"signed_tx" gorm:"type:longtext;comment:已签名交易数据"`
 
+	// QR码导出相关字段
+	ChainID    *string `json:"chain_id" gorm:"type:varchar(10);comment:链ID"`
+	TxData     *string `json:"tx_data" gorm:"type:longtext;comment:交易数据(十六进制)"`
+	AccessList *string `json:"access_list" gorm:"type:longtext;comment:访问列表(JSON格式)"`
+
+	// 签名组件
+	V *string `json:"v" gorm:"type:varchar(100);comment:签名V组件"`
+	R *string `json:"r" gorm:"type:varchar(100);comment:签名R组件"`
+	S *string `json:"s" gorm:"type:varchar(100);comment:签名S组件"`
+
 	// 交易结果
 	BlockHeight   *uint64 `json:"block_height" gorm:"comment:区块高度"`
 	Confirmations *uint   `json:"confirmations" gorm:"default:0;comment:确认数"`

@@ -59,6 +59,16 @@ type UserTransactionResponse struct {
 	TransactionType       string `json:"transaction_type,omitempty"`
 	ContractOperationType string `json:"contract_operation_type,omitempty"`
 	TokenContractAddress  string `json:"token_contract_address,omitempty"`
+
+	// QR码导出相关字段
+	ChainID    *string `json:"chain_id,omitempty"`
+	TxData     *string `json:"tx_data,omitempty"`
+	AccessList *string `json:"access_list,omitempty"`
+
+	// 签名组件
+	V *string `json:"v,omitempty"`
+	R *string `json:"r,omitempty"`
+	S *string `json:"s,omitempty"`
 }
 
 // UserTransactionListResponse 用户交易列表响应
@@ -87,12 +97,20 @@ type ExportTransactionResponse struct {
 	GasLimit    *uint   `json:"gas_limit"`
 	GasPrice    *string `json:"gas_price"`
 	Nonce       *uint64 `json:"nonce"`
+
+	// QR码数据
+	ChainID    *string `json:"chain_id"`
+	TxData     *string `json:"tx_data"`
+	AccessList *string `json:"access_list"`
 }
 
 // ImportSignatureRequest 导入签名请求
 type ImportSignatureRequest struct {
-	ID       uint   `json:"id" binding:"required" validate:"required"`
-	SignedTx string `json:"signed_tx" binding:"required" validate:"required"`
+	ID       uint    `json:"id" binding:"required" validate:"required"`
+	SignedTx string  `json:"signed_tx" binding:"required" validate:"required"`
+	V        *string `json:"v,omitempty"`
+	R        *string `json:"r,omitempty"`
+	S        *string `json:"s,omitempty"`
 }
 
 // SendTransactionRequest 发送交易请求
