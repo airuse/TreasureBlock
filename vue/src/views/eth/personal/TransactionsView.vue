@@ -655,6 +655,7 @@ const generateQRCode = async (transactionData: any, tx: UserTransaction) => {
       id: 123,
       chainId: '1',
       nonce: 42, // 从区块链实时获取的nonce
+      from: '0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6', // 发送地址，用于签名程序自动匹配私钥
       to: '0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6',
       value: '0xde0b6b3a7640000', // 十六进制格式 (1 ETH = 10^18 wei)
       data: '0x'
@@ -663,6 +664,7 @@ const generateQRCode = async (transactionData: any, tx: UserTransaction) => {
       id: 124,
       chainId: '1',
       nonce: 43, // 从区块链实时获取的nonce
+      from: '0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6', // 发送地址，用于签名程序自动匹配私钥
       to: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
       value: '0x0', // 代币操作value为0
       data: '0x70a08231000000000000000000000000742d35cc6634c0532925a3b8d4c9db96c4b4d8b6' // balanceOf(address)
@@ -671,6 +673,7 @@ const generateQRCode = async (transactionData: any, tx: UserTransaction) => {
       id: 125,
       chainId: '1',
       nonce: 44, // 从区块链实时获取的nonce
+      from: '0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6', // 发送地址，用于签名程序自动匹配私钥
       to: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
       value: '0x0', // 代币操作value为0
       data: '0xa9059cbb000000000000000000000000742d35cc6634c0532925a3b8d4c9db96c4b4d8b600000000000000000000000000000000000000000000000000000000000f4240', // transfer(address,uint256)
@@ -680,6 +683,7 @@ const generateQRCode = async (transactionData: any, tx: UserTransaction) => {
       id: 126,
       chainId: '1',
       nonce: 45, // 从区块链实时获取的nonce
+      from: '0x26248Ec61fC83a24F958faF435f8254ce65D08d9', // 发送地址，用于签名程序自动匹配私钥
       to: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
       value: '0x0', // 代币操作value为0
       data: '0x23b872dd00000000000000000000000026248ec61fc83a24f958faf435f8254ce65d08d9000000000000000000000000320b0306fa5917cb12109d5404b5fd00056b37b500000000000000000000000000000000000000000000000000000000d09dc300', // transferFrom(address,address,uint256)
@@ -723,6 +727,7 @@ const createMinimalTransactionData = (tx: UserTransaction, fullData: any) => {
     
     // 交易核心字段
     nonce: fullData.nonce || tx.nonce || 0, // 优先使用API返回的nonce
+    from: tx.from_address, // 添加from字段用于签名程序自动匹配私钥
     to: tx.transaction_type === 'token' && tx.token_contract_address ? tx.token_contract_address : tx.to_address,
     value: tx.transaction_type === 'token' ? '0x0' : convertToHexString(tx.amount || '0'), // 代币转账value为0，ETH转账使用十六进制格式
     data: fullData.tx_data || generateContractData(tx, fullData) // 优先使用后端保存的tx_data

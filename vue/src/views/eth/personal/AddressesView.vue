@@ -191,359 +191,365 @@
     </div>
 
     <!-- 添加地址模态框 -->
-    <div v-if="showAddAddressModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
-        <div class="px-6 py-4 border-b border-gray-200">
-          <h3 class="text-lg font-medium text-gray-900">添加地址</h3>
-        </div>
-        
-        <div class="px-6 py-4">
-          <div class="space-y-4">
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">地址</label>
-              <input
-                v-model="newAddress.address"
-                type="text"
-                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="0x..."
-              />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">标签</label>
-              <input
-                v-model="newAddress.label"
-                type="text"
-                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="例如：主钱包"
-              />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">类型</label>
-              <select
-                v-model="newAddress.type"
-                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="wallet">钱包</option>
-                <option value="contract">合约</option>
-                <option value="exchange">交易所</option>
-                <option value="other">其他</option>
-              </select>
-            </div>
-            
-                        <!-- 合约选择器，仅当类型为合约时显示 -->
-            <div v-if="newAddress.type === 'contract'">
-              <label class="block text-sm font-medium text-gray-700 mb-1">选择合约</label>
-              <select
-                v-model="newAddress.contract_id"
-                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                :disabled="loadingContracts"
-              >
-                <option value="">请选择合约</option>
-                <option 
-                  v-for="contract in contracts" 
-                  :key="contract.id" 
-                  :value="contract.id"
-                >
-                  {{ contract.name || contract.address }} 
-                  <span v-if="contract.symbol">({{ contract.symbol }})</span>
-                </option>
-              </select>
-              <div v-if="loadingContracts" class="mt-1 text-sm text-gray-500">
-                加载合约中...
+    <Teleport to="body">
+      <div v-if="showAddAddressModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+          <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">添加地址</h3>
+          </div>
+          
+          <div class="px-6 py-4">
+            <div class="space-y-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">地址</label>
+                <input
+                  v-model="newAddress.address"
+                  type="text"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="0x..."
+                />
               </div>
-            </div>
-            
-            <!-- 授权地址输入，仅当类型为合约时显示 -->
-            <div v-if="newAddress.type === 'contract'">
-              <label class="block text-sm font-medium text-gray-700 mb-1">授权地址</label>
-              <div class="space-y-2">
-                <div v-for="(addr, index) in (newAddress.authorized_addresses || [])" :key="index" class="flex items-center space-x-2">
-                  <input
-                    v-model="(newAddress.authorized_addresses || [])[index]"
-                    type="text"
-                    class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="0x..."
-                  />
-                  <button
-                    @click="removeAuthorizedAddress(index)"
-                    type="button"
-                    class="px-2 py-2 text-red-600 hover:text-red-800"
-                    title="删除授权地址"
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">标签</label>
+                <input
+                  v-model="newAddress.label"
+                  type="text"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="例如：主钱包"
+                />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">类型</label>
+                <select
+                  v-model="newAddress.type"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="wallet">钱包</option>
+                  <option value="contract">合约</option>
+                  <option value="exchange">交易所</option>
+                  <option value="other">其他</option>
+                </select>
+              </div>
+              
+                          <!-- 合约选择器，仅当类型为合约时显示 -->
+              <div v-if="newAddress.type === 'contract'">
+                <label class="block text-sm font-medium text-gray-700 mb-1">选择合约</label>
+                <select
+                  v-model="newAddress.contract_id"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  :disabled="loadingContracts"
+                >
+                  <option value="">请选择合约</option>
+                  <option 
+                    v-for="contract in contracts" 
+                    :key="contract.id" 
+                    :value="contract.id"
                   >
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
+                    {{ contract.name || contract.address }} 
+                    <span v-if="contract.symbol">({{ contract.symbol }})</span>
+                  </option>
+                </select>
+                <div v-if="loadingContracts" class="mt-1 text-sm text-gray-500">
+                  加载合约中...
+                </div>
+              </div>
+              
+              <!-- 授权地址输入，仅当类型为合约时显示 -->
+              <div v-if="newAddress.type === 'contract'">
+                <label class="block text-sm font-medium text-gray-700 mb-1">授权地址</label>
+                <div class="space-y-2">
+                  <div v-for="(addr, index) in (newAddress.authorized_addresses || [])" :key="index" class="flex items-center space-x-2">
+                    <input
+                      v-model="(newAddress.authorized_addresses || [])[index]"
+                      type="text"
+                      class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="0x..."
+                    />
+                    <button
+                      @click="removeAuthorizedAddress(index)"
+                      type="button"
+                      class="px-2 py-2 text-red-600 hover:text-red-800"
+                      title="删除授权地址"
+                    >
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
+                  <button
+                    @click="addAuthorizedAddress"
+                    type="button"
+                    class="w-full px-3 py-2 border border-gray-300 border-dashed rounded-md text-gray-600 hover:text-gray-800 hover:border-gray-400 transition-colors"
+                  >
+                    + 添加授权地址
                   </button>
                 </div>
-                <button
-                  @click="addAuthorizedAddress"
-                  type="button"
-                  class="w-full px-3 py-2 border border-gray-300 border-dashed rounded-md text-gray-600 hover:text-gray-800 hover:border-gray-400 transition-colors"
-                >
-                  + 添加授权地址
-                </button>
+                <div class="mt-1 text-xs text-gray-500">
+                  授权地址可以操作该合约，最多支持10个地址
+                </div>
               </div>
-              <div class="mt-1 text-xs text-gray-500">
-                授权地址可以操作该合约，最多支持10个地址
-              </div>
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">备注</label>
-              <textarea
-                v-model="newAddress.notes"
-                rows="3"
-                maxlength="500"
-                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="可选备注信息（最多500字符）"
-              ></textarea>
-              <div class="mt-1 text-xs text-gray-500 text-right">
-                {{ (newAddress.notes || '').length }}/500
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">备注</label>
+                <textarea
+                  v-model="newAddress.notes"
+                  rows="3"
+                  maxlength="500"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="可选备注信息（最多500字符）"
+                ></textarea>
+                <div class="mt-1 text-xs text-gray-500 text-right">
+                  {{ (newAddress.notes || '').length }}/500
+                </div>
               </div>
             </div>
           </div>
-        </div>
-        
-        <div class="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
-          <button
-            @click="showAddAddressModal = false"
-            class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
-          >
-            取消
-          </button>
-          <button
-            @click="addAddress"
-            :disabled="!canAddAddress || addingAddress"
-            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-          >
-            <span v-if="addingAddress">添加中...</span>
-            <span v-else>添加</span>
-          </button>
+          
+          <div class="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+            <button
+              @click="showAddAddressModal = false"
+              class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+            >
+              取消
+            </button>
+            <button
+              @click="addAddress"
+              :disabled="!canAddAddress || addingAddress"
+              class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+            >
+              <span v-if="addingAddress">添加中...</span>
+              <span v-else>添加</span>
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </Teleport>
 
     <!-- 编辑地址模态框 -->
-    <div v-if="showEditAddressModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
-        <div class="px-6 py-4 border-b border-gray-200">
-          <h3 class="text-lg font-medium text-gray-900">编辑地址</h3>
-        </div>
-        
-        <div class="px-6 py-4">
-          <div class="space-y-4">
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">地址</label>
-              <input
-                v-model="editingAddress.address"
-                type="text"
-                class="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
-                readonly
-              />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">标签</label>
-              <input
-                v-model="editingAddress.label"
-                type="text"
-                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="例如：主钱包"
-              />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">类型</label>
-              <select
-                v-model="editingAddress.type"
-                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              >
-                <option value="wallet">钱包</option>
-                <option value="contract">合约</option>
-                <option value="exchange">交易所</option>
-                <option value="other">其他</option>
-              </select>
-            </div>
-            
-                        <!-- 合约选择器，仅当类型为合约时显示 -->
-            <div v-if="editingAddress.type === 'contract'">
-              <label class="block text-sm font-medium text-gray-700 mb-1">选择合约</label>
-              <select
-                v-model="editingAddress.contract_id"
-                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                :disabled="loadingContracts"
-              >
-                <option value="">请选择合约</option>
-                <option 
-                  v-for="contract in contracts" 
-                  :key="contract.id" 
-                  :value="contract.id"
-                >
-                  {{ contract.name || contract.address }} 
-                  <span v-if="contract.symbol">({{ contract.symbol }})</span>
-                </option>
-              </select>
-              <div v-if="loadingContracts" class="mt-1 text-sm text-gray-500">
-                加载合约中...
+    <Teleport to="body">
+      <div v-if="showEditAddressModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-xl max-w-md w-full mx-4">
+          <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">编辑地址</h3>
+          </div>
+          
+          <div class="px-6 py-4">
+            <div class="space-y-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">地址</label>
+                <input
+                  v-model="editingAddress.address"
+                  type="text"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
+                  readonly
+                />
               </div>
-            </div>
-            
-            <!-- 授权地址输入，仅当类型为合约时显示 -->
-            <div v-if="editingAddress.type === 'contract'">
-              <label class="block text-sm font-medium text-gray-700 mb-1">授权地址</label>
-              <div class="space-y-2">
-                <div v-for="(addr, index) in (editingAddress.authorized_addresses || [])" :key="index" class="flex items-center space-x-2">
-                  <input
-                    v-model="(editingAddress.authorized_addresses || [])[index]"
-                    type="text"
-                    class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="0x..."
-                  />
-                  <button
-                    @click="removeEditingAuthorizedAddress(index)"
-                    type="button"
-                    class="px-2 py-2 text-red-600 hover:text-red-800"
-                    title="删除授权地址"
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">标签</label>
+                <input
+                  v-model="editingAddress.label"
+                  type="text"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="例如：主钱包"
+                />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">类型</label>
+                <select
+                  v-model="editingAddress.type"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="wallet">钱包</option>
+                  <option value="contract">合约</option>
+                  <option value="exchange">交易所</option>
+                  <option value="other">其他</option>
+                </select>
+              </div>
+              
+                          <!-- 合约选择器，仅当类型为合约时显示 -->
+              <div v-if="editingAddress.type === 'contract'">
+                <label class="block text-sm font-medium text-gray-700 mb-1">选择合约</label>
+                <select
+                  v-model="editingAddress.contract_id"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  :disabled="loadingContracts"
+                >
+                  <option value="">请选择合约</option>
+                  <option 
+                    v-for="contract in contracts" 
+                    :key="contract.id" 
+                    :value="contract.id"
                   >
-                    <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                      <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                    </svg>
+                    {{ contract.name || contract.address }} 
+                    <span v-if="contract.symbol">({{ contract.symbol }})</span>
+                  </option>
+                </select>
+                <div v-if="loadingContracts" class="mt-1 text-sm text-gray-500">
+                  加载合约中...
+                </div>
+              </div>
+              
+              <!-- 授权地址输入，仅当类型为合约时显示 -->
+              <div v-if="editingAddress.type === 'contract'">
+                <label class="block text-sm font-medium text-gray-700 mb-1">授权地址</label>
+                <div class="space-y-2">
+                  <div v-for="(addr, index) in (editingAddress.authorized_addresses || [])" :key="index" class="flex items-center space-x-2">
+                    <input
+                      v-model="(editingAddress.authorized_addresses || [])[index]"
+                      type="text"
+                      class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                      placeholder="0x..."
+                    />
+                    <button
+                      @click="removeEditingAuthorizedAddress(index)"
+                      type="button"
+                      class="px-2 py-2 text-red-600 hover:text-red-800"
+                      title="删除授权地址"
+                    >
+                      <svg class="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+                      </svg>
+                    </button>
+                  </div>
+                  <button
+                    @click="addEditingAuthorizedAddress"
+                    type="button"
+                    class="w-full px-3 py-2 border border-gray-300 border-dashed rounded-md text-gray-600 hover:text-gray-800 hover:border-gray-400 transition-colors"
+                  >
+                    + 添加授权地址
                   </button>
                 </div>
-                <button
-                  @click="addEditingAuthorizedAddress"
-                  type="button"
-                  class="w-full px-3 py-2 border border-gray-300 border-dashed rounded-md text-gray-600 hover:text-gray-800 hover:border-gray-400 transition-colors"
-                >
-                  + 添加授权地址
-                </button>
+                <div class="mt-1 text-xs text-gray-500">
+                  授权地址可以操作该合约，最多支持10个地址
+                </div>
               </div>
-              <div class="mt-1 text-xs text-gray-500">
-                授权地址可以操作该合约，最多支持10个地址
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">备注</label>
+                <textarea
+                  v-model="editingAddress.notes"
+                  rows="3"
+                  maxlength="500"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="可选备注信息（最多500字符）"
+                ></textarea>
+                <div class="mt-1 text-xs text-gray-500 text-right">
+                  {{ (editingAddress.notes || '').length }}/500
+                </div>
               </div>
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">备注</label>
-              <textarea
-                v-model="editingAddress.notes"
-                rows="3"
-                maxlength="500"
-                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="可选备注信息（最多500字符）"
-              ></textarea>
-              <div class="mt-1 text-xs text-gray-500 text-right">
-                {{ (editingAddress.notes || '').length }}/500
+              <div>
+                <label class="flex items-center">
+                  <input
+                    v-model="editingAddress.isActive"
+                    type="checkbox"
+                    class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
+                  />
+                  <span class="ml-2 text-sm text-gray-700">启用地址</span>
+                </label>
               </div>
-            </div>
-            <div>
-              <label class="flex items-center">
-                <input
-                  v-model="editingAddress.isActive"
-                  type="checkbox"
-                  class="rounded border-gray-300 text-blue-600 shadow-sm focus:border-blue-300 focus:ring focus:ring-blue-200 focus:ring-opacity-50"
-                />
-                <span class="ml-2 text-sm text-gray-700">启用地址</span>
-              </label>
             </div>
           </div>
-        </div>
-        
-        <div class="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
-          <button
-            @click="showEditAddressModal = false"
-            class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
-          >
-            取消
-          </button>
-          <button
-            @click="updateAddress"
-            :disabled="!canUpdateAddress || updatingAddress"
-            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-          >
-            <span v-if="updatingAddress">更新中...</span>
-            <span v-else>更新</span>
-          </button>
+          
+          <div class="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+            <button
+              @click="showEditAddressModal = false"
+              class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+            >
+              取消
+            </button>
+            <button
+              @click="updateAddress"
+              :disabled="!canUpdateAddress || updatingAddress"
+              class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+            >
+              <span v-if="updatingAddress">更新中...</span>
+              <span v-else>更新</span>
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </Teleport>
 
     <!-- 创建交易模态框 -->
-    <div v-if="showCreateTransactionModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div class="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4">
-        <div class="px-6 py-4 border-b border-gray-200">
-          <h3 class="text-lg font-medium text-gray-900">创建交易</h3>
-        </div>
-        
-        <div class="px-6 py-4">
-          <div class="space-y-4">
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">发送地址</label>
-              <input
-                v-model="newTransaction.fromAddress"
-                type="text"
-                class="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
-                readonly
-              />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">接收地址</label>
-              <input
-                v-model="newTransaction.toAddress"
-                type="text"
-                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="0x..."
-              />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">金额 (ETH)</label>
-              <input
-                v-model="newTransaction.amount"
-                type="number"
-                step="0.000001"
-                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="0.001"
-              />
-            </div>
-            <div>
-              <label class="block text-sm font-medium text-gray-700 mb-1">Gas价格 (Gwei)</label>
-              <input
-                v-model="newTransaction.gasPrice"
-                type="number"
-                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="20"
-              />
-            </div>
-            <div class="bg-yellow-50 border border-yellow-200 rounded-md p-3">
-              <div class="flex">
-                <div class="flex-shrink-0">
-                  <svg class="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
-                    <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
-                  </svg>
-                </div>
-                <div class="ml-3">
-                  <p class="text-sm text-yellow-800">
-                    创建交易需要消耗 1 TB 收益。当前可用收益：{{ availableEarnings }} TB
-                  </p>
+    <Teleport to="body">
+      <div v-if="showCreateTransactionModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+        <div class="bg-white rounded-lg shadow-xl max-w-lg w-full mx-4">
+          <div class="px-6 py-4 border-b border-gray-200">
+            <h3 class="text-lg font-medium text-gray-900">创建交易</h3>
+          </div>
+          
+          <div class="px-6 py-4">
+            <div class="space-y-4">
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">发送地址</label>
+                <input
+                  v-model="newTransaction.fromAddress"
+                  type="text"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md bg-gray-50"
+                  readonly
+                />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">接收地址</label>
+                <input
+                  v-model="newTransaction.toAddress"
+                  type="text"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="0x..."
+                />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">金额 (ETH)</label>
+                <input
+                  v-model="newTransaction.amount"
+                  type="number"
+                  step="0.000001"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="0.001"
+                />
+              </div>
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">Gas价格 (Gwei)</label>
+                <input
+                  v-model="newTransaction.gasPrice"
+                  type="number"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="20"
+                />
+              </div>
+              <div class="bg-yellow-50 border border-yellow-200 rounded-md p-3">
+                <div class="flex">
+                  <div class="flex-shrink-0">
+                    <svg class="h-5 w-5 text-yellow-400" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.213 2.98-1.742 2.98H4.42c-1.53 0-2.493-1.646-1.743-2.98l5.58-9.92zM11 13a1 1 0 11-2 0 1 1 0 012 0zm-1-8a1 1 0 00-1 1v3a1 1 0 002 0V6a1 1 0 00-1-1z" clip-rule="evenodd" />
+                    </svg>
+                  </div>
+                  <div class="ml-3">
+                    <p class="text-sm text-yellow-800">
+                      创建交易需要消耗 1 TB 收益。当前可用收益：{{ availableEarnings }} TB
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
           </div>
-        </div>
-        
-        <div class="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
-          <button
-            @click="showCreateTransactionModal = false"
-            class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
-          >
-            取消
-          </button>
-          <button
-            @click="submitTransaction"
-            :disabled="!canCreateTransaction"
-            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-          >
-            创建交易
-          </button>
+          
+          <div class="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+            <button
+              @click="showCreateTransactionModal = false"
+              class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+            >
+              取消
+            </button>
+            <button
+              @click="submitTransaction"
+              :disabled="!canCreateTransaction"
+              class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+            >
+              创建交易
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </Teleport>
   </div>
 </template>
 

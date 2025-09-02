@@ -83,365 +83,13 @@
     </div>
 
     <!-- 编辑合约模态框 -->
-    <div v-if="showEditModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-      <div class="relative top-16 mx-auto p-5 border w-11/12 max-w-5xl shadow-xl rounded-xl bg-white">
-        <div class="flex justify-between items-center mb-4 pb-3 border-b">
-          <h3 class="text-lg font-semibold text-gray-900">编辑合约信息</h3>
-          <button 
-            @click="closeEditModal"
-            class="text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-            </svg>
-          </button>
-        </div>
-        
-        <form @submit.prevent="saveEdit" class="max-h-[65vh] overflow-y-auto pr-2">
-          <!-- 基本信息 -->
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">合约地址</label>
-              <input 
-                v-model="editingAddress.hash" 
-                type="text" 
-                readonly
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded bg-gray-50 text-gray-500"
-              />
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">合约名称</label>
-              <input 
-                v-model="editingAddress.name" 
-                type="text" 
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">合约符号</label>
-              <input 
-                v-model="editingAddress.symbol" 
-                type="text" 
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">合约类型</label>
-              <select 
-                v-model="editingAddress.type" 
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              >
-                <option value="erc20">ERC-20 代币</option>
-                <option value="erc721">ERC-721 NFT</option>
-                <option value="erc1155">ERC-1155 多代币</option>
-                <option value="defi">DeFi 协议</option>
-                <option value="dex">DEX 交易所</option>
-                <option value="lending">借贷协议</option>
-                <option value="other">其他合约</option>
-              </select>
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">精度</label>
-              <input 
-                v-model="editingAddress.decimals" 
-                type="number" 
-                min="0" 
-                max="18"
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">状态</label>
-              <select 
-                v-model="editingAddress.status" 
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              >
-                <option value="active">活跃</option>
-                <option value="inactive">非活跃</option>
-                <option value="paused">暂停</option>
-              </select>
-            </div>
-          </div>
-
-          <!-- 合约详细信息 -->
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">接口 (Interfaces)</label>
-              <div class="space-y-2">
-                <div class="flex space-x-2">
-                  <input 
-                    v-model="newInterface" 
-                    type="text" 
-                    placeholder="输入接口名称"
-                    class="flex-1 px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    @keyup.enter="addInterface"
-                  />
-                  <button 
-                    @click="addInterface"
-                    type="button"
-                    class="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  >
-                    +
-                  </button>
-                </div>
-                <div class="flex flex-wrap gap-1">
-                  <span 
-                    v-for="(item, index) in editingAddress.interfacesList" 
-                    :key="index"
-                    class="inline-flex items-center px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded"
-                  >
-                    {{ item }}
-                    <button 
-                      @click="removeInterface(index)"
-                      type="button"
-                      class="ml-1 text-blue-600 hover:text-blue-800"
-                    >
-                      ×
-                    </button>
-                  </span>
-                </div>
-              </div>
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">方法 (Methods)</label>
-              <div class="space-y-2">
-                <div class="flex space-x-2">
-                  <input 
-                    v-model="newMethod" 
-                    type="text" 
-                    placeholder="输入方法名称"
-                    class="flex-1 px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    @keyup.enter="addMethod"
-                  />
-                  <button 
-                    @click="addMethod"
-                    type="button"
-                    class="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  >
-                    +
-                  </button>
-                </div>
-                <div class="flex flex-wrap gap-1">
-                  <span 
-                    v-for="(item, index) in editingAddress.methodsList" 
-                    :key="index"
-                    class="inline-flex items-center px-2 py-1 text-xs bg-green-100 text-green-800 rounded"
-                  >
-                    {{ item }}
-                    <button 
-                      @click="removeMethod(index)"
-                      type="button"
-                      class="ml-1 text-green-600 hover:text-green-800"
-                    >
-                      ×
-                    </button>
-                  </span>
-                </div>
-              </div>
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">事件 (Events)</label>
-              <div class="space-y-2">
-                <div class="flex space-x-2">
-                  <input 
-                    v-model="newEvent" 
-                    type="text" 
-                    placeholder="输入事件名称"
-                    class="flex-1 px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    @keyup.enter="addEvent"
-                  />
-                  <button 
-                    @click="addEvent"
-                    type="button"
-                    class="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  >
-                    +
-                  </button>
-                </div>
-                <div class="flex flex-wrap gap-1">
-                  <span 
-                    v-for="(item, index) in editingAddress.eventsList" 
-                    :key="index"
-                    class="inline-flex items-center px-2 py-1 text-xs bg-purple-100 text-purple-800 rounded"
-                  >
-                    {{ item }}
-                    <button 
-                      @click="removeEvent(index)"
-                      type="button"
-                      class="ml-1 text-purple-600 hover:text-purple-800"
-                    >
-                      ×
-                    </button>
-                  </span>
-                </div>
-              </div>
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">元数据 (Metadata)</label>
-              <div class="space-y-2">
-                <div class="flex space-x-2">
-                  <input 
-                    v-model="newMetadataKey" 
-                    type="text" 
-                    placeholder="键名"
-                    class="flex-1 px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  />
-                  <input 
-                    v-model="newMetadataValue" 
-                    type="text" 
-                    placeholder="值"
-                    class="flex-1 px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    @keyup.enter="addMetadata"
-                  />
-                  <button 
-                    @click="addMetadata"
-                    type="button"
-                    class="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  >
-                    +
-                  </button>
-                </div>
-                <div class="flex flex-wrap gap-1">
-                  <span 
-                    v-for="(key, index) in Object.keys(editingAddress.metadataObj || {})" 
-                    :key="index"
-                    class="inline-flex items-center px-2 py-1 text-xs bg-yellow-100 text-yellow-800 rounded"
-                  >
-                    {{ key }}: {{ editingAddress.metadataObj?.[key] }}
-                    <button 
-                      @click="removeMetadata(key)"
-                      type="button"
-                      class="ml-1 text-yellow-600 hover:text-yellow-800"
-                    >
-                      ×
-                    </button>
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- 其他信息 -->
-          <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">总供应量</label>
-              <input 
-                v-model="editingAddress.totalSupply" 
-                type="text" 
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">是否ERC-20</label>
-              <select 
-                v-model="editingAddress.isErc20" 
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              >
-                <option :value="true">是</option>
-                <option :value="false">否</option>
-              </select>
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">是否已验证</label>
-              <select 
-                v-model="editingAddress.verified" 
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              >
-                <option :value="true">已验证</option>
-                <option :value="false">未验证</option>
-              </select>
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">创建区块</label>
-              <input 
-                v-model="editingAddress.creationBlock" 
-                type="number" 
-                placeholder="12345678"
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-          </div>
-
-          <!-- 创建信息 -->
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">创建者地址</label>
-              <input 
-                v-model="editingAddress.creator" 
-                type="text" 
-                placeholder="0x..."
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">创建交易哈希</label>
-              <input 
-                v-model="editingAddress.creationTx" 
-                type="text" 
-                placeholder="0x..."
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-          </div>
-
-          <!-- 合约Logo和描述 -->
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">合约Logo</label>
-              <div class="flex items-center space-x-2">
-                <img 
-                  v-if="editingAddress.contractLogo" 
-                  :src="editingAddress.contractLogo" 
-                  alt="合约Logo" 
-                  class="w-10 h-10 rounded object-cover border"
-                />
-                <input 
-                  type="file" 
-                  @change="handleLogoUpload" 
-                  accept="image/*"
-                  class="block w-full text-xs text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
-                />
-              </div>
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">描述</label>
-              <textarea 
-                v-model="editingAddress.description" 
-                rows="2"
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              ></textarea>
-            </div>
-          </div>
-        </form>
-
-        <!-- 底部按钮 -->
-        <div class="flex justify-end space-x-3 pt-4 border-t">
-          <button 
-            type="button"
-            @click="closeEditModal"
-            class="px-4 py-2 text-xs font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded hover:bg-gray-200 transition-colors"
-          >
-            取消
-          </button>
-          <button 
-            @click="saveEdit"
-            class="px-4 py-2 text-xs font-medium text-white bg-blue-600 border border-transparent rounded hover:bg-blue-700 transition-colors"
-          >
-            保存
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- 维护币种信息模态框 -->
-    <div v-if="showCoinConfigModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-      <div class="relative top-16 mx-auto p-5 border w-11/12 max-w-4xl shadow-xl rounded-xl bg-white">
-        <div class="flex justify-between items-center mb-4 pb-3 border-b">
-          <h3 class="text-lg font-semibold text-gray-900">维护币种信息</h3>
-          <div class="flex items-center space-x-2">
-            <!-- 关闭按钮 -->
+    <Teleport to="body">
+      <div v-if="showEditModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div class="relative top-16 mx-auto p-5 border w-11/12 max-w-5xl shadow-xl rounded-xl bg-white">
+          <div class="flex justify-between items-center mb-4 pb-3 border-b">
+            <h3 class="text-lg font-semibold text-gray-900">编辑合约信息</h3>
             <button 
-              @click="closeCoinConfigModal"
+              @click="closeEditModal"
               class="text-gray-400 hover:text-gray-600 transition-colors"
             >
               <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
@@ -449,371 +97,578 @@
               </svg>
             </button>
           </div>
-        </div>
-        
-        <form @submit.prevent="saveCoinConfig" class="max-h-[65vh] overflow-y-auto pr-2">
-          <!-- 币种基本信息 -->
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">合约地址</label>
-              <input 
-                v-model="coinConfigData.contract_address" 
-                type="text" 
-                readonly
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded bg-gray-50 text-gray-500"
-              />
+          
+          <form @submit.prevent="saveEdit" class="max-h-[65vh] overflow-y-auto pr-2">
+            <!-- 基本信息 -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">合约地址</label>
+                <input 
+                  v-model="editingAddress.hash" 
+                  type="text" 
+                  readonly
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded bg-gray-50 text-gray-500"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">合约名称</label>
+                <input 
+                  v-model="editingAddress.name" 
+                  type="text" 
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">合约符号</label>
+                <input 
+                  v-model="editingAddress.symbol" 
+                  type="text" 
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">合约类型</label>
+                <select 
+                  v-model="editingAddress.type" 
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="erc20">ERC-20 代币</option>
+                  <option value="erc721">ERC-721 NFT</option>
+                  <option value="erc1155">ERC-1155 多代币</option>
+                  <option value="defi">DeFi 协议</option>
+                  <option value="dex">DEX 交易所</option>
+                  <option value="lending">借贷协议</option>
+                  <option value="other">其他合约</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">精度</label>
+                <input 
+                  v-model="editingAddress.decimals" 
+                  type="number" 
+                  min="0" 
+                  max="18"
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">状态</label>
+                <select 
+                  v-model="editingAddress.status" 
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="active">活跃</option>
+                  <option value="inactive">非活跃</option>
+                  <option value="paused">暂停</option>
+                </select>
+              </div>
             </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">币种名称 *</label>
-              <input 
-                v-model="coinConfigData.name" 
-                type="text" 
-                required
-                placeholder="输入币种名称"
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">币种符号 *</label>
-              <input 
-                v-model="coinConfigData.symbol" 
-                type="text" 
-                required
-                placeholder="输入币种符号"
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">币种类型</label>
-              <select 
-                v-model="coinConfigData.coin_type" 
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              >
-                <option value="0">原生币</option>
-                <option value="1">ERC-20 代币</option>
-                <option value="2">ERC-223 代币</option>
-                <option value="3">ERC-721 NFT</option>
-                <option value="4">ERC-1155 多代币</option>
-              </select>
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">精度</label>
-              <input 
-                v-model="coinConfigData.precision" 
-                type="number" 
-                min="0" 
-                max="18"
-                placeholder="18"
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">精度别名</label>
-              <input 
-                v-model="coinConfigData.decimals" 
-                type="number" 
-                min="0" 
-                max="18"
-                placeholder="18"
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">市值排名</label>
-              <input 
-                v-model="coinConfigData.market_cap_rank" 
-                type="number" 
-                min="0"
-                placeholder="0"
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">是否为稳定币</label>
-              <select 
-                v-model="coinConfigData.is_stablecoin" 
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              >
-                <option :value="false">否</option>
-                <option :value="true">是</option>
-              </select>
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">状态</label>
-              <select 
-                v-model="coinConfigData.status" 
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              >
-                <option value="1">启用</option>
-                <option value="0">禁用</option>
-              </select>
-            </div>
-          </div>
 
-          <!-- 其他信息 -->
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">Logo URL</label>
-              <input 
-                v-model="coinConfigData.logo_url" 
-                type="text" 
-                placeholder="输入Logo URL"
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">是否已验证</label>
-              <select 
-                v-model="coinConfigData.is_verified" 
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              >
-                <option :value="true">已验证</option>
-                <option :value="false">未验证</option>
-              </select>
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">官方网站</label>
-              <input 
-                v-model="coinConfigData.website_url" 
-                type="text" 
-                placeholder="输入官方网站URL"
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">区块浏览器地址</label>
-              <input 
-                v-model="coinConfigData.explorer_url" 
-                type="text" 
-                placeholder="输入区块浏览器地址"
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-            <div class="md:col-span-2">
-              <label class="block text-xs font-medium text-gray-700 mb-1">币种描述</label>
-              <textarea 
-                v-model="coinConfigData.description" 
-                rows="2"
-                placeholder="输入币种描述"
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              ></textarea>
-            </div>
-          </div>
-
-          <!-- 解析配置 -->
-          <div class="mb-4">
-            <h4 class="text-sm font-medium text-gray-700 mb-2">解析配置</h4>
-            <div class="space-y-3">
-              <div 
-                v-for="(config, index) in coinConfigData.parser_configs" 
-                :key="index"
-                class="border border-gray-200 rounded p-3"
-              >
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-2">
-                  <div>
-                    <label class="block text-xs font-medium text-gray-700 mb-1">函数名称</label>
+            <!-- 合约详细信息 -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">接口 (Interfaces)</label>
+                <div class="space-y-2">
+                  <div class="flex space-x-2">
                     <input 
-                      v-model="config.function_name" 
+                      v-model="newInterface" 
                       type="text" 
-                      placeholder="transfer"
-                      class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      placeholder="输入接口名称"
+                      class="flex-1 px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      @keyup.enter="addInterface"
                     />
-                  </div>
-                  <div>
-                    <label class="block text-xs font-medium text-gray-700 mb-1">函数签名</label>
-                    <input 
-                      v-model="config.function_signature" 
-                      type="text" 
-                      placeholder="0xa9059cbb"
-                      class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-                <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-2">
-                  <div>
-                    <label class="block text-xs font-medium text-gray-700 mb-1">函数描述</label>
-                    <input 
-                      v-model="config.function_description" 
-                      type="text" 
-                      placeholder="转账函数"
-                      class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                  </div>
-                  <div>
-                    <label class="block text-xs font-medium text-gray-700 mb-1">显示格式</label>
-                    <input 
-                      v-model="config.display_format" 
-                      type="text" 
-                      placeholder="转账 {amount} {symbol} 到 {to}"
-                      class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    />
-                  </div>
-                </div>
-                
-                <!-- 参数配置 -->
-                <div class="mb-2">
-                  <label class="block text-xs font-medium text-gray-700 mb-1">参数配置</label>
-                  <div class="space-y-2">
-                    <div 
-                      v-for="(param, paramIndex) in config.param_config" 
-                      :key="paramIndex"
-                      class="grid grid-cols-1 md:grid-cols-5 gap-2 p-2 bg-gray-50 rounded"
-                    >
-                      <input 
-                        v-model="param.name" 
-                        type="text" 
-                        placeholder="参数名"
-                        class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
-                      />
-                      <select 
-                        v-model="param.type" 
-                        class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
-                      >
-                        <option value="address">地址</option>
-                        <option value="uint256">大整数</option>
-                        <option value="bytes">字节</option>
-                        <option value="string">字符串</option>
-                      </select>
-                      <input 
-                        v-model="param.offset" 
-                        type="number" 
-                        placeholder="偏移量"
-                        class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
-                      />
-                      <input 
-                        v-model="param.length" 
-                        type="number" 
-                        placeholder="长度"
-                        class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
-                      />
-                      <div class="flex items-center space-x-2">
-                        <input 
-                          v-model="param.description" 
-                          type="text" 
-                          placeholder="参数描述"
-                          class="flex-1 px-2 py-1 text-xs border border-gray-300 rounded"
-                        />
-                        <button 
-                          @click="removeParamConfig(index, paramIndex)"
-                          type="button"
-                          class="text-red-600 hover:text-red-800 text-xs px-2 py-1"
-                          title="删除参数"
-                        >
-                          ×
-                        </button>
-                      </div>
-                    </div>
                     <button 
-                      @click="addParamConfig(index)"
+                      @click="addInterface"
                       type="button"
-                      class="text-xs text-blue-600 hover:text-blue-800"
+                      class="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
                     >
-                      + 添加参数
+                      +
                     </button>
                   </div>
-                </div>
-                
-                <!-- 解析规则 -->
-                <div class="mb-2">
-                  <label class="block text-xs font-medium text-gray-700 mb-1">解析规则</label>
-                  <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
-                    <input 
-                      v-model="config.parser_rules.extract_to_address" 
-                      type="text" 
-                      placeholder="提取收款地址规则"
-                      class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
-                    />
-                    <input 
-                      v-model="config.parser_rules.extract_amount" 
-                      type="text" 
-                      placeholder="提取金额规则"
-                      class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
-                    />
-                    <input 
-                      v-model="config.parser_rules.amount_unit" 
-                      type="text" 
-                      placeholder="金额单位"
-                      class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
-                    />
-                    <input 
-                      v-model="config.parser_rules.extract_data" 
-                      type="text" 
-                      placeholder="提取其他数据规则"
-                      class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
-                    />
+                  <div class="flex flex-wrap gap-1">
+                    <span 
+                      v-for="(item, index) in editingAddress.interfacesList" 
+                      :key="index"
+                      class="inline-flex items-center px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded"
+                    >
+                      {{ item }}
+                      <button 
+                        @click="removeInterface(index)"
+                        type="button"
+                        class="ml-1 text-blue-600 hover:text-blue-800"
+                      >
+                        ×
+                      </button>
+                    </span>
                   </div>
                 </div>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">方法 (Methods)</label>
+                <div class="space-y-2">
+                  <div class="flex space-x-2">
+                    <input 
+                      v-model="newMethod" 
+                      type="text" 
+                      placeholder="输入方法名称"
+                      class="flex-1 px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      @keyup.enter="addMethod"
+                    />
+                    <button 
+                      @click="addMethod"
+                      type="button"
+                      class="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    >
+                      +
+                    </button>
+                  </div>
+                  <div class="flex flex-wrap gap-1">
+                    <span 
+                      v-for="(item, index) in editingAddress.methodsList" 
+                      :key="index"
+                      class="inline-flex items-center px-2 py-1 text-xs bg-green-100 text-green-800 rounded"
+                    >
+                      {{ item }}
+                      <button 
+                        @click="removeMethod(index)"
+                        type="button"
+                        class="ml-1 text-green-600 hover:text-green-800"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">事件 (Events)</label>
+                <div class="space-y-2">
+                  <div class="flex space-x-2">
+                    <input 
+                      v-model="newEvent" 
+                      type="text" 
+                      placeholder="输入事件名称"
+                      class="flex-1 px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      @keyup.enter="addEvent"
+                    />
+                    <button 
+                      @click="addEvent"
+                      type="button"
+                      class="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    >
+                      +
+                    </button>
+                  </div>
+                  <div class="flex flex-wrap gap-1">
+                    <span 
+                      v-for="(item, index) in editingAddress.eventsList" 
+                      :key="index"
+                      class="inline-flex items-center px-2 py-1 text-xs bg-purple-100 text-purple-800 rounded"
+                    >
+                      {{ item }}
+                      <button 
+                        @click="removeEvent(index)"
+                        type="button"
+                        class="ml-1 text-purple-600 hover:text-purple-800"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">元数据 (Metadata)</label>
+                <div class="space-y-2">
+                  <div class="flex space-x-2">
+                    <input 
+                      v-model="newMetadataKey" 
+                      type="text" 
+                      placeholder="键名"
+                      class="flex-1 px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                    <input 
+                      v-model="newMetadataValue" 
+                      type="text" 
+                      placeholder="值"
+                      class="flex-1 px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      @keyup.enter="addMetadata"
+                    />
+                    <button 
+                      @click="addMetadata"
+                      type="button"
+                      class="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    >
+                      +
+                    </button>
+                  </div>
+                  <div class="flex flex-wrap gap-1">
+                    <span 
+                      v-for="(key, index) in Object.keys(editingAddress.metadataObj || {})" 
+                      :key="index"
+                      class="inline-flex items-center px-2 py-1 text-xs bg-yellow-100 text-yellow-800 rounded"
+                    >
+                      {{ key }}: {{ editingAddress.metadataObj?.[key] }}
+                      <button 
+                        @click="removeMetadata(key)"
+                        type="button"
+                        class="ml-1 text-yellow-600 hover:text-yellow-800"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
 
-                <!-- 日志解析配置 -->
-                <div class="mb-2 border-t pt-2">
-                  <label class="block text-xs font-medium text-gray-700 mb-1">日志解析配置</label>
+            <!-- 其他信息 -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">总供应量</label>
+                <input 
+                  v-model="editingAddress.totalSupply" 
+                  type="text" 
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">是否ERC-20</label>
+                <select 
+                  v-model="editingAddress.isErc20" 
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option :value="true">是</option>
+                  <option :value="false">否</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">是否已验证</label>
+                <select 
+                  v-model="editingAddress.verified" 
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option :value="true">已验证</option>
+                  <option :value="false">未验证</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">创建区块</label>
+                <input 
+                  v-model="editingAddress.creationBlock" 
+                  type="number" 
+                  placeholder="12345678"
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+
+            <!-- 创建信息 -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">创建者地址</label>
+                <input 
+                  v-model="editingAddress.creator" 
+                  type="text" 
+                  placeholder="0x..."
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">创建交易哈希</label>
+                <input 
+                  v-model="editingAddress.creationTx" 
+                  type="text" 
+                  placeholder="0x..."
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+
+            <!-- 合约Logo和描述 -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">合约Logo</label>
+                <div class="flex items-center space-x-2">
+                  <img 
+                    v-if="editingAddress.contractLogo" 
+                    :src="editingAddress.contractLogo" 
+                    alt="合约Logo" 
+                    class="w-10 h-10 rounded object-cover border"
+                  />
+                  <input 
+                    type="file" 
+                    @change="handleLogoUpload" 
+                    accept="image/*"
+                    class="block w-full text-xs text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                  />
+                </div>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">描述</label>
+                <textarea 
+                  v-model="editingAddress.description" 
+                  rows="2"
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                ></textarea>
+              </div>
+            </div>
+          </form>
+
+          <!-- 底部按钮 -->
+          <div class="flex justify-end space-x-3 pt-4 border-t">
+            <button 
+              type="button"
+              @click="closeEditModal"
+              class="px-4 py-2 text-xs font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded hover:bg-gray-200 transition-colors"
+            >
+              取消
+            </button>
+            <button 
+              @click="saveEdit"
+              class="px-4 py-2 text-xs font-medium text-white bg-blue-600 border border-transparent rounded hover:bg-blue-700 transition-colors"
+            >
+              保存
+            </button>
+          </div>
+        </div>
+      </div>
+    </Teleport>
+
+    <!-- 维护币种信息模态框 -->
+    <Teleport to="body">
+      <div v-if="showCoinConfigModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div class="relative top-16 mx-auto p-5 border w-11/12 max-w-4xl shadow-xl rounded-xl bg-white">
+          <div class="flex justify-between items-center mb-4 pb-3 border-b">
+            <h3 class="text-lg font-semibold text-gray-900">维护币种信息</h3>
+            <div class="flex items-center space-x-2">
+              <button 
+                @click="closeCoinConfigModal"
+                class="text-gray-400 hover:text-gray-600 transition-colors"
+              >
+                <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+                </svg>
+              </button>
+            </div>
+          </div>
+          
+          <form @submit.prevent="saveCoinConfig" class="max-h-[65vh] overflow-y-auto pr-2">
+            <!-- 币种基本信息 -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">合约地址</label>
+                <input 
+                  v-model="coinConfigData.contract_address" 
+                  type="text" 
+                  readonly
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded bg-gray-50 text-gray-500"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">币种名称 *</label>
+                <input 
+                  v-model="coinConfigData.name" 
+                  type="text" 
+                  required
+                  placeholder="输入币种名称"
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">币种符号 *</label>
+                <input 
+                  v-model="coinConfigData.symbol" 
+                  type="text" 
+                  required
+                  placeholder="输入币种符号"
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">币种类型</label>
+                <select 
+                  v-model="coinConfigData.coin_type" 
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="0">原生币</option>
+                  <option value="1">ERC-20 代币</option>
+                  <option value="2">ERC-223 代币</option>
+                  <option value="3">ERC-721 NFT</option>
+                  <option value="4">ERC-1155 多代币</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">精度</label>
+                <input 
+                  v-model="coinConfigData.precision" 
+                  type="number" 
+                  min="0" 
+                  max="18"
+                  placeholder="18"
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">精度别名</label>
+                <input 
+                  v-model="coinConfigData.decimals" 
+                  type="number" 
+                  min="0" 
+                  max="18"
+                  placeholder="18"
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">市值排名</label>
+                <input 
+                  v-model="coinConfigData.market_cap_rank" 
+                  type="number" 
+                  min="0"
+                  placeholder="0"
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">是否为稳定币</label>
+                <select 
+                  v-model="coinConfigData.is_stablecoin" 
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option :value="false">否</option>
+                  <option :value="true">是</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">状态</label>
+                <select 
+                  v-model="coinConfigData.status" 
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="1">启用</option>
+                  <option value="0">禁用</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- 其他信息 -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">Logo URL</label>
+                <input 
+                  v-model="coinConfigData.logo_url" 
+                  type="text" 
+                  placeholder="输入Logo URL"
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">是否已验证</label>
+                <select 
+                  v-model="coinConfigData.is_verified" 
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option :value="true">已验证</option>
+                  <option :value="false">未验证</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">官方网站</label>
+                <input 
+                  v-model="coinConfigData.website_url" 
+                  type="text" 
+                  placeholder="输入官方网站URL"
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">区块浏览器地址</label>
+                <input 
+                  v-model="coinConfigData.explorer_url" 
+                  type="text" 
+                  placeholder="输入区块浏览器地址"
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+              <div class="md:col-span-2">
+                <label class="block text-xs font-medium text-gray-700 mb-1">币种描述</label>
+                <textarea 
+                  v-model="coinConfigData.description" 
+                  rows="2"
+                  placeholder="输入币种描述"
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                ></textarea>
+              </div>
+            </div>
+
+            <!-- 解析配置 -->
+            <div class="mb-4">
+              <h4 class="text-sm font-medium text-gray-700 mb-2">解析配置</h4>
+              <div class="space-y-3">
+                <div 
+                  v-for="(config, index) in coinConfigData.parser_configs" 
+                  :key="index"
+                  class="border border-gray-200 rounded p-3"
+                >
                   <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-2">
                     <div>
-                      <label class="block text-xs font-medium text-gray-500 mb-1">日志解析类型</label>
-                      <select 
-                        v-model="config.logs_parser_type" 
-                        class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
-                      >
-                        <option value="input_data">输入数据</option>
-                        <option value="event_log">事件日志</option>
-                        <option value="both">两者</option>
-                      </select>
-                    </div>
-                    <div>
-                      <label class="block text-xs font-medium text-gray-500 mb-1">事件签名</label>
+                      <label class="block text-xs font-medium text-gray-700 mb-1">函数名称</label>
                       <input 
-                        v-model="config.event_signature" 
+                        v-model="config.function_name" 
                         type="text" 
-                        placeholder="0x..."
-                        class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
+                        placeholder="transfer"
+                        class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                       />
                     </div>
                     <div>
-                      <label class="block text-xs font-medium text-gray-500 mb-1">事件名称</label>
+                      <label class="block text-xs font-medium text-gray-700 mb-1">函数签名</label>
                       <input 
-                        v-model="config.event_name" 
+                        v-model="config.function_signature" 
                         type="text" 
-                        placeholder="Transfer"
-                        class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
-                      />
-                    </div>
-                    <div>
-                      <label class="block text-xs font-medium text-gray-500 mb-1">事件描述</label>
-                      <input 
-                        v-model="config.event_description" 
-                        type="text" 
-                        placeholder="转账事件"
-                        class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
-                      />
-                    </div>
-                    <div>
-                      <label class="block text-xs font-medium text-gray-500 mb-1">日志显示格式</label>
-                      <input 
-                        v-model="config.logs_display_format" 
-                        type="text" 
-                        placeholder="转账 {amount} {symbol} 从 {from} 到 {to}"
-                        class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
+                        placeholder="0xa9059cbb"
+                        class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                       />
                     </div>
                   </div>
-
-                  <!-- 日志参数配置 -->
+                  <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-2">
+                    <div>
+                      <label class="block text-xs font-medium text-gray-700 mb-1">函数描述</label>
+                      <input 
+                        v-model="config.function_description" 
+                        type="text" 
+                        placeholder="转账函数"
+                        class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                    </div>
+                    <div>
+                      <label class="block text-xs font-medium text-gray-700 mb-1">显示格式</label>
+                      <input 
+                        v-model="config.display_format" 
+                        type="text" 
+                        placeholder="转账 {amount} {symbol} 到 {to}"
+                        class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      />
+                    </div>
+                  </div>
+                  
+                  <!-- 参数配置 -->
                   <div class="mb-2">
-                    <label class="block text-xs font-medium text-gray-500 mb-1">日志参数配置</label>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">参数配置</label>
                     <div class="space-y-2">
                       <div 
-                        v-for="(logParam, logParamIndex) in config.logs_param_config" 
-                        :key="logParamIndex"
-                        class="grid grid-cols-1 md:grid-cols-6 gap-2 p-2 bg-blue-50 rounded"
+                        v-for="(param, paramIndex) in config.param_config" 
+                        :key="paramIndex"
+                        class="grid grid-cols-1 md:grid-cols-5 gap-2 p-2 bg-gray-50 rounded"
                       >
                         <input 
-                          v-model="logParam.name" 
+                          v-model="param.name" 
                           type="text" 
                           placeholder="参数名"
                           class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
                         />
                         <select 
-                          v-model="logParam.type" 
+                          v-model="param.type" 
                           class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
                         >
                           <option value="address">地址</option>
@@ -822,490 +677,640 @@
                           <option value="string">字符串</option>
                         </select>
                         <input 
-                          v-model="logParam.topic_index" 
+                          v-model="param.offset" 
                           type="number" 
-                          placeholder="Topic索引"
+                          placeholder="偏移量"
                           class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
                         />
                         <input 
-                          v-model="logParam.data_index" 
+                          v-model="param.length" 
                           type="number" 
-                          placeholder="Data索引"
+                          placeholder="长度"
                           class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
                         />
-                        <input 
-                          v-model="logParam.description" 
-                          type="text" 
-                          placeholder="参数描述"
-                          class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
-                        />
-                        <button 
-                          @click="removeLogsParamConfig(index, logParamIndex)"
-                          type="button"
-                          class="text-red-600 hover:text-red-800 text-xs px-2 py-1"
-                          title="删除日志参数"
-                        >
-                          ×
-                        </button>
+                        <div class="flex items-center space-x-2">
+                          <input 
+                            v-model="param.description" 
+                            type="text" 
+                            placeholder="参数描述"
+                            class="flex-1 px-2 py-1 text-xs border border-gray-300 rounded"
+                          />
+                          <button 
+                            @click="removeParamConfig(index, paramIndex)"
+                            type="button"
+                            class="text-red-600 hover:text-red-800 text-xs px-2 py-1"
+                            title="删除参数"
+                          >
+                            ×
+                          </button>
+                        </div>
                       </div>
                       <button 
-                        @click="addLogsParamConfig(index)"
+                        @click="addParamConfig(index)"
                         type="button"
                         class="text-xs text-blue-600 hover:text-blue-800"
                       >
-                        + 添加日志参数
+                        + 添加参数
                       </button>
                     </div>
                   </div>
-
-                  <!-- 日志解析规则 -->
+                  
+                  <!-- 解析规则 -->
                   <div class="mb-2">
-                    <label class="block text-xs font-medium text-gray-500 mb-1">日志解析规则</label>
+                    <label class="block text-xs font-medium text-gray-700 mb-1">解析规则</label>
                     <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
                       <input 
-                        v-model="config.logs_parser_rules.extract_from_address" 
-                        type="text" 
-                        placeholder="提取发送地址规则"
-                        class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
-                      />
-                      <input 
-                        v-model="config.logs_parser_rules.extract_to_address" 
+                        v-model="config.parser_rules.extract_to_address" 
                         type="text" 
                         placeholder="提取收款地址规则"
                         class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
                       />
                       <input 
-                        v-model="config.logs_parser_rules.extract_amount" 
+                        v-model="config.parser_rules.extract_amount" 
                         type="text" 
                         placeholder="提取金额规则"
                         class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
                       />
                       <input 
-                        v-model="config.logs_parser_rules.amount_unit" 
+                        v-model="config.parser_rules.amount_unit" 
                         type="text" 
                         placeholder="金额单位"
                         class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
                       />
                       <input 
-                        v-model="config.logs_parser_rules.extract_owner_address" 
+                        v-model="config.parser_rules.extract_data" 
                         type="text" 
-                        placeholder="提取所有者地址规则"
-                        class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
-                      />
-                      <input 
-                        v-model="config.logs_parser_rules.extract_spender_address" 
-                        type="text" 
-                        placeholder="提取授权地址规则"
+                        placeholder="提取其他数据规则"
                         class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
                       />
                     </div>
                   </div>
-                </div>
 
-                <div class="flex items-center space-x-2">
-                  <label class="flex items-center">
-                    <input 
-                      v-model="config.is_active" 
-                      type="checkbox" 
-                      class="mr-2"
-                    />
-                    <span class="text-xs text-gray-700">启用</span>
-                  </label>
-                  <button 
-                    @click="removeParserConfig(index)"
-                    type="button"
-                    class="ml-auto text-red-600 hover:text-red-800 text-xs"
-                  >
-                    删除
-                  </button>
+                  <!-- 日志解析配置 -->
+                  <div class="mb-2 border-t pt-2">
+                    <label class="block text-xs font-medium text-gray-700 mb-1">日志解析配置</label>
+                    <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-2">
+                      <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">日志解析类型</label>
+                        <select 
+                          v-model="config.logs_parser_type" 
+                          class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
+                        >
+                          <option value="input_data">输入数据</option>
+                          <option value="event_log">事件日志</option>
+                          <option value="both">两者</option>
+                        </select>
+                      </div>
+                      <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">事件签名</label>
+                        <input 
+                          v-model="config.event_signature" 
+                          type="text" 
+                          placeholder="0x..."
+                          class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
+                        />
+                      </div>
+                      <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">事件名称</label>
+                        <input 
+                          v-model="config.event_name" 
+                          type="text" 
+                          placeholder="Transfer"
+                          class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
+                        />
+                      </div>
+                      <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">事件描述</label>
+                        <input 
+                          v-model="config.event_description" 
+                          type="text" 
+                          placeholder="转账事件"
+                          class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
+                        />
+                      </div>
+                      <div>
+                        <label class="block text-xs font-medium text-gray-500 mb-1">日志显示格式</label>
+                        <input 
+                          v-model="config.logs_display_format" 
+                          type="text" 
+                          placeholder="转账 {amount} {symbol} 从 {from} 到 {to}"
+                          class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
+                        />
+                      </div>
+                    </div>
+
+                    <!-- 日志参数配置 -->
+                    <div class="mb-2">
+                      <label class="block text-xs font-medium text-gray-500 mb-1">日志参数配置</label>
+                      <div class="space-y-2">
+                        <div 
+                          v-for="(logParam, logParamIndex) in config.logs_param_config" 
+                          :key="logParamIndex"
+                          class="grid grid-cols-1 md:grid-cols-6 gap-2 p-2 bg-blue-50 rounded"
+                        >
+                          <input 
+                            v-model="logParam.name" 
+                            type="text" 
+                            placeholder="参数名"
+                            class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
+                          />
+                          <select 
+                            v-model="logParam.type" 
+                            class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
+                          >
+                            <option value="address">地址</option>
+                            <option value="uint256">大整数</option>
+                            <option value="bytes">字节</option>
+                            <option value="string">字符串</option>
+                          </select>
+                          <input 
+                            v-model="logParam.topic_index" 
+                            type="number" 
+                            placeholder="Topic索引"
+                            class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
+                          />
+                          <input 
+                            v-model="logParam.data_index" 
+                            type="number" 
+                            placeholder="Data索引"
+                            class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
+                          />
+                          <input 
+                            v-model="logParam.description" 
+                            type="text" 
+                            placeholder="参数描述"
+                            class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
+                          />
+                          <button 
+                            @click="removeLogsParamConfig(index, logParamIndex)"
+                            type="button"
+                            class="text-red-600 hover:text-red-800 text-xs px-2 py-1"
+                            title="删除日志参数"
+                          >
+                            ×
+                          </button>
+                        </div>
+                        <button 
+                          @click="addLogsParamConfig(index)"
+                          type="button"
+                          class="text-xs text-blue-600 hover:text-blue-800"
+                        >
+                          + 添加日志参数
+                        </button>
+                      </div>
+                    </div>
+
+                    <!-- 日志解析规则 -->
+                    <div class="mb-2">
+                      <label class="block text-xs font-medium text-gray-500 mb-1">日志解析规则</label>
+                      <div class="grid grid-cols-1 md:grid-cols-2 gap-2">
+                        <input 
+                          v-model="config.logs_parser_rules.extract_from_address" 
+                          type="text" 
+                          placeholder="提取发送地址规则"
+                          class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
+                        />
+                        <input 
+                          v-model="config.logs_parser_rules.extract_to_address" 
+                          type="text" 
+                          placeholder="提取收款地址规则"
+                          class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
+                        />
+                        <input 
+                          v-model="config.logs_parser_rules.extract_amount" 
+                          type="text" 
+                          placeholder="提取金额规则"
+                          class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
+                        />
+                        <input 
+                          v-model="config.logs_parser_rules.amount_unit" 
+                          type="text" 
+                          placeholder="金额单位"
+                          class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
+                        />
+                        <input 
+                          v-model="config.logs_parser_rules.extract_owner_address" 
+                          type="text" 
+                          placeholder="提取所有者地址规则"
+                          class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
+                        />
+                        <input 
+                          v-model="config.logs_parser_rules.extract_spender_address" 
+                          type="text" 
+                          placeholder="提取授权地址规则"
+                          class="block w-full px-2 py-1 text-xs border border-gray-300 rounded"
+                        />
+                      </div>
+                    </div>
+                  </div>
+
+                  <div class="flex items-center space-x-2">
+                    <label class="flex items-center">
+                      <input 
+                        v-model="config.is_active" 
+                        type="checkbox" 
+                        class="mr-2"
+                      />
+                      <span class="text-xs text-gray-700">启用</span>
+                    </label>
+                    <button 
+                      @click="removeParserConfig(index)"
+                      type="button"
+                      class="ml-auto text-red-600 hover:text-red-800 text-xs"
+                    >
+                      删除
+                    </button>
+                  </div>
                 </div>
+                <button 
+                  @click="addParserConfig"
+                  type="button"
+                  class="w-full px-3 py-2 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  + 添加解析配置
+                </button>
               </div>
-              <button 
-                @click="addParserConfig"
-                type="button"
-                class="w-full px-3 py-2 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
-              >
-                + 添加解析配置
-              </button>
             </div>
-          </div>
-        </form>
+          </form>
 
-        <!-- 底部按钮 -->
-        <div class="flex justify-end space-x-3 pt-4 border-t">
-          <button 
-            type="button"
-            @click="closeCoinConfigModal"
-            class="px-4 py-2 text-xs font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded hover:bg-gray-200 transition-colors"
-          >
-            取消
-          </button>
-          <button 
-            @click="saveCoinConfig"
-            class="px-4 py-2 text-xs font-medium text-white bg-blue-600 border border-transparent rounded hover:bg-blue-700 transition-colors"
-          >
-            保存
-          </button>
+          <!-- 底部按钮 -->
+          <div class="flex justify-end space-x-3 pt-4 border-t">
+            <button 
+              type="button"
+              @click="closeCoinConfigModal"
+              class="px-4 py-2 text-xs font-medium text-gray-700 bg-gray-100 border border-gray-300 rounded hover:bg-gray-200 transition-colors"
+            >
+              取消
+            </button>
+            <button 
+              @click="saveCoinConfig"
+              class="px-4 py-2 text-xs font-medium text-white bg-blue-600 border border-transparent rounded hover:bg-blue-700 transition-colors"
+            >
+              保存
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </Teleport>
 
     <!-- 添加合约地址模态框 -->
-    <div v-if="showAddAddressModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
-      <div class="relative top-16 mx-auto p-5 border w-11/12 max-w-5xl shadow-xl rounded-xl bg-white">
-        <div class="flex justify-between items-center mb-4 pb-3 border-b">
-          <h3 class="text-lg font-semibold text-gray-900">添加新合约地址</h3>
-          <button 
-            @click="closeAddModal"
-            class="text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
-            </svg>
-          </button>
-        </div>
-        
-        <form @submit.prevent="saveAdd" class="max-h-[65vh] overflow-y-auto pr-2">
-          <!-- 基本信息 -->
-          <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">合约地址 *</label>
-              <input 
-                v-model="newAddress.hash" 
-                type="text" 
-                required
-                placeholder="0x..."
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">合约名称</label>
-              <input 
-                v-model="newAddress.name" 
-                type="text" 
-                placeholder="输入合约名称"
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">合约符号</label>
-              <input 
-                v-model="newAddress.symbol" 
-                type="text" 
-                placeholder="输入合约符号"
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">合约类型</label>
-              <select 
-                v-model="newAddress.type" 
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              >
-                <option value="erc20">ERC-20 代币</option>
-                <option value="erc721">ERC-721 NFT</option>
-                <option value="erc1155">ERC-1155 多代币</option>
-                <option value="defi">DeFi 协议</option>
-                <option value="dex">DEX 交易所</option>
-                <option value="lending">借贷协议</option>
-                <option value="other">其他合约</option>
-              </select>
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">精度</label>
-              <input 
-                v-model="newAddress.decimals" 
-                type="number" 
-                min="0" 
-                max="18"
-                placeholder="18"
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">状态</label>
-              <select 
-                v-model="newAddress.status" 
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              >
-                <option value="active">活跃</option>
-                <option value="inactive">非活跃</option>
-                <option value="paused">暂停</option>
-              </select>
-            </div>
+    <Teleport to="body">
+      <div v-if="showAddAddressModal" class="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50">
+        <div class="relative top-16 mx-auto p-5 border w-11/12 max-w-5xl shadow-xl rounded-xl bg-white">
+          <div class="flex justify-between items-center mb-4 pb-3 border-b">
+            <h3 class="text-lg font-semibold text-gray-900">添加新合约地址</h3>
+            <button 
+              @click="closeAddModal"
+              class="text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <svg class="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12"></path>
+              </svg>
+            </button>
           </div>
-
-          <!-- 合约详细信息 -->
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">接口 (Interfaces)</label>
-              <div class="space-y-2">
-                <div class="flex space-x-2">
-                  <input 
-                    v-model="newInterface" 
-                    type="text" 
-                    placeholder="输入接口名称"
-                    class="flex-1 px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    @keyup.enter="addNewInterface"
-                  />
-                  <button 
-                    @click="addNewInterface"
-                    type="button"
-                    class="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  >
-                    +
-                  </button>
-                </div>
-                <div class="flex flex-wrap gap-1">
-                  <span 
-                    v-for="(item, index) in newAddress.interfacesList" 
-                    :key="index"
-                    class="inline-flex items-center px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded"
-                  >
-                    {{ item }}
-                    <button 
-                      @click="removeNewInterface(index)"
-                      type="button"
-                      class="ml-1 text-blue-600 hover:text-blue-800"
-                    >
-                      ×
-                    </button>
-                  </span>
-                </div>
-              </div>
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">方法 (Methods)</label>
-              <div class="space-y-2">
-                <div class="flex space-x-2">
-                  <input 
-                    v-model="newMethod" 
-                    type="text" 
-                    placeholder="输入方法名称"
-                    class="flex-1 px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    @keyup.enter="addNewMethod"
-                  />
-                  <button 
-                    @click="addNewMethod"
-                    type="button"
-                    class="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  >
-                    +
-                  </button>
-                </div>
-                <div class="flex flex-wrap gap-1">
-                  <span 
-                    v-for="(item, index) in newAddress.methodsList" 
-                    :key="index"
-                    class="inline-flex items-center px-2 py-1 text-xs bg-green-100 text-green-800 rounded"
-                  >
-                    {{ item }}
-                    <button 
-                      @click="removeNewMethod(index)"
-                      type="button"
-                      class="ml-1 text-green-600 hover:text-green-800"
-                    >
-                      ×
-                    </button>
-                  </span>
-                </div>
-              </div>
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">事件 (Events)</label>
-              <div class="space-y-2">
-                <div class="flex space-x-2">
-                  <input 
-                    v-model="newEvent" 
-                    type="text" 
-                    placeholder="输入事件名称"
-                    class="flex-1 px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    @keyup.enter="addNewEvent"
-                  />
-                  <button 
-                    @click="addNewEvent"
-                    type="button"
-                    class="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  >
-                    +
-                  </button>
-                </div>
-                <div class="flex flex-wrap gap-1">
-                  <span 
-                    v-for="(item, index) in newAddress.eventsList" 
-                    :key="index"
-                    class="inline-flex items-center px-2 py-1 text-xs bg-purple-100 text-purple-800 rounded"
-                  >
-                    {{ item }}
-                    <button 
-                      @click="removeNewEvent(index)"
-                      type="button"
-                      class="ml-1 text-purple-600 hover:text-purple-800"
-                    >
-                      ×
-                    </button>
-                  </span>
-                </div>
-              </div>
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">元数据 (Metadata)</label>
-              <div class="space-y-2">
-                <div class="flex space-x-2">
-                  <input 
-                    v-model="newMetadataKey" 
-                    type="text" 
-                    placeholder="键名"
-                    class="flex-1 px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  />
-                  <input 
-                    v-model="newMetadataValue" 
-                    type="text" 
-                    placeholder="值"
-                    class="flex-1 px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-                    @keyup.enter="addNewMetadata"
-                  />
-                  <button 
-                    @click="addNewMetadata"
-                    type="button"
-                    class="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
-                  >
-                    +
-                  </button>
-                </div>
-                <div class="flex flex-wrap gap-1">
-                  <span 
-                    v-for="(key, index) in Object.keys(newAddress.metadataObj || {})" 
-                    :key="index"
-                    class="inline-flex items-center px-2 py-1 text-xs bg-yellow-100 text-yellow-800 rounded"
-                  >
-                    {{ key }}: {{ newAddress.metadataObj?.[key] }}
-                    <button 
-                      @click="removeNewMetadata(key)"
-                      type="button"
-                      class="ml-1 text-yellow-600 hover:text-yellow-800"
-                    >
-                      ×
-                    </button>
-                  </span>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- 其他信息 -->
-          <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">总供应量</label>
-              <input 
-                v-model="newAddress.totalSupply" 
-                type="text" 
-                placeholder="1000000000000000000000000000000"
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">是否ERC-20</label>
-              <select 
-                v-model="newAddress.isErc20" 
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              >
-                <option :value="true">是</option>
-                <option :value="false">否</option>
-              </select>
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">是否已验证</label>
-              <select 
-                v-model="newAddress.verified" 
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-blue-500"
-              >
-                <option :value="true">已验证</option>
-                <option :value="false">未验证</option>
-              </select>
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">创建区块</label>
-              <input 
-                v-model="newAddress.creationBlock" 
-                type="number" 
-                placeholder="12345678"
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-          </div>
-
-          <!-- 创建信息 -->
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">创建者地址</label>
-              <input 
-                v-model="newAddress.creator" 
-                type="text" 
-                placeholder="0x..."
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">创建交易哈希</label>
-              <input 
-                v-model="newAddress.creationTx" 
-                type="text" 
-                placeholder="0x..."
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              />
-            </div>
-          </div>
-
-          <!-- 合约Logo和描述 -->
-          <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">合约Logo</label>
-              <div class="flex items-center space-x-2">
-                <img 
-                  v-if="newAddress.contractLogo" 
-                  :src="newAddress.contractLogo" 
-                  alt="合约Logo" 
-                  class="w-10 h-10 rounded object-cover border"
-                />
+          
+          <form @submit.prevent="saveAdd" class="max-h-[65vh] overflow-y-auto pr-2">
+            <!-- 基本信息 -->
+            <div class="grid grid-cols-1 md:grid-cols-3 gap-3 mb-4">
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">合约地址 *</label>
                 <input 
-                  type="file" 
-                  @change="handleNewLogoUpload" 
-                  accept="image/*"
-                  class="block w-full text-xs text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                  v-model="newAddress.hash" 
+                  type="text" 
+                  required
+                  placeholder="0x..."
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">合约名称</label>
+                <input 
+                  v-model="newAddress.name" 
+                  type="text" 
+                  placeholder="输入合约名称"
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">合约符号</label>
+                <input 
+                  v-model="newAddress.symbol" 
+                  type="text" 
+                  placeholder="输入合约符号"
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">合约类型</label>
+                <select 
+                  v-model="newAddress.type" 
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="erc20">ERC-20 代币</option>
+                  <option value="erc721">ERC-721 NFT</option>
+                  <option value="erc1155">ERC-1155 多代币</option>
+                  <option value="defi">DeFi 协议</option>
+                  <option value="dex">DEX 交易所</option>
+                  <option value="lending">借贷协议</option>
+                  <option value="other">其他合约</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">精度</label>
+                <input 
+                  v-model="newAddress.decimals" 
+                  type="number" 
+                  min="0" 
+                  max="18"
+                  placeholder="18"
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">状态</label>
+                <select 
+                  v-model="newAddress.status" 
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option value="active">活跃</option>
+                  <option value="inactive">非活跃</option>
+                  <option value="paused">暂停</option>
+                </select>
+              </div>
+            </div>
+
+            <!-- 合约详细信息 -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">接口 (Interfaces)</label>
+                <div class="space-y-2">
+                  <div class="flex space-x-2">
+                    <input 
+                      v-model="newInterface" 
+                      type="text" 
+                      placeholder="输入接口名称"
+                      class="flex-1 px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      @keyup.enter="addNewInterface"
+                    />
+                    <button 
+                      @click="addNewInterface"
+                      type="button"
+                      class="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    >
+                      +
+                    </button>
+                  </div>
+                  <div class="flex flex-wrap gap-1">
+                    <span 
+                      v-for="(item, index) in newAddress.interfacesList" 
+                      :key="index"
+                      class="inline-flex items-center px-2 py-1 text-xs bg-blue-100 text-blue-800 rounded"
+                    >
+                      {{ item }}
+                      <button 
+                        @click="removeNewInterface(index)"
+                        type="button"
+                        class="ml-1 text-blue-600 hover:text-blue-800"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">方法 (Methods)</label>
+                <div class="space-y-2">
+                  <div class="flex space-x-2">
+                    <input 
+                      v-model="newMethod" 
+                      type="text" 
+                      placeholder="输入方法名称"
+                      class="flex-1 px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      @keyup.enter="addNewMethod"
+                    />
+                    <button 
+                      @click="addNewMethod"
+                      type="button"
+                      class="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    >
+                      +
+                    </button>
+                  </div>
+                  <div class="flex flex-wrap gap-1">
+                    <span 
+                      v-for="(item, index) in newAddress.methodsList" 
+                      :key="index"
+                      class="inline-flex items-center px-2 py-1 text-xs bg-green-100 text-green-800 rounded"
+                    >
+                      {{ item }}
+                      <button 
+                        @click="removeNewMethod(index)"
+                        type="button"
+                        class="ml-1 text-green-600 hover:text-green-800"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">事件 (Events)</label>
+                <div class="space-y-2">
+                  <div class="flex space-x-2">
+                    <input 
+                      v-model="newEvent" 
+                      type="text" 
+                      placeholder="输入事件名称"
+                      class="flex-1 px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      @keyup.enter="addNewEvent"
+                    />
+                    <button 
+                      @click="addNewEvent"
+                      type="button"
+                      class="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    >
+                      +
+                    </button>
+                  </div>
+                  <div class="flex flex-wrap gap-1">
+                    <span 
+                      v-for="(item, index) in newAddress.eventsList" 
+                      :key="index"
+                      class="inline-flex items-center px-2 py-1 text-xs bg-purple-100 text-purple-800 rounded"
+                    >
+                      {{ item }}
+                      <button 
+                        @click="removeNewEvent(index)"
+                        type="button"
+                        class="ml-1 text-purple-600 hover:text-purple-800"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  </div>
+                </div>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">元数据 (Metadata)</label>
+                <div class="space-y-2">
+                  <div class="flex space-x-2">
+                    <input 
+                      v-model="newMetadataKey" 
+                      type="text" 
+                      placeholder="键名"
+                      class="flex-1 px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    />
+                    <input 
+                      v-model="newMetadataValue" 
+                      type="text" 
+                      placeholder="值"
+                      class="flex-1 px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                      @keyup.enter="addNewMetadata"
+                    />
+                    <button 
+                      @click="addNewMetadata"
+                      type="button"
+                      class="px-3 py-1.5 text-xs bg-blue-600 text-white rounded hover:bg-blue-700 focus:outline-none focus:ring-1 focus:ring-blue-500"
+                    >
+                      +
+                    </button>
+                  </div>
+                  <div class="flex flex-wrap gap-1">
+                    <span 
+                      v-for="(key, index) in Object.keys(newAddress.metadataObj || {})" 
+                      :key="index"
+                      class="inline-flex items-center px-2 py-1 text-xs bg-yellow-100 text-yellow-800 rounded"
+                    >
+                      {{ key }}: {{ newAddress.metadataObj?.[key] }}
+                      <button 
+                        @click="removeNewMetadata(key)"
+                        type="button"
+                        class="ml-1 text-yellow-600 hover:text-yellow-800"
+                      >
+                        ×
+                      </button>
+                    </span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 其他信息 -->
+            <div class="grid grid-cols-1 md:grid-cols-4 gap-3 mb-4">
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">总供应量</label>
+                <input 
+                  v-model="newAddress.totalSupply" 
+                  type="text" 
+                  placeholder="1000000000000000000000000000000"
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">是否ERC-20</label>
+                <select 
+                  v-model="newAddress.isErc20" 
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                >
+                  <option :value="true">是</option>
+                  <option :value="false">否</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">是否已验证</label>
+                <select 
+                  v-model="newAddress.verified" 
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-blue-500"
+                >
+                  <option :value="true">已验证</option>
+                  <option :value="false">未验证</option>
+                </select>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">创建区块</label>
+                <input 
+                  v-model="newAddress.creationBlock" 
+                  type="number" 
+                  placeholder="12345678"
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
                 />
               </div>
             </div>
-            <div>
-              <label class="block text-xs font-medium text-gray-700 mb-1">描述</label>
-              <textarea 
-                v-model="newAddress.description" 
-                rows="2"
-                placeholder="输入合约描述"
-                class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
-              ></textarea>
-            </div>
-          </div>
-        </form>
 
-        <!-- 底部按钮 -->
-        <div class="flex justify-end space-x-3 pt-4 border-t">
-          <button 
-            type="button"
-            @click="closeAddModal"
-            class="px-4 py-2 text-xs font-medium text-white bg-gray-100 border border-gray-300 rounded hover:bg-gray-200 transition-colors"
-          >
-            取消
-          </button>
-          <button 
-            @click="saveAdd"
-            class="px-4 py-2 text-xs font-medium text-white bg-blue-600 border border-transparent rounded hover:bg-blue-700 transition-colors"
-          >
-            添加
-          </button>
+            <!-- 创建信息 -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">创建者地址</label>
+                <input 
+                  v-model="newAddress.creator" 
+                  type="text" 
+                  placeholder="0x..."
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">创建交易哈希</label>
+                <input 
+                  v-model="newAddress.creationTx" 
+                  type="text" 
+                  placeholder="0x..."
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                />
+              </div>
+            </div>
+
+            <!-- 合约Logo和描述 -->
+            <div class="grid grid-cols-1 md:grid-cols-2 gap-3 mb-4">
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">合约Logo</label>
+                <div class="flex items-center space-x-2">
+                  <img 
+                    v-if="newAddress.contractLogo" 
+                    :src="newAddress.contractLogo" 
+                    alt="合约Logo" 
+                    class="w-10 h-10 rounded object-cover border"
+                  />
+                  <input 
+                    type="file" 
+                    @change="handleNewLogoUpload" 
+                    accept="image/*"
+                    class="block w-full text-xs text-gray-500 file:mr-2 file:py-1 file:px-2 file:rounded file:border-0 file:text-xs file:font-medium file:bg-blue-50 file:text-blue-700 hover:file:bg-blue-100"
+                  />
+                </div>
+              </div>
+              <div>
+                <label class="block text-xs font-medium text-gray-700 mb-1">描述</label>
+                <textarea 
+                  v-model="newAddress.description" 
+                  rows="2"
+                  placeholder="输入合约描述"
+                  class="block w-full px-2 py-1.5 text-xs border border-gray-300 rounded focus:outline-none focus:ring-1 focus:ring-blue-500"
+                ></textarea>
+              </div>
+            </div>
+          </form>
+
+          <!-- 底部按钮 -->
+          <div class="flex justify-end space-x-3 pt-4 border-t">
+            <button 
+              type="button"
+              @click="closeAddModal"
+              class="px-4 py-2 text-xs font-medium text-white bg-gray-100 border border-gray-300 rounded hover:bg-gray-200 transition-colors"
+            >
+              取消
+            </button>
+            <button 
+              @click="saveAdd"
+              class="px-4 py-2 text-xs font-medium text-white bg-blue-600 border border-transparent rounded hover:bg-blue-700 transition-colors"
+            >
+              添加
+            </button>
+          </div>
         </div>
       </div>
-    </div>
+    </Teleport>
 
     <!-- 地址列表 -->
     <div class="card">

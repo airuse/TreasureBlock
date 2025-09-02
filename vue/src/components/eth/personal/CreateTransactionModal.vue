@@ -1,252 +1,254 @@
 <template>
-  <div v-if="show" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-    <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
-      <div class="px-6 py-4 border-b border-gray-200">
-        <div class="flex items-center justify-between">
-          <h3 class="text-lg font-medium text-gray-900">{{ isEditMode ? '编辑交易' : '新建交易' }}</h3>
-          <button
-            @click="$emit('close')"
-            class="text-gray-400 hover:text-gray-600 transition-colors"
-          >
-            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
-            </svg>
-          </button>
+  <Teleport to="body">
+    <div v-if="show" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+        <div class="px-6 py-4 border-b border-gray-200">
+          <div class="flex items-center justify-between">
+            <h3 class="text-lg font-medium text-gray-900">{{ isEditMode ? '编辑交易' : '新建交易' }}</h3>
+            <button
+              @click="$emit('close')"
+              class="text-gray-400 hover:text-gray-600 transition-colors"
+            >
+              <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" />
+              </svg>
+            </button>
+          </div>
         </div>
+        
+        <form @submit.prevent="handleSubmit" class="px-6 py-4">
+          <div class="space-y-6">
+            <!-- 链类型 - 固定为ETH -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">链类型</label>
+              <div class="px-3 py-2 bg-gray-100 border border-gray-300 rounded-md text-gray-700">
+                以太坊 (ETH)
+              </div>
+            </div>
+            
+            <!-- 交易类型选择 -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">交易类型</label>
+              <div class="flex space-x-4">
+                <label class="flex items-center">
+                  <input
+                    type="radio"
+                    v-model="transactionType"
+                    value="eth"
+                    class="mr-2 text-blue-600"
+                    @change="handleTransactionTypeChange"
+                  />
+                  <span class="text-sm text-gray-700">ETH转账</span>
+                </label>
+                <label class="flex items-center">
+                  <input
+                    type="radio"
+                    v-model="transactionType"
+                    value="erc20"
+                    class="mr-2 text-blue-600"
+                    @change="handleTransactionTypeChange"
+                  />
+                  <span class="text-sm text-gray-700">ERC-20代币</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- 合约操作类型选择 (仅ERC-20时显示) -->
+            <div v-if="transactionType === 'erc20'">
+              <label class="block text-sm font-medium text-gray-700 mb-2">合约操作类型</label>
+              <div class="flex space-x-4">
+                <label class="flex items-center">
+                  <input
+                    type="radio"
+                    v-model="contractOperationType"
+                    value="transfer"
+                    class="mr-2 text-blue-600"
+                    @change="handleContractOperationTypeChange"
+                  />
+                  <span class="text-sm text-gray-700">转账</span>
+                </label>
+                <label class="flex items-center">
+                  <input
+                    type="radio"
+                    v-model="contractOperationType"
+                    value="approve"
+                    class="mr-2 text-blue-600"
+                    @change="handleContractOperationTypeChange"
+                  />
+                  <span class="text-sm text-gray-700">授权</span>
+                </label>
+                <label class="flex items-center">
+                  <input
+                    type="radio"
+                    v-model="contractOperationType"
+                    value="transferFrom"
+                    class="mr-2 text-blue-600"
+                    @change="handleContractOperationTypeChange"
+                  />
+                  <span class="text-sm text-gray-700">授权转账</span>
+                </label>
+                <label class="flex items-center">
+                  <input
+                    type="radio"
+                    v-model="contractOperationType"
+                    value="balanceOf"
+                    class="mr-2 text-blue-600"
+                    @change="handleContractOperationTypeChange"
+                  />
+                  <span class="text-sm text-gray-700">查询余额</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- 代币选择 (仅ERC-20时显示) -->
+            <div v-if="transactionType === 'erc20'">
+              <label class="block text-sm font-medium text-gray-700 mb-2">选择代币</label>
+              <div class="relative">
+                <input
+                  v-model="selectedTokenSearch"
+                  type="text"
+                  @focus="showTokenDropdown = true"
+                  @blur="handleTokenDropdownBlur"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="搜索代币名称或合约地址"
+                  required
+                />
+                <!-- 代币下拉选择 -->
+                <div v-if="showTokenDropdown && filteredTokens.length > 0" class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                  <div
+                    v-for="token in filteredTokens"
+                    :key="token.contract_address"
+                    @click="selectToken(token)"
+                    class="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                  >
+                    <div class="flex items-center justify-between">
+                      <div>
+                        <div class="font-medium text-gray-900">{{ token.symbol }} - {{ token.name }}</div>
+                        <div class="text-sm text-gray-500 font-mono">{{ token.contract_address }}</div>
+                      </div>
+                      <div class="text-right">
+                        <div class="text-sm text-gray-600">精度: {{ token.decimals }}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+
+
+            <!-- 发送地址 - 智能下拉选择 -->
+            <div v-if="shouldShowFromAddress">
+              <label class="block text-sm font-medium text-gray-700 mb-2">
+                {{ getFromAddressLabel() }}
+              </label>
+              <div class="relative">
+                <input
+                  v-model="form.from_address"
+                  type="text"
+                  @focus="showFromAddressDropdown = true"
+                  @blur="handleFromAddressBlur"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  :placeholder="getFromAddressPlaceholder()"
+                  required
+                />
+                <!-- 下拉选择 -->
+                <div v-if="showFromAddressDropdown && filteredFromAddresses.length > 0" class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                  <div
+                    v-for="address in filteredFromAddresses"
+                    :key="address.id"
+                    @click="selectFromAddress(address)"
+                    class="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                  >
+                    <div class="flex items-center justify-between">
+                      <div>
+                        <div class="font-medium text-gray-900">{{ address.label }}</div>
+                        <div class="text-sm text-gray-500 font-mono">{{ address.address }}</div>
+                      </div>
+                      <div class="text-right">
+                        <div class="text-sm text-gray-600">{{ address.type }}</div>
+                        <div class="text-xs text-gray-500">{{ formatBalance(address.balance) }} {{ form.symbol }}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 接收地址 - 智能下拉选择 -->
+            <div v-if="shouldShowToAddress">
+              <label class="block text-sm font-medium text-gray-700 mb-2">
+                {{ getToAddressLabel() }}
+              </label>
+              <div class="relative">
+                <input
+                  v-model="form.to_address"
+                  type="text"
+                  @focus="showToAddressDropdown = true"
+                  @blur="handleToAddressBlur"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  :placeholder="getToAddressPlaceholder()"
+                  required
+                />
+                <!-- 下拉选择 -->
+                <div v-if="showToAddressDropdown && filteredToAddresses.length > 0" class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                  <div
+                    v-for="address in filteredToAddresses"
+                    :key="address.id"
+                    @click="selectToAddress(address)"
+                    class="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                  >
+                    <div class="flex items-center justify-between">
+                      <div>
+                        <div class="font-medium text-gray-900">{{ address.label }}</div>
+                        <div class="text-sm text-gray-500 font-mono">{{ address.address }}</div>
+                      </div>
+                      <div class="text-right">
+                        <div class="text-sm text-gray-600">{{ address.type }}</div>
+                        <div class="text-xs text-gray-500">{{ formatBalance(address.balance) }} {{ form.symbol }}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- 交易金额 -->
+            <div v-if="shouldShowAmount">
+              <label class="block text-sm font-medium text-gray-700 mb-2">
+                {{ getAmountLabel() }}
+              </label>
+              <input
+                v-model="form.amount"
+                type="text"
+                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                :placeholder="getAmountPlaceholder()"
+                required
+              />
+              <!-- 显示单位 -->
+              <div class="mt-1 text-sm text-gray-500">
+                <span v-if="transactionType === 'eth'">{{ formatToWei(form.amount) }} wei</span>
+                <span v-else-if="selectedToken">{{ formatToTokenUnits(form.amount, selectedToken.decimals) }} {{ selectedToken.symbol }}</span>
+                <span v-else>0 {{ form.symbol }}</span>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- 操作按钮 -->
+          <div class="flex justify-end mt-6 pt-4 border-t border-gray-200">
+            <button
+              type="submit"
+              :disabled="isSubmitting"
+              class="px-6 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+            >
+              {{ isSubmitting ? (isEditMode ? '更新中...' : '创建中...') : (isEditMode ? '更新交易' : '创建交易') }}
+            </button>
+          </div>
+        </form>
       </div>
-      
-      <form @submit.prevent="handleSubmit" class="px-6 py-4">
-        <div class="space-y-6">
-          <!-- 链类型 - 固定为ETH -->
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-2">链类型</label>
-            <div class="px-3 py-2 bg-gray-100 border border-gray-300 rounded-md text-gray-700">
-              以太坊 (ETH)
-            </div>
-          </div>
-
-          <!-- 交易类型选择 -->
-          <div>
-            <label class="block text-sm font-medium text-gray-700 mb-2">交易类型</label>
-            <div class="flex space-x-4">
-              <label class="flex items-center">
-                <input
-                  type="radio"
-                  v-model="transactionType"
-                  value="eth"
-                  class="mr-2 text-blue-600"
-                  @change="handleTransactionTypeChange"
-                />
-                <span class="text-sm text-gray-700">ETH转账</span>
-              </label>
-              <label class="flex items-center">
-                <input
-                  type="radio"
-                  v-model="transactionType"
-                  value="erc20"
-                  class="mr-2 text-blue-600"
-                  @change="handleTransactionTypeChange"
-                />
-                <span class="text-sm text-gray-700">ERC-20代币</span>
-              </label>
-            </div>
-          </div>
-
-          <!-- 合约操作类型选择 (仅ERC-20时显示) -->
-          <div v-if="transactionType === 'erc20'">
-            <label class="block text-sm font-medium text-gray-700 mb-2">合约操作类型</label>
-            <div class="flex space-x-4">
-              <label class="flex items-center">
-                <input
-                  type="radio"
-                  v-model="contractOperationType"
-                  value="transfer"
-                  class="mr-2 text-blue-600"
-                  @change="handleContractOperationTypeChange"
-                />
-                <span class="text-sm text-gray-700">转账</span>
-              </label>
-              <label class="flex items-center">
-                <input
-                  type="radio"
-                  v-model="contractOperationType"
-                  value="approve"
-                  class="mr-2 text-blue-600"
-                  @change="handleContractOperationTypeChange"
-                />
-                <span class="text-sm text-gray-700">授权</span>
-              </label>
-              <label class="flex items-center">
-                <input
-                  type="radio"
-                  v-model="contractOperationType"
-                  value="transferFrom"
-                  class="mr-2 text-blue-600"
-                  @change="handleContractOperationTypeChange"
-                />
-                <span class="text-sm text-gray-700">授权转账</span>
-              </label>
-              <label class="flex items-center">
-                <input
-                  type="radio"
-                  v-model="contractOperationType"
-                  value="balanceOf"
-                  class="mr-2 text-blue-600"
-                  @change="handleContractOperationTypeChange"
-                />
-                <span class="text-sm text-gray-700">查询余额</span>
-              </label>
-            </div>
-          </div>
-
-          <!-- 代币选择 (仅ERC-20时显示) -->
-          <div v-if="transactionType === 'erc20'">
-            <label class="block text-sm font-medium text-gray-700 mb-2">选择代币</label>
-            <div class="relative">
-              <input
-                v-model="selectedTokenSearch"
-                type="text"
-                @focus="showTokenDropdown = true"
-                @blur="handleTokenDropdownBlur"
-                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                placeholder="搜索代币名称或合约地址"
-                required
-              />
-              <!-- 代币下拉选择 -->
-              <div v-if="showTokenDropdown && filteredTokens.length > 0" class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
-                <div
-                  v-for="token in filteredTokens"
-                  :key="token.contract_address"
-                  @click="selectToken(token)"
-                  class="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
-                >
-                  <div class="flex items-center justify-between">
-                    <div>
-                      <div class="font-medium text-gray-900">{{ token.symbol }} - {{ token.name }}</div>
-                      <div class="text-sm text-gray-500 font-mono">{{ token.contract_address }}</div>
-                    </div>
-                    <div class="text-right">
-                      <div class="text-sm text-gray-600">精度: {{ token.decimals }}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-
-
-          <!-- 发送地址 - 智能下拉选择 -->
-          <div v-if="shouldShowFromAddress">
-            <label class="block text-sm font-medium text-gray-700 mb-2">
-              {{ getFromAddressLabel() }}
-            </label>
-            <div class="relative">
-              <input
-                v-model="form.from_address"
-                type="text"
-                @focus="showFromAddressDropdown = true"
-                @blur="handleFromAddressBlur"
-                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                :placeholder="getFromAddressPlaceholder()"
-                required
-              />
-              <!-- 下拉选择 -->
-              <div v-if="showFromAddressDropdown && filteredFromAddresses.length > 0" class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
-                <div
-                  v-for="address in filteredFromAddresses"
-                  :key="address.id"
-                  @click="selectFromAddress(address)"
-                  class="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
-                >
-                  <div class="flex items-center justify-between">
-                    <div>
-                      <div class="font-medium text-gray-900">{{ address.label }}</div>
-                      <div class="text-sm text-gray-500 font-mono">{{ address.address }}</div>
-                    </div>
-                    <div class="text-right">
-                      <div class="text-sm text-gray-600">{{ address.type }}</div>
-                      <div class="text-xs text-gray-500">{{ formatBalance(address.balance) }} {{ form.symbol }}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- 接收地址 - 智能下拉选择 -->
-          <div v-if="shouldShowToAddress">
-            <label class="block text-sm font-medium text-gray-700 mb-2">
-              {{ getToAddressLabel() }}
-            </label>
-            <div class="relative">
-              <input
-                v-model="form.to_address"
-                type="text"
-                @focus="showToAddressDropdown = true"
-                @blur="handleToAddressBlur"
-                class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                :placeholder="getToAddressPlaceholder()"
-                required
-              />
-              <!-- 下拉选择 -->
-              <div v-if="showToAddressDropdown && filteredToAddresses.length > 0" class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
-                <div
-                  v-for="address in filteredToAddresses"
-                  :key="address.id"
-                  @click="selectToAddress(address)"
-                  class="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
-                >
-                  <div class="flex items-center justify-between">
-                    <div>
-                      <div class="font-medium text-gray-900">{{ address.label }}</div>
-                      <div class="text-sm text-gray-500 font-mono">{{ address.address }}</div>
-                    </div>
-                    <div class="text-right">
-                      <div class="text-sm text-gray-600">{{ address.type }}</div>
-                      <div class="text-xs text-gray-500">{{ formatBalance(address.balance) }} {{ form.symbol }}</div>
-                    </div>
-                  </div>
-                </div>
-              </div>
-            </div>
-          </div>
-
-          <!-- 交易金额 -->
-          <div v-if="shouldShowAmount">
-            <label class="block text-sm font-medium text-gray-700 mb-2">
-              {{ getAmountLabel() }}
-            </label>
-            <input
-              v-model="form.amount"
-              type="text"
-              class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-              :placeholder="getAmountPlaceholder()"
-              required
-            />
-            <!-- 显示单位 -->
-            <div class="mt-1 text-sm text-gray-500">
-              <span v-if="transactionType === 'eth'">{{ formatToWei(form.amount) }} wei</span>
-              <span v-else-if="selectedToken">{{ formatToTokenUnits(form.amount, selectedToken.decimals) }} {{ selectedToken.symbol }}</span>
-              <span v-else>0 {{ form.symbol }}</span>
-            </div>
-          </div>
-
-        </div>
-
-        <!-- 操作按钮 -->
-        <div class="flex justify-end mt-6 pt-4 border-t border-gray-200">
-          <button
-            type="submit"
-            :disabled="isSubmitting"
-            class="px-6 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-          >
-            {{ isSubmitting ? (isEditMode ? '更新中...' : '创建中...') : (isEditMode ? '更新交易' : '创建交易') }}
-          </button>
-        </div>
-      </form>
     </div>
-  </div>
+  </Teleport>
 </template>
 
 <script setup lang="ts">
