@@ -40,130 +40,20 @@
             </div>
           </div>
 
-          <!-- 手续费设置 -->
-          <div class="mb-6">
-            <h4 class="text-sm font-medium text-gray-700 mb-3">手续费设置 (Type2)</h4>
-            
-            <!-- 手续费模式选择 -->
-            <div class="mb-4">
-              <div class="flex space-x-4">
-                <label class="flex items-center">
-                  <input
-                    type="radio"
-                    v-model="feeMode"
-                    value="auto"
-                    class="mr-2 text-blue-600"
-                  />
-                  <span class="text-sm text-gray-700">自动模式</span>
-                </label>
-                <label class="flex items-center">
-                  <input
-                    type="radio"
-                    v-model="feeMode"
-                    value="manual"
-                    class="mr-2 text-blue-600"
-                  />
-                  <span class="text-sm text-gray-700">手动模式</span>
-                </label>
+          <!-- 费率信息显示 -->
+          <div class="mb-6 p-4 bg-gray-50 rounded-lg">
+            <h4 class="text-sm font-medium text-gray-700 mb-3">交易费率信息</h4>
+            <div class="text-sm text-gray-600">
+              <div class="flex justify-between">
+                <span>矿工费:</span>
+                <span>{{ transaction.max_priority_fee_per_gas || '2' }} Gwei</span>
               </div>
-            </div>
-
-            <!-- 自动模式 -->
-            <div v-if="feeMode === 'auto'" class="space-y-3">
-              <div class="grid grid-cols-3 gap-3">
-                <label class="flex items-center p-3 border border-gray-200 rounded-lg cursor-pointer hover:border-blue-300">
-                  <input
-                    type="radio"
-                    v-model="autoFeeSpeed"
-                    value="slow"
-                    class="mr-2 text-blue-600"
-                  />
-                  <div>
-                    <div class="font-medium text-gray-900">慢速</div>
-                    <div class="text-xs text-gray-500">{{ autoFeeRates.slow }} Gwei</div>
-                  </div>
-                </label>
-                
-                <label class="flex items-center p-3 border border-gray-200 rounded-lg cursor-pointer hover:border-blue-300">
-                  <input
-                    type="radio"
-                    v-model="autoFeeSpeed"
-                    value="normal"
-                    class="mr-2 text-blue-600"
-                  />
-                  <div>
-                    <div class="font-medium text-gray-900">普通</div>
-                    <div class="text-xs text-gray-500">{{ autoFeeRates.normal }} Gwei</div>
-                  </div>
-                </label>
-                
-                <label class="flex items-center p-3 border border-gray-200 rounded-lg cursor-pointer hover:border-blue-300">
-                  <input
-                    type="radio"
-                    v-model="autoFeeSpeed"
-                    value="fast"
-                    class="mr-2 text-blue-600"
-                  />
-                  <div>
-                    <div class="font-medium text-gray-900">快速</div>
-                    <div class="text-xs text-gray-500">{{ autoFeeRates.fast }} Gwei</div>
-                  </div>
-                </label>
+              <div class="flex justify-between">
+                <span>最大手续费:</span>
+                <span>{{ transaction.max_fee_per_gas || '30' }} Gwei</span>
               </div>
-              
-              <!-- 自动模式费用预览 -->
-              <div class="p-3 bg-blue-50 border border-blue-200 rounded-md">
-                <div class="text-sm text-blue-800">
-                  <div class="flex justify-between">
-                    <span>矿工费:</span>
-                    <span>{{ calculateAutoMinerFee }} ETH</span>
-                  </div>
-                  <div class="flex justify-between">
-                    <span>最大手续费:</span>
-                    <span>{{ calculateAutoMaxFee }} ETH</span>
-                  </div>
-                </div>
-              </div>
-            </div>
-
-            <!-- 手动模式 -->
-            <div v-if="feeMode === 'manual'" class="space-y-4">
-              <div class="grid grid-cols-2 gap-4">
-                <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-1">矿工费 (Gwei)</label>
-                  <input
-                    v-model="manualFee.maxPriorityFeePerGas"
-                    type="number"
-                    step="0.1"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="1.5"
-                  />
-                </div>
-                
-                <div>
-                  <label class="block text-sm font-medium text-gray-700 mb-1">最大手续费 (Gwei)</label>
-                  <input
-                    v-model="manualFee.maxFeePerGas"
-                    type="number"
-                    step="0.1"
-                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                    placeholder="20"
-                  />
-                </div>
-              </div>
-              
-              <!-- 手动模式费用预览 -->
-              <div class="p-3 bg-green-50 border border-green-200 rounded-md">
-                <div class="text-sm text-green-800">
-                  <div class="flex justify-between">
-                    <span>矿工费:</span>
-                    <span>{{ calculateManualMinerFee }} ETH</span>
-                  </div>
-                  <div class="flex justify-between">
-                    <span>最大手续费:</span>
-                    <span>{{ calculateManualMaxFee }} ETH</span>
-                  </div>
-                </div>
+              <div class="mt-2 text-xs text-gray-500">
+                费率已在导出交易时设置，无法修改
               </div>
             </div>
           </div>
@@ -205,7 +95,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, watch } from 'vue'
+import { ref } from 'vue'
 import { sendTransaction } from '@/api/user-transactions'
 import type { UserTransaction } from '@/types'
 
@@ -222,83 +112,15 @@ interface Emits {
 const props = defineProps<Props>()
 const emit = defineEmits<Emits>()
 
-// 手续费模式
-const feeMode = ref<'auto' | 'manual'>('auto')
-const autoFeeSpeed = ref<'slow' | 'normal' | 'fast'>('normal')
-
-// 自动模式费率（Gwei）
-const autoFeeRates = {
-  slow: 1.5,
-  normal: 2.0,
-  fast: 2.5
-}
-
-// 手动模式费率
-const manualFee = ref({
-  maxPriorityFeePerGas: '1.5', // 矿工费
-  maxFeePerGas: '20' // 最大手续费
-})
-
 // 发送状态
 const isSending = ref(false)
-
-// 计算属性
-const calculateAutoMinerFee = computed(() => {
-  const gasPrice = autoFeeRates[autoFeeSpeed.value]
-  const gasLimit = props.transaction.gas_limit || 21000
-  const fee = (gasPrice * gasLimit) / 1e9
-  return fee.toFixed(6)
-})
-
-const calculateAutoMaxFee = computed(() => {
-  const gasPrice = autoFeeRates[autoFeeSpeed.value] * 1.1 // 增加10%作为最大手续费
-  const gasLimit = props.transaction.gas_limit || 21000
-  const fee = (gasPrice * gasLimit) / 1e9
-  return fee.toFixed(6)
-})
-
-const calculateManualMinerFee = computed(() => {
-  const maxPriorityFee = parseFloat(manualFee.value.maxPriorityFeePerGas) || 0
-  const gasLimit = props.transaction.gas_limit || 21000
-  const fee = (maxPriorityFee * gasLimit) / 1e9
-  return fee.toFixed(6)
-})
-
-const calculateManualMaxFee = computed(() => {
-  const maxFee = parseFloat(manualFee.value.maxFeePerGas) || 0
-  const gasLimit = props.transaction.gas_limit || 21000
-  const fee = (maxFee * gasLimit) / 1e9
-  return fee.toFixed(6)
-})
-
-// 监听手续费模式变化
-watch(feeMode, (newMode) => {
-  if (newMode === 'auto') {
-    autoFeeSpeed.value = 'normal'
-  }
-})
 
 // 发送交易
 const handleSendTransaction = async () => {
   try {
     isSending.value = true
     
-    // 准备手续费数据
-    let feeData = {}
-    if (feeMode.value === 'auto') {
-      const gasPrice = autoFeeRates[autoFeeSpeed.value]
-      feeData = {
-        maxPriorityFeePerGas: gasPrice.toString(),
-        maxFeePerGas: (gasPrice * 1.1).toString()
-      }
-    } else {
-      feeData = {
-        maxPriorityFeePerGas: manualFee.value.maxPriorityFeePerGas,
-        maxFeePerGas: manualFee.value.maxFeePerGas
-      }
-    }
-    
-    // 调用发送交易API
+    // 调用发送交易API（费率已在导出时设置）
     const response = await sendTransaction(props.transaction.id)
     
     if (response.success) {

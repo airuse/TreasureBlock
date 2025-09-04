@@ -102,9 +102,13 @@ func (r *userTransactionRepository) GetStatsByUserID(ctx context.Context, userID
 
 // GetByStatus 根据状态获取用户交易
 func (r *userTransactionRepository) GetByStatus(ctx context.Context, userID uint64, status string) ([]*models.UserTransaction, error) {
-	var transactions []*models.UserTransaction
-	err := r.db.WithContext(ctx).Where("user_id = ? AND status = ?", userID, status).Find(&transactions).Error
-	return transactions, err
+	var txs []*models.UserTransaction
+	q := r.db.WithContext(ctx).Model(&models.UserTransaction{}).Where("status = ?", status)
+	if userID != 0 {
+		q = q.Where("user_id = ?", userID)
+	}
+	err := q.Find(&txs).Error
+	return txs, err
 }
 
 // GetByChain 根据链类型获取用户交易

@@ -12,6 +12,10 @@ export interface UserTransaction {
   gas_price?: string
   nonce?: number
   status: string
+  
+  // EIP-1559费率字段
+  max_priority_fee_per_gas?: string
+  max_fee_per_gas?: string
   tx_hash?: string
   block_height?: number
   confirmations?: number
@@ -91,6 +95,10 @@ export interface ExportTransactionResponse {
   gas_price?: string
   nonce?: number
   
+  // EIP-1559费率字段
+  max_priority_fee_per_gas?: string
+  max_fee_per_gas?: string
+  
   // QR码数据
   chain_id?: string
   tx_data?: string
@@ -116,7 +124,6 @@ export interface UserTransactionStatsResponse {
   total_transactions: number
   draft_count: number
   unsigned_count: number
-  unsent_count: number
   in_progress_count: number
   packed_count: number
   confirmed_count: number
@@ -124,13 +131,12 @@ export interface UserTransactionStatsResponse {
 }
 
 // 用户交易状态类型
-export type UserTransactionStatus = 'draft' | 'unsigned' | 'unsent' | 'in_progress' | 'packed' | 'confirmed' | 'failed'
+export type UserTransactionStatus = 'draft' | 'unsigned' | 'in_progress' | 'packed' | 'confirmed' | 'failed'
 
 // 用户交易状态文本映射
 export const USER_TRANSACTION_STATUS_TEXT: Record<UserTransactionStatus, string> = {
   draft: '草稿',
   unsigned: '未签名',
-  unsent: '未发送',
   in_progress: '在途',
   packed: '已打包',
   confirmed: '已确认',
@@ -141,7 +147,6 @@ export const USER_TRANSACTION_STATUS_TEXT: Record<UserTransactionStatus, string>
 export const USER_TRANSACTION_STATUS_CLASS: Record<UserTransactionStatus, string> = {
   draft: 'bg-gray-100 text-gray-800',
   unsigned: 'bg-yellow-100 text-yellow-800',
-  unsent: 'bg-blue-100 text-blue-800',
   in_progress: 'bg-orange-100 text-orange-800',
   packed: 'bg-purple-100 text-purple-800',
   confirmed: 'bg-green-100 text-green-800',

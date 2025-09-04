@@ -305,12 +305,32 @@ const form = ref<CreateUserTransactionRequest>({
 const initEditForm = () => {
   if (props.isEditMode && props.transaction) {
     const tx = props.transaction
+    
+    // 将整数金额转换为显示格式
+    let displayAmount = ''
+    if (tx.amount) {
+      if (tx.transaction_type === 'token' && tx.token_decimals !== undefined) {
+        // 代币：从最小单位转换为显示单位
+        const intAmount = BigInt(tx.amount)
+        const factor = BigInt(Math.pow(10, tx.token_decimals).toString())
+        displayAmount = (Number(intAmount) / Number(factor)).toString()
+      } else if (tx.symbol === 'ETH') {
+        // ETH：从wei转换为ETH
+        const intAmount = BigInt(tx.amount)
+        const factor = BigInt('1000000000000000000') // 10^18
+        displayAmount = (Number(intAmount) / Number(factor)).toString()
+      } else {
+        // 其他情况直接使用原始值
+        displayAmount = tx.amount
+      }
+    }
+    
     form.value = {
       chain: tx.chain || 'eth',
       symbol: tx.symbol || 'ETH',
       from_address: tx.from_address || '',
       to_address: tx.to_address || '',
-      amount: tx.amount || '',
+      amount: displayAmount,
       fee: tx.fee || '0',
       gas_limit: tx.gas_limit,
       gas_price: tx.gas_price,
@@ -663,24 +683,24 @@ const formatBalance = (balance: string | undefined) => {
   return num.toFixed(6)
 }
 
-// 转换为wei单位
+// 转换为wei单位 - 处理整数金额
 const formatToWei = (amount: string) => {
   if (!amount) return '0'
   const num = parseFloat(amount)
   if (isNaN(num)) return '0'
-  // 1 ETH = 10^18 wei
-  const wei = num * Math.pow(10, 18)
-  return wei.toLocaleString('en-US', { maximumFractionDigits: 0 })
+  // 1 ETH = 10^18 wei，返回整数格式
+  const wei = Math.floor(num * Math.pow(10, 18))
+  return wei.toString()
 }
 
-// 转换为代币最小单位
+// 转换为代币最小单位 - 处理整数金额
 const formatToTokenUnits = (amount: string, decimals: number) => {
   if (!amount) return '0'
   const num = parseFloat(amount)
   if (isNaN(num)) return '0'
-  // 转换为代币的最小单位
-  const units = num * Math.pow(10, decimals)
-  return units.toLocaleString('en-US', { maximumFractionDigits: 0 })
+  // 转换为代币的最小单位，返回整数格式
+  const units = Math.floor(num * Math.pow(10, decimals))
+  return units.toString()
 }
 
 // 提交表单
@@ -725,7 +745,11 @@ const handleSubmit = async () => {
       transaction_type: transactionType.value === 'eth' ? 'coin' : 'token',
       contract_operation_type: contractOperationType.value,
       // 如果是代币交易，添加代币合约地址
-      token_contract_address: selectedToken.value?.contract_address || ''
+      token_contract_address: selectedToken.value?.contract_address || '',
+      // 确保金额为整数格式
+      amount: form.value.amount ? (transactionType.value === 'eth' ? formatToWei(form.value.amount) : formatToTokenUnits(form.value.amount, selectedToken.value?.decimals || 18)) : '0',
+      // 确保手续费为整数格式
+      fee: form.value.fee || '0'
     }
     
     console.log('提交的交易数据:', submitData)

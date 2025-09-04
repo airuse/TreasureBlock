@@ -16,16 +16,20 @@ type UserTransaction struct {
 	// 交易基本信息
 	FromAddress string `json:"from_address" gorm:"type:varchar(120);not null;index;comment:发送地址"`
 	ToAddress   string `json:"to_address" gorm:"type:varchar(120);not null;comment:接收地址"`
-	Amount      string `json:"amount" gorm:"type:decimal(65,18);not null;comment:交易金额"`
-	Fee         string `json:"fee" gorm:"type:decimal(36,18);not null;default:0;comment:手续费"`
+	Amount      string `json:"amount" gorm:"type:decimal(65,0);not null;comment:交易金额"`
+	Fee         string `json:"fee" gorm:"type:decimal(65,0);not null;default:0;comment:手续费"`
 
 	// ETH特有字段
 	GasLimit *uint   `json:"gas_limit" gorm:"comment:Gas限制"`
 	GasPrice *string `json:"gas_price" gorm:"type:varchar(100);comment:Gas价格"`
 	Nonce    *uint64 `json:"nonce" gorm:"comment:交易序号"`
 
+	// EIP-1559费率字段
+	MaxPriorityFeePerGas *string `json:"max_priority_fee_per_gas" gorm:"type:varchar(100);comment:最大优先费用(Gwei)"`
+	MaxFeePerGas         *string `json:"max_fee_per_gas" gorm:"type:varchar(100);comment:最大费用(Gwei)"`
+
 	// 交易状态
-	Status string  `json:"status" gorm:"type:varchar(20);not null;default:'draft';index;comment:状态:draft,unsigned,unsent,in_progress,packed,confirmed,failed"`
+	Status string  `json:"status" gorm:"type:varchar(20);not null;default:'draft';index;comment:状态:draft,unsigned,in_progress,packed,confirmed,failed"`
 	TxHash *string `json:"tx_hash" gorm:"type:varchar(120);comment:交易哈希"`
 
 	// 签名相关
@@ -78,7 +82,7 @@ func (t *UserTransaction) IsUnsigned() bool {
 
 // IsUnsent 检查是否为未发送状态
 func (t *UserTransaction) IsUnsent() bool {
-	return t.Status == "unsent"
+	return t.Status == "in_progress"
 }
 
 // IsInProgress 检查是否为在途状态

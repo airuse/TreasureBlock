@@ -569,6 +569,12 @@ func (h *BlockHandler) CreateBlock(c *gin.Context) {
 	// 2. 将DTO转换为模型
 	block := req.ToModel()
 
+	// 验证区块链ID
+	if block.ChainID != config.AppConfig.Blockchain.Chains[block.Chain].ChainID {
+		utils.ErrorResponse(c, http.StatusBadRequest, "block chain id is not correct", nil)
+		return
+	}
+
 	// 3. 调用服务层处理业务逻辑（先创建区块，获取数据库时间）
 	err := h.blockService.CreateBlock(c.Request.Context(), block)
 	if err != nil {

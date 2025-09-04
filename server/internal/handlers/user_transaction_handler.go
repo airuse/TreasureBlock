@@ -5,6 +5,7 @@ import (
 	"blockChainBrowser/server/internal/services"
 	"blockChainBrowser/server/internal/utils"
 	"fmt"
+	"math/big"
 	"net/http"
 	"strconv"
 
@@ -110,10 +111,45 @@ func (h *UserTransactionHandler) validateTransactionFields(req *dto.CreateUserTr
 		if req.FromAddress == "" || req.ToAddress == "" || req.Amount == "" {
 			return fmt.Errorf("原生代币转账需要发送地址、接收地址和金额")
 		}
+		// 验证金额格式（必须是有效的整数）
+		if err := h.validateAmountFormat(req.Amount); err != nil {
+			return fmt.Errorf("金额格式错误: %v", err)
+		}
 		// 手续费可以为0，但必须提供
 		if req.Fee == "" {
 			req.Fee = "0"
 		}
+		// 验证手续费格式（必须是有效的整数）
+		if err := h.validateAmountFormat(req.Fee); err != nil {
+			return fmt.Errorf("手续费格式错误: %v", err)
+		}
+	}
+
+	return nil
+}
+
+// validateAmountFormat 验证金额格式（必须是有效的整数）
+func (h *UserTransactionHandler) validateAmountFormat(amount string) error {
+	if amount == "" {
+		return fmt.Errorf("金额不能为空")
+	}
+
+	// 尝试将字符串转换为大整数
+	amountBig, ok := new(big.Int).SetString(amount, 10)
+	if !ok {
+		return fmt.Errorf("金额必须是有效的整数格式")
+	}
+
+	// 检查金额是否为正数
+	if amountBig.Sign() < 0 {
+		return fmt.Errorf("金额不能为负数")
+	}
+
+	// 检查金额是否超过最大值（65位十进制数）
+	maxAmount := new(big.Int)
+	maxAmount.SetString("99999999999999999999999999999999999999999999999999999999999999999", 10)
+	if amountBig.Cmp(maxAmount) > 0 {
+		return fmt.Errorf("金额超过最大值")
 	}
 
 	return nil
@@ -250,8 +286,15 @@ func (h *UserTransactionHandler) ExportTransaction(c *gin.Context) {
 		return
 	}
 
+	// 解析请求体，获取费率设置
+	var req dto.ExportTransactionRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "请求参数错误", err.Error())
+		return
+	}
+
 	// 导出交易
-	response, err := h.userTxService.ExportTransaction(c.Request.Context(), uint(id), uint64(userID.(uint)))
+	response, err := h.userTxService.ExportTransaction(c.Request.Context(), uint(id), uint64(userID.(uint)), &req)
 	if err != nil {
 		utils.ErrorResponse(c, http.StatusInternalServerError, "导出交易失败", err.Error())
 		return

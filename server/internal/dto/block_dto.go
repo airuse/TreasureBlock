@@ -18,6 +18,7 @@ type CreateBlockRequest struct {
 	Confirmations    uint64    `json:"confirmations" validate:"gte=0"`
 	IsOrphan         bool      `json:"is_orphan"`
 	Chain            string    `json:"chain" validate:"required,oneof=btc eth"`
+	ChainID          int       `json:"chain_id" validate:"required,gt=0"`
 
 	// BTC特有字段
 	MerkleRoot string `json:"merkle_root,omitempty" validate:"omitempty,len=66"`
@@ -139,7 +140,7 @@ func (req *CreateBlockRequest) ToModel() *models.Block {
 		Confirmations:    req.Confirmations,
 		IsOrphan:         req.IsOrphan,
 		Chain:            req.Chain,
-
+		ChainID:          req.ChainID,
 		// BTC特有字段
 		MerkleRoot: req.MerkleRoot,
 		Bits:       req.Bits,

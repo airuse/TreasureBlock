@@ -136,12 +136,6 @@ func selectChainType() string {
 func handleQRCodeImport(ethSigner *eth.ETHSigner, btcSigner *btc.BTCSigner) {
 	fmt.Println("\n=== QR码导入和签名 ===")
 
-	// 选择链类型
-	chainType := selectChainType()
-	if chainType == "" {
-		return
-	}
-
 	// 获取QR码文件路径
 	fmt.Print("请输入QR码图片文件路径: ")
 	var filePath string
@@ -179,17 +173,19 @@ func handleQRCodeImport(ethSigner *eth.ETHSigner, btcSigner *btc.BTCSigner) {
 
 	fmt.Printf("✅ QR码数据解析成功\n")
 	fmt.Printf("交易ID: %d\n", transaction.ID)
-	fmt.Printf("链类型: %s\n", transaction.ChainID)
+	fmt.Printf("链类型: %s\n", transaction.Type)
 	fmt.Printf("发送地址: %s\n", transaction.From)
 
-	// 根据选择的链类型进行签名
-	switch chainType {
-	case "eth":
-		fmt.Println("🔷 使用ETH签名器")
+	// 根据QR码中的类型字段自动选择签名器
+	if transaction.IsETH() {
+		fmt.Println("🔷 自动识别为ETH交易，使用ETH签名器")
 		signETHTransaction(ethSigner, transaction)
-	case "btc":
-		fmt.Println("🟠 使用BTC签名器")
+	} else if transaction.IsBTC() {
+		fmt.Println("🟠 自动识别为BTC交易，使用BTC签名器")
 		signBTCTransaction(btcSigner, transaction)
+	} else {
+		fmt.Printf("❌ 不支持的链类型: %s\n", transaction.Type)
+		return
 	}
 }
 
@@ -200,17 +196,7 @@ func signETHTransaction(ethSigner *eth.ETHSigner, transaction *pkg.TransactionDa
 	// 显示交易详情
 	ethSigner.DisplayTransaction(transaction)
 
-	// 确认签名
-	fmt.Print("\n是否确认签名此交易? (y/N): ")
-	var confirm string
-	fmt.Scanln(&confirm)
-
-	if confirm != "y" && confirm != "Y" {
-		fmt.Println("❌ 用户取消签名")
-		return
-	}
-
-	// 执行签名
+	// 执行签名（确认步骤已合并到密码输入中）
 	signedTx, err := ethSigner.SignTransaction(transaction)
 	if err != nil {
 		fmt.Printf("❌ ETH交易签名失败: %v\n", err)

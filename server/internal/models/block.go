@@ -20,7 +20,7 @@ type Block struct {
 	Confirmations    uint64    `json:"confirmations"`
 	IsOrphan         bool      `json:"is_orphan" gorm:"default:false"`
 	Chain            string    `json:"chain" gorm:"type:varchar(20);index;not null"` // btc, eth
-
+	ChainID          int       `json:"chain_id" gorm:"type:int;index;not null"`
 	// BTC特有字段
 	MerkleRoot string `json:"merkle_root,omitempty" gorm:"type:char(66)"`
 	Bits       string `json:"bits,omitempty" gorm:"type:varchar(20)"`

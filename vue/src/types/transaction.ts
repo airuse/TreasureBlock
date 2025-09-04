@@ -49,7 +49,7 @@ export interface PersonalTransaction {
 }
 
 // 交易状态类型
-export type TransactionStatus = 'unsigned' | 'unsent' | 'in_progress' | 'packed' | 'confirmed'
+export type TransactionStatus = 'unsigned' | 'in_progress' | 'packed' | 'confirmed'
 
 // 交易列表项类型（用于列表展示）
 export interface TransactionListItem {

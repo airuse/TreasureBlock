@@ -5,8 +5,8 @@ server:
   environment: "development"  # 新增环境标识，当 production 时用的是线上环境 development 是本地环境
   # api_key: "ak_c9da22f76fa7a6870b10b2f074db1b31"
   # secret_key: "sk_7cad6309637b7c0c374c9974c68a0beeb65ca80093ea4c4bc60a04181eb1f5fa"
-  api_key: "ak_534f2da9ea90b6a8af379303deb70f02"
-  secret_key: "sk_1845148e933c22f681ce8f0d4d27d825d1ae9f04666a030b73e0925480e47c6d"
+  api_key: "ak_54bf1b19a0d3b13078e1f09953403ced"
+  secret_key: "sk_d9e23d5d3268378bae7d628c45960782aa8424fffbc2a10ca22e24ce6c3fffba"
   # # HTTPS相关配置
   tls:
     enabled: true
@@ -44,6 +44,7 @@ blockchain:
     #     enable_mempool: true
     #     mempool_interval: 5s
     eth:
+      chain_id: 11155111
       name: "Ethereum"
       symbol: "ETH"
       decimals: 18
@@ -89,8 +90,8 @@ blockchain:
         # - "https://yolo-smart-tree.quiknode.pro/52836b8f979fca7325258c42925d6c245ca45079"
         # - "https://thrilling-summer-frost.quiknode.pro/ca8e71700184f645a7935acf1487acd191e429a1"
         # - "https://warmhearted-bold-emerald.quiknode.pro/be4e6633f9443a4dd26046d40be1650a810db3a1"
-        - "https://empty-hardworking-spree.quiknode.pro/d1cb31945987ed11caa6f3e63c2b8b86b00d41ff"
-        - "https://solemn-purple-river.quiknode.pro/93a62baaa6ed6004344fca98ff7f05f8f0a12ae1"
+        - "https://empty-hardworking-spree.ethereum-sepolia.quiknode.pro/d1cb31945987ed11caa6f3e63c2b8b86b00d41ff"
+        - "https://solemn-purple-river.ethereum-sepolia.quiknode.pro/93a62baaa6ed6004344fca98ff7f05f8f0a12ae1"
 
       api_key: ""  # 如果需要的话
       username: ""
@@ -102,7 +103,7 @@ blockchain:
       # ETH链特定的扫描配置
       scan:
         enabled: true                # 是否启用ETH链扫描
-        interval: 1s                 # 扫描区块的时间间隔
+        interval: 5s                 # 扫描区块的时间间隔
         max_retries: 3               # 区块扫描失败时的最大重试次数
         retry_delay: 3s              # 重试间隔时间
         confirmations: 61            # 需要等待的区块确认数

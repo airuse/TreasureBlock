@@ -135,7 +135,7 @@ export function deleteUserTransaction(id: number): Promise<ApiResponse<null>> {
 /**
  * 导出交易
  */
-export function exportTransaction(id: number): Promise<ApiResponse<ExportTransactionResponse>> {
+export function exportTransaction(id: number, feeData?: any): Promise<ApiResponse<ExportTransactionResponse>> {
   if (__USE_MOCK__) {
     console.log('🔧 使用Mock数据 - exportTransaction')
     return handleMockExportTransaction(id)
@@ -144,7 +144,8 @@ export function exportTransaction(id: number): Promise<ApiResponse<ExportTransac
   console.log('🌐 使用真实API - exportTransaction')
   return request({
     url: `/api/user/transactions/${id}/export`,
-    method: 'POST'
+    method: 'POST',
+    data: feeData || {}
   })
 }
 

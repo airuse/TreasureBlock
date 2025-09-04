@@ -19,10 +19,11 @@ import (
 
 // Server 服务器结构
 type Server struct {
-	router     *gin.Engine
-	wsHandler  *handlers.WebSocketHandler
-	httpServer *http.Server
-	tlsServer  *http.Server
+	router                     *gin.Engine
+	wsHandler                  *handlers.WebSocketHandler
+	httpServer                 *http.Server
+	tlsServer                  *http.Server
+	transactionStatusScheduler *services.TransactionStatusScheduler
 }
 
 // New 创建服务器实例
@@ -113,6 +114,10 @@ func New() *Server {
 	// 启动WebSocket处理器
 	wsHandler.Start()
 
+	// 创建并启动交易状态调度器
+	transactionStatusScheduler := services.NewTransactionStatusScheduler()
+	go transactionStatusScheduler.Start(context.Background())
+
 	// 设置路由
 	router := routes.SetupRoutes(
 		blockHandler,
@@ -159,10 +164,11 @@ func New() *Server {
 	}
 
 	return &Server{
-		router:     router,
-		wsHandler:  wsHandler,
-		httpServer: httpServer,
-		tlsServer:  tlsServer,
+		router:                     router,
+		wsHandler:                  wsHandler,
+		httpServer:                 httpServer,
+		tlsServer:                  tlsServer,
+		transactionStatusScheduler: transactionStatusScheduler,
 	}
 }
 
@@ -198,6 +204,11 @@ func (s *Server) Shutdown(timeout time.Duration) error {
 	log.Println("Shutting down server...")
 	ctx, cancel := context.WithTimeout(context.Background(), timeout)
 	defer cancel()
+
+	// 停止交易状态调度器
+	if s.transactionStatusScheduler != nil {
+		s.transactionStatusScheduler.Stop()
+	}
 
 	// 关闭HTTP服务器
 	if err := s.httpServer.Shutdown(ctx); err != nil {

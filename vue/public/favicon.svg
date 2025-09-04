@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="22 23 46 46" width="70px" height="100px" preserveAspectRatio="xMidYMid slice">
+  <path style="fill: rgb(216, 216, 216); stroke: rgb(0, 0, 0);" d="M 30 30 L 60 30.035 L 30 30 Z"/>
+  <rect x="30" y="30" width="30" height="4" style="stroke: rgb(0, 0, 0);"/>
+  <ellipse style="stroke: rgb(0, 0, 0); fill-rule: nonzero;" cx="45" cy="45" rx="4" ry="4"/>
+  <rect x="43" y="34" width="4" height="6" style="stroke: rgb(0, 0, 0);"/>
+  <ellipse style="stroke: rgb(0, 0, 0); stroke-width: 1;" cx="44.97" cy="60.953" rx="4" ry="4"/>
+  <rect x="42.97" y="49.953" width="4" height="6" style="stroke: rgb(0, 0, 0); stroke-width: 1;"/>
+</svg>

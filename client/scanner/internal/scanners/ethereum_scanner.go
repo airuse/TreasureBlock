@@ -104,6 +104,7 @@ func (es *EthereumScanner) GetBlockByHeight(height uint64) (*models.Block, error
 func (es *EthereumScanner) parseBlock(block *types.Block) *models.Block {
 	parsedBlock := &models.Block{
 		Chain:            "eth",
+		ChainID:          es.config.ChainID,
 		Hash:             block.Hash().Hex(),
 		Height:           block.NumberU64(),
 		Version:          0, // 以太坊区块没有Version字段，设为0

@@ -6,12 +6,17 @@ import "encoding/json"
 type TransactionData struct {
 	ID         int              `json:"id"`                   // 交易ID
 	ChainID    string           `json:"chainId"`              // 链ID
+	Type       string           `json:"type"`                 // 链类型：eth 或 btc
 	Nonce      uint64           `json:"nonce"`                // 交易序号
 	From       string           `json:"from"`                 // 发送地址
 	To         string           `json:"to"`                   // 接收地址
 	Value      string           `json:"value"`                // 交易金额（十六进制）
 	Data       string           `json:"data"`                 // 交易数据（十六进制）
 	AccessList []AccessListItem `json:"accessList,omitempty"` // 访问列表（ETH EIP-2930）
+
+	// EIP-1559费率字段
+	MaxPriorityFeePerGas string `json:"maxPriorityFeePerGas,omitempty"` // 最大优先费用（Gwei）
+	MaxFeePerGas         string `json:"maxFeePerGas,omitempty"`         // 最大费用（Gwei）
 }
 
 // AccessListItem 访问列表项
@@ -74,12 +79,12 @@ func (t *TransactionData) ToJSON() (string, error) {
 
 // IsETH 判断是否为ETH交易
 func (t *TransactionData) IsETH() bool {
-	return t.ChainID == "1" || t.ChainID == "eth"
+	return t.Type == "eth" || t.ChainID == "1" || t.ChainID == "eth"
 }
 
 // IsBTC 判断是否为BTC交易
 func (t *TransactionData) IsBTC() bool {
-	return t.ChainID == "btc"
+	return t.Type == "btc" || t.ChainID == "btc"
 }
 
 // GetChainName 获取链名称

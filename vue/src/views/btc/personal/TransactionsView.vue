@@ -30,8 +30,6 @@
             <div class="text-sm text-gray-500">未签名</div>
           </div>
           <div class="text-center">
-            <div class="text-2xl font-bold text-blue-600">{{ unsentCount }}</div>
-            <div class="text-sm text-gray-500">未发送</div>
           </div>
           <div class="text-center">
             <div class="text-2xl font-bold text-orange-600">{{ inProgressCount }}</div>
@@ -54,7 +52,6 @@
             <select v-model="selectedStatus" class="border border-gray-300 rounded-md px-3 py-2 text-sm">
               <option value="">全部状态</option>
               <option value="unsigned">未签名</option>
-              <option value="unsent">未发送</option>
               <option value="in_progress">在途</option>
               <option value="packed">已打包</option>
               <option value="confirmed">已确认</option>
@@ -118,7 +115,7 @@
                     导出交易
                   </button>
                   <button
-                    v-if="tx.status === 'unsent'"
+                    v-if="tx.status === 'in_progress'"
                     @click="sendTransaction(tx)"
                     class="text-green-600 hover:text-green-900"
                   >
@@ -240,7 +237,6 @@ const importSignature = ref('')
 // 交易统计
 const totalTransactions = ref(18)
 const unsignedCount = ref(2)
-const unsentCount = ref(1)
 const inProgressCount = ref(1)
 const confirmedCount = ref(14)
 
@@ -268,7 +264,7 @@ const transactionsList = ref<PersonalTransaction[]>([
     toAddress: '1FvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2',
     amount: 0.02,
     fee: 0.0001,
-    status: 'unsent',
+    status: 'in_progress',
     timestamp: new Date(Date.now() - 1000 * 60 * 60 * 4),
     confirmations: 0
   },
@@ -325,7 +321,6 @@ const filteredTransactions = computed(() => {
 const getStatusClass = (status: string) => {
   switch (status) {
     case 'unsigned': return 'bg-gray-100 text-gray-800'
-    case 'unsent': return 'bg-blue-100 text-blue-800'
     case 'in_progress': return 'bg-yellow-100 text-yellow-800'
     case 'packed': return 'bg-orange-100 text-orange-800'
     case 'confirmed': return 'bg-green-100 text-green-800'
@@ -337,7 +332,6 @@ const getStatusClass = (status: string) => {
 const getStatusText = (status: string) => {
   switch (status) {
     case 'unsigned': return '未签名'
-    case 'unsent': return '未发送'
     case 'in_progress': return '在途'
     case 'packed': return '已打包'
     case 'confirmed': return '已确认'

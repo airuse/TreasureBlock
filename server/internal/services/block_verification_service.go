@@ -17,10 +17,10 @@ import (
 	"blockChainBrowser/server/config"
 	"blockChainBrowser/server/internal/models"
 	"blockChainBrowser/server/internal/repository"
+	"blockChainBrowser/server/internal/utils"
 
 	common "github.com/ethereum/go-ethereum/common"
 	ethtypes "github.com/ethereum/go-ethereum/core/types"
-	"github.com/ethereum/go-ethereum/ethclient"
 	"github.com/ethereum/go-ethereum/trie"
 )
 
@@ -225,21 +225,20 @@ func (s *blockVerificationService) verifyEthTransactionsWithRPC(block *models.Bl
 		return nil
 	}
 
-	// 从配置文件获取RPC URL
-	chainConfig, exists := config.AppConfig.Blockchain.Chains[strings.ToLower(block.Chain)]
-	if !exists || chainConfig.RPCURL == "" {
-		// 未配置则跳过RPC校验
+	// 从配置文件读取链配置，若无配置则跳过
+	if _, exists := config.AppConfig.Blockchain.Chains[strings.ToLower(block.Chain)]; !exists {
 		return nil
 	}
 
-	cli, err := ethclient.Dial(chainConfig.RPCURL)
+	// 使用ETH故障转移管理器
+	fo, err := utils.NewEthFailoverFromChain(strings.ToLower(block.Chain))
 	if err != nil {
-		return fmt.Errorf("连接ETH RPC失败: %w", err)
+		return fmt.Errorf("初始化ETH故障转移失败: %w", err)
 	}
-	defer cli.Close()
+	defer fo.Close()
 
 	ctx := context.Background()
-	b, err := cli.BlockByHash(ctx, common.HexToHash(block.Hash))
+	b, err := fo.BlockByHash(ctx, common.HexToHash(block.Hash))
 	if err != nil {
 		return fmt.Errorf("获取区块失败: %w", err)
 	}
@@ -294,10 +293,20 @@ func (s *blockVerificationService) verifyBtcBlockWithRPC(block *models.Block, tx
 		return nil
 	}
 
-	// 从配置文件获取RPC配置
+	// 从配置获取可能的多个RPC地址
 	chainConfig, exists := config.AppConfig.Blockchain.Chains[strings.ToLower(block.Chain)]
-	if !exists || chainConfig.RPCURL == "" {
-		// 未配置则跳过RPC校验
+	if !exists {
+		return nil
+	}
+
+	urls := make([]string, 0)
+	if len(chainConfig.RPCURLs) > 0 {
+		urls = append(urls, chainConfig.RPCURLs...)
+	}
+	if chainConfig.RPCURL != "" {
+		urls = append(urls, chainConfig.RPCURL)
+	}
+	if len(urls) == 0 {
 		return nil
 	}
 
@@ -306,44 +315,17 @@ func (s *blockVerificationService) verifyBtcBlockWithRPC(block *models.Block, tx
 		"jsonrpc": "1.0",
 		"id":      "block_verification",
 		"method":  "getblock",
-		"params":  []interface{}{block.Hash, 1}, // 1表示返回详细信息
+		"params":  []interface{}{block.Hash, 1},
 	}
 
-	// 发送HTTP POST请求到Bitcoin RPC
 	jsonData, err := json.Marshal(rpcRequest)
 	if err != nil {
 		return fmt.Errorf("序列化RPC请求失败: %w", err)
 	}
 
-	// 创建HTTP客户端
 	client := &http.Client{Timeout: 30 * time.Second}
 
-	// 准备请求
-	req, err := http.NewRequest("POST", chainConfig.RPCURL, bytes.NewBuffer(jsonData))
-	if err != nil {
-		return fmt.Errorf("创建HTTP请求失败: %w", err)
-	}
-
-	req.Header.Set("Content-Type", "application/json")
-
-	// 如果配置了认证信息，添加Basic Auth
-	if chainConfig.Username != "" && chainConfig.Password != "" {
-		req.SetBasicAuth(chainConfig.Username, chainConfig.Password)
-	}
-
-	// 发送请求
-	resp, err := client.Do(req)
-	if err != nil {
-		return fmt.Errorf("发送RPC请求失败: %w", err)
-	}
-	defer resp.Body.Close()
-
-	// 检查响应状态
-	if resp.StatusCode != http.StatusOK {
-		return fmt.Errorf("RPC响应状态错误: %d", resp.StatusCode)
-	}
-
-	// 解析响应
+	var lastErr error
 	var rpcResponse struct {
 		Error *struct {
 			Code    int
@@ -371,11 +353,48 @@ func (s *blockVerificationService) verifyBtcBlockWithRPC(block *models.Block, tx
 		} `json:"result"`
 	}
 
-	if err := json.NewDecoder(resp.Body).Decode(&rpcResponse); err != nil {
-		return fmt.Errorf("解析RPC响应失败: %w", err)
+	for _, url := range urls {
+		req, err := http.NewRequest("POST", url, bytes.NewBuffer(jsonData))
+		if err != nil {
+			lastErr = fmt.Errorf("创建HTTP请求失败: %w", err)
+			continue
+		}
+		req.Header.Set("Content-Type", "application/json")
+		if chainConfig.Username != "" && chainConfig.Password != "" {
+			req.SetBasicAuth(chainConfig.Username, chainConfig.Password)
+		}
+
+		resp, err := client.Do(req)
+		if err != nil {
+			lastErr = fmt.Errorf("发送RPC请求失败(%s): %w", url, err)
+			continue
+		}
+		// Ensure body closed for each attempt
+		func() {
+			defer resp.Body.Close()
+			if resp.StatusCode != http.StatusOK {
+				lastErr = fmt.Errorf("RPC响应状态错误(%s): %d", url, resp.StatusCode)
+				return
+			}
+			// reset previous response
+			rpcResponse.Error = nil
+			rpcResponse.Result = nil
+			if err := json.NewDecoder(resp.Body).Decode(&rpcResponse); err != nil {
+				lastErr = fmt.Errorf("解析RPC响应失败(%s): %w", url, err)
+				return
+			}
+			lastErr = nil
+		}()
+
+		if lastErr == nil {
+			break
+		}
 	}
 
-	// 检查RPC错误
+	if lastErr != nil {
+		return lastErr
+	}
+
 	if rpcResponse.Error != nil {
 		return fmt.Errorf("RPC错误: %d - %s", rpcResponse.Error.Code, rpcResponse.Error.Message)
 	}

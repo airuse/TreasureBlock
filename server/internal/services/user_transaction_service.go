@@ -5,13 +5,17 @@ import (
 	"blockChainBrowser/server/internal/dto"
 	"blockChainBrowser/server/internal/models"
 	"blockChainBrowser/server/internal/repository"
+	"blockChainBrowser/server/internal/utils"
 	"context"
 	"errors"
 	"fmt"
+	"math/big"
 	"strconv"
+	"strings"
+	"time"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/ethclient"
+	"github.com/sirupsen/logrus"
 )
 
 // UserTransactionService 用户交易服务接口
@@ -21,7 +25,7 @@ type UserTransactionService interface {
 	GetUserTransactions(ctx context.Context, userID uint64, page, pageSize int, status string) (*dto.UserTransactionListResponse, error)
 	UpdateTransaction(ctx context.Context, id uint, userID uint64, req *dto.UpdateUserTransactionRequest) (*dto.UserTransactionResponse, error)
 	DeleteTransaction(ctx context.Context, id uint, userID uint64) error
-	ExportTransaction(ctx context.Context, id uint, userID uint64) (*dto.ExportTransactionResponse, error)
+	ExportTransaction(ctx context.Context, id uint, userID uint64, req *dto.ExportTransactionRequest) (*dto.ExportTransactionResponse, error)
 	ImportSignature(ctx context.Context, id uint, userID uint64, req *dto.ImportSignatureRequest) (*dto.UserTransactionResponse, error)
 	SendTransaction(ctx context.Context, id uint, userID uint64) (*dto.UserTransactionResponse, error)
 	GetUserTransactionStats(ctx context.Context, userID uint64) (*dto.UserTransactionStatsResponse, error)
@@ -30,12 +34,14 @@ type UserTransactionService interface {
 // userTransactionService 用户交易服务实现
 type userTransactionService struct {
 	userTxRepo repository.UserTransactionRepository
+	logger     *logrus.Logger
 }
 
 // NewUserTransactionService 创建用户交易服务实例
 func NewUserTransactionService() UserTransactionService {
 	return &userTransactionService{
 		userTxRepo: repository.NewUserTransactionRepository(),
+		logger:     logrus.New(),
 	}
 }
 
@@ -154,7 +160,7 @@ func (s *userTransactionService) DeleteTransaction(ctx context.Context, id uint,
 }
 
 // ExportTransaction 导出交易
-func (s *userTransactionService) ExportTransaction(ctx context.Context, id uint, userID uint64) (*dto.ExportTransactionResponse, error) {
+func (s *userTransactionService) ExportTransaction(ctx context.Context, id uint, userID uint64, req *dto.ExportTransactionRequest) (*dto.ExportTransactionResponse, error) {
 	userTx, err := s.userTxRepo.GetByID(ctx, id, userID)
 	if err != nil {
 		return nil, err
@@ -186,10 +192,16 @@ func (s *userTransactionService) ExportTransaction(ctx context.Context, id uint,
 	// 生成未签名交易数据（这里简化处理，实际应该调用区块链SDK）
 	unsignedTx := s.generateUnsignedTx(userTx)
 
-	// 生成QR码数据
-	chainID := "1" // 以太坊主网
-	if userTx.Chain != "eth" {
-		chainID = userTx.Chain
+	// 生成QR码数据（使用配置中的链ID）
+	chainID := ""
+	if chainCfg, ok := config.AppConfig.Blockchain.Chains[strings.ToLower(userTx.Chain)]; ok {
+		chainID = strconv.Itoa(chainCfg.ChainID)
+	} else {
+		if strings.ToLower(userTx.Chain) == "eth" {
+			chainID = "1"
+		} else {
+			chainID = userTx.Chain
+		}
 	}
 
 	// 生成交易数据（这里需要调用前端相同的逻辑，暂时使用占位符）
@@ -197,6 +209,23 @@ func (s *userTransactionService) ExportTransaction(ctx context.Context, id uint,
 
 	// 生成AccessList（如果是代币交易）
 	accessList := s.generateAccessList(userTx)
+
+	// 处理费率设置
+	if req.MaxPriorityFeePerGas != nil {
+		userTx.MaxPriorityFeePerGas = req.MaxPriorityFeePerGas
+	} else if userTx.MaxPriorityFeePerGas == nil {
+		// 如果没有设置费率，使用默认值
+		defaultTip := "2" // 2 Gwei
+		userTx.MaxPriorityFeePerGas = &defaultTip
+	}
+
+	if req.MaxFeePerGas != nil {
+		userTx.MaxFeePerGas = req.MaxFeePerGas
+	} else if userTx.MaxFeePerGas == nil {
+		// 如果没有设置费率，使用默认值
+		defaultFee := "30" // 30 Gwei
+		userTx.MaxFeePerGas = &defaultFee
+	}
 
 	// 更新交易状态为未签名，并保存QR码数据
 	userTx.Status = "unsigned"
@@ -223,6 +252,9 @@ func (s *userTransactionService) ExportTransaction(ctx context.Context, id uint,
 		ChainID:     &chainID,
 		TxData:      &txData,
 		AccessList:  &accessList,
+		// 添加费率字段
+		MaxPriorityFeePerGas: userTx.MaxPriorityFeePerGas,
+		MaxFeePerGas:         userTx.MaxFeePerGas,
 	}, nil
 }
 
@@ -240,7 +272,7 @@ func (s *userTransactionService) ImportSignature(ctx context.Context, id uint, u
 
 	// 更新签名数据
 	userTx.SignedTx = &req.SignedTx
-	userTx.Status = "unsent" // 状态变为未发送
+	userTx.Status = "in_progress" // 直接设置为在途状态，因为会自动发送
 
 	// 保存签名组件
 	if req.V != nil {
@@ -258,7 +290,18 @@ func (s *userTransactionService) ImportSignature(ctx context.Context, id uint, u
 		return nil, fmt.Errorf("导入签名失败: %w", err)
 	}
 
-	return s.convertToResponse(userTx), nil
+	// 自动发送交易
+	sendResp, err := s.SendTransaction(ctx, id, userID)
+	if err != nil {
+		// 发送失败，更新状态为失败
+		userTx.Status = "failed"
+		errorMsg := err.Error()
+		userTx.ErrorMsg = &errorMsg
+		s.userTxRepo.Update(ctx, userTx)
+		return nil, fmt.Errorf("自动发送交易失败: %w", err)
+	}
+
+	return sendResp, nil
 }
 
 // SendTransaction 发送交易
@@ -273,13 +316,181 @@ func (s *userTransactionService) SendTransaction(ctx context.Context, id uint, u
 		return nil, errors.New("只有未发送状态的交易才能发送")
 	}
 
-	// 这里应该调用区块链SDK发送交易
-	// 简化处理，直接更新状态
+	// 检查是否有已签名的交易数据
+	if userTx.SignedTx == nil || *userTx.SignedTx == "" {
+		return nil, errors.New("交易尚未签名，无法发送")
+	}
+
+	// 创建RPC客户端管理器
+	rpcManager := utils.NewRPCClientManager()
+	defer rpcManager.Close()
+
+	// 准备发送交易请求
+	sendReq := &utils.SendTransactionRequest{
+		Chain:       userTx.Chain,
+		SignedTx:    *userTx.SignedTx,
+		FromAddress: userTx.FromAddress,
+		ToAddress:   userTx.ToAddress,
+		Amount:      userTx.Amount,
+		Fee:         userTx.Fee,
+	}
+
+	// 调用RPC发送交易
+	sendResp, err := rpcManager.SendTransaction(ctx, sendReq)
+	if err != nil {
+		s.logger.Errorf("发送交易失败: %v", err)
+		return nil, fmt.Errorf("发送交易失败: %w", err)
+	}
+
+	if !sendResp.Success {
+		// 发送失败，更新状态为失败
+		userTx.Status = "failed"
+		errorMsg := sendResp.Message
+		userTx.ErrorMsg = &errorMsg
+
+		if err := s.userTxRepo.Update(ctx, userTx); err != nil {
+			s.logger.Errorf("更新交易状态失败: %v", err)
+		}
+
+		return nil, fmt.Errorf("发送交易失败: %s", sendResp.Message)
+	}
+
+	// 发送成功，更新交易状态
 	userTx.Status = "in_progress"
+	userTx.TxHash = &sendResp.TxHash
+	userTx.ErrorMsg = nil // 清除之前的错误信息
 
 	// 保存更新
 	if err := s.userTxRepo.Update(ctx, userTx); err != nil {
-		return nil, fmt.Errorf("发送交易失败: %w", err)
+		return nil, fmt.Errorf("更新交易状态失败: %w", err)
+	}
+
+	s.logger.Infof("交易发送成功: ID=%d, TxHash=%s", userTx.ID, sendResp.TxHash)
+
+	// 异步更新交易状态（从区块链查询最新状态）
+	go s.updateTransactionStatusAsync(context.Background(), userTx.ID, userID)
+
+	return s.convertToResponse(userTx), nil
+}
+
+// updateTransactionStatusAsync 异步更新交易状态（从区块链查询）
+func (s *userTransactionService) updateTransactionStatusAsync(ctx context.Context, id uint, userID uint64) {
+	// 等待一段时间让交易在区块链上确认
+	time.Sleep(5 * time.Second)
+
+	userTx, err := s.userTxRepo.GetByID(ctx, id, userID)
+	if err != nil {
+		s.logger.Errorf("获取交易失败: %v", err)
+		return
+	}
+
+	// 只有已发送的交易才需要查询状态
+	if userTx.Status != "in_progress" && userTx.Status != "packed" {
+		return
+	}
+
+	// 检查是否有交易哈希
+	if userTx.TxHash == nil || *userTx.TxHash == "" {
+		return
+	}
+
+	// 创建RPC客户端管理器
+	rpcManager := utils.NewRPCClientManager()
+	defer rpcManager.Close()
+
+	// 查询交易状态
+	txStatus, err := rpcManager.GetTransactionStatus(ctx, userTx.Chain, *userTx.TxHash)
+	if err != nil {
+		s.logger.Errorf("查询交易状态失败: %v", err)
+		return
+	}
+
+	// 根据查询结果更新状态
+	oldStatus := userTx.Status
+	switch txStatus.Status {
+	case "pending":
+		userTx.Status = "in_progress"
+	case "confirmed":
+		userTx.Status = "confirmed"
+		if txStatus.BlockHeight > 0 {
+			userTx.BlockHeight = &txStatus.BlockHeight
+		}
+		if txStatus.Confirmations > 0 {
+			confirmations := uint(txStatus.Confirmations)
+			userTx.Confirmations = &confirmations
+		}
+	case "failed":
+		userTx.Status = "failed"
+		errorMsg := "交易在区块链上失败"
+		userTx.ErrorMsg = &errorMsg
+	}
+
+	// 如果状态有变化，保存更新
+	if userTx.Status != oldStatus {
+		if err := s.userTxRepo.Update(ctx, userTx); err != nil {
+			s.logger.Errorf("更新交易状态失败: %v", err)
+		} else {
+			s.logger.Infof("交易状态已更新: ID=%d, 从 %s 到 %s", userTx.ID, oldStatus, userTx.Status)
+		}
+	}
+}
+
+// updateTransactionStatus 更新交易状态（内部方法）
+func (s *userTransactionService) updateTransactionStatus(ctx context.Context, id uint, userID uint64) (*dto.UserTransactionResponse, error) {
+	userTx, err := s.userTxRepo.GetByID(ctx, id, userID)
+	if err != nil {
+		return nil, err
+	}
+
+	// 只有已发送的交易才需要查询状态
+	if userTx.Status != "in_progress" && userTx.Status != "packed" {
+		return s.convertToResponse(userTx), nil
+	}
+
+	// 检查是否有交易哈希
+	if userTx.TxHash == nil || *userTx.TxHash == "" {
+		return s.convertToResponse(userTx), nil
+	}
+
+	// 创建RPC客户端管理器
+	rpcManager := utils.NewRPCClientManager()
+	defer rpcManager.Close()
+
+	// 查询交易状态
+	txStatus, err := rpcManager.GetTransactionStatus(ctx, userTx.Chain, *userTx.TxHash)
+	if err != nil {
+		s.logger.Errorf("查询交易状态失败: %v", err)
+		// 查询失败不影响返回，只是不更新状态
+		return s.convertToResponse(userTx), nil
+	}
+
+	// 根据查询结果更新状态
+	oldStatus := userTx.Status
+	switch txStatus.Status {
+	case "pending":
+		userTx.Status = "in_progress"
+	case "confirmed":
+		userTx.Status = "confirmed"
+		if txStatus.BlockHeight > 0 {
+			userTx.BlockHeight = &txStatus.BlockHeight
+		}
+		if txStatus.Confirmations > 0 {
+			confirmations := uint(txStatus.Confirmations)
+			userTx.Confirmations = &confirmations
+		}
+	case "failed":
+		userTx.Status = "failed"
+		errorMsg := "交易在区块链上失败"
+		userTx.ErrorMsg = &errorMsg
+	}
+
+	// 如果状态有变化，保存更新
+	if userTx.Status != oldStatus {
+		if err := s.userTxRepo.Update(ctx, userTx); err != nil {
+			s.logger.Errorf("更新交易状态失败: %v", err)
+		} else {
+			s.logger.Infof("交易状态已更新: ID=%d, 从 %s 到 %s", userTx.ID, oldStatus, userTx.Status)
+		}
 	}
 
 	return s.convertToResponse(userTx), nil
@@ -288,7 +499,7 @@ func (s *userTransactionService) SendTransaction(ctx context.Context, id uint, u
 // GetUserTransactionStats 获取用户交易统计
 func (s *userTransactionService) GetUserTransactionStats(ctx context.Context, userID uint64) (*dto.UserTransactionStatsResponse, error) {
 	// 获取各种状态的交易数量
-	statuses := []string{"draft", "unsigned", "unsent", "in_progress", "packed", "confirmed", "failed"}
+	statuses := []string{"draft", "unsigned", "in_progress", "packed", "confirmed", "failed"}
 
 	stats := &dto.UserTransactionStatsResponse{}
 
@@ -306,8 +517,6 @@ func (s *userTransactionService) GetUserTransactionStats(ctx context.Context, us
 			stats.DraftCount = count
 		case "unsigned":
 			stats.UnsignedCount = count
-		case "unsent":
-			stats.UnsentCount = count
 		case "in_progress":
 			stats.InProgressCount = count
 		case "packed":
@@ -365,7 +574,7 @@ func (s *userTransactionService) convertToResponse(userTx *models.UserTransactio
 // generateUnsignedTx 生成未签名交易数据（简化实现）
 func (s *userTransactionService) generateUnsignedTx(userTx *models.UserTransaction) string {
 	// 这里应该调用区块链SDK生成未签名交易
-	// 简化处理，返回JSON格式的交易数据
+	// 简化处理，返回JSON格式的交易数据，包含EIP-1559费率
 	unsignedTx := fmt.Sprintf(`{
 		"chain": "%s",
 		"symbol": "%s",
@@ -375,7 +584,9 @@ func (s *userTransactionService) generateUnsignedTx(userTx *models.UserTransacti
 		"fee": "%s",
 		"gasLimit": %s,
 		"gasPrice": "%s",
-		"nonce": %s
+		"nonce": %s,
+		"maxPriorityFeePerGas": "%s",
+		"maxFeePerGas": "%s"
 	}`,
 		userTx.Chain,
 		userTx.Symbol,
@@ -386,6 +597,8 @@ func (s *userTransactionService) generateUnsignedTx(userTx *models.UserTransacti
 		s.uintToString(userTx.GasLimit),
 		s.stringToString(userTx.GasPrice),
 		s.uint64ToString(userTx.Nonce),
+		s.stringToString(userTx.MaxPriorityFeePerGas),
+		s.stringToString(userTx.MaxFeePerGas),
 	)
 
 	return unsignedTx
@@ -417,19 +630,19 @@ func (s *userTransactionService) uint64ToString(u *uint64) string {
 func (s *userTransactionService) getAddressNonce(ctx context.Context, address string) (uint64, error) {
 	// 从配置文件获取ETH RPC URL
 	chainConfig, exists := config.AppConfig.Blockchain.Chains["eth"]
-	if !exists || chainConfig.RPCURL == "" {
+	if !exists || (chainConfig.RPCURL == "" && len(chainConfig.RPCURLs) == 0) {
 		return 0, fmt.Errorf("未配置ETH RPC URL")
 	}
 
-	// 连接ETH客户端
-	client, err := ethclient.Dial(chainConfig.RPCURL)
+	// 使用故障转移管理器
+	fo, err := utils.NewEthFailoverFromChain("eth")
 	if err != nil {
-		return 0, fmt.Errorf("连接ETH RPC失败: %w", err)
+		return 0, fmt.Errorf("初始化ETH故障转移失败: %w", err)
 	}
-	defer client.Close()
+	defer fo.Close()
 
-	// 获取地址的当前nonce
-	nonce, err := client.NonceAt(ctx, common.HexToAddress(address), nil)
+	// 获取地址的当前nonce（故障转移）
+	nonce, err := fo.NonceAt(ctx, common.HexToAddress(address), nil)
 	if err != nil {
 		return 0, fmt.Errorf("获取地址nonce失败: %w", err)
 	}
@@ -488,7 +701,15 @@ func (s *userTransactionService) padAddress(address string) string {
 
 // convertAmountToHex 将金额转换为十六进制格式
 func (s *userTransactionService) convertAmountToHex(amount string) string {
-	// 简化处理，将字符串转换为数字再转十六进制
-	// TODO: 实现完整的金额转换逻辑
-	return fmt.Sprintf("%064s", "0")
+	// 将字符串转换为大整数，然后转换为十六进制
+	// 数据库中存储的是整数格式的金额
+	amountBig, ok := new(big.Int).SetString(amount, 10)
+	if !ok {
+		// 如果转换失败，返回0
+		return "0x0"
+	}
+
+	// 转换为十六进制并添加0x前缀
+	hexStr := fmt.Sprintf("0x%s", amountBig.Text(16))
+	return hexStr
 }

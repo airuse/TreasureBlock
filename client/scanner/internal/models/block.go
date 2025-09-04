@@ -21,6 +21,7 @@ type Block struct {
 	Confirmations    uint64     `json:"confirmations"`
 	IsOrphan         bool       `json:"is_orphan"`
 	Chain            string     `json:"chain"`
+	ChainID          int        `json:"chain_id"`
 	Version          int        `json:"version"`
 	Bits             string     `json:"bits"`
 	Weight           uint64     `json:"weight"`

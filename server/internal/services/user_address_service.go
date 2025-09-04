@@ -5,6 +5,7 @@ import (
 	"blockChainBrowser/server/internal/dto"
 	"blockChainBrowser/server/internal/models"
 	"blockChainBrowser/server/internal/repository"
+	"blockChainBrowser/server/internal/utils"
 	"context"
 	"errors"
 	"fmt"
@@ -13,7 +14,6 @@ import (
 	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
-	"github.com/ethereum/go-ethereum/ethclient"
 )
 
 // UserAddressService 用户地址服务接口
@@ -249,24 +249,24 @@ func (s *userAddressService) getCurrentBlockHeightAndBalance(address string) (ui
 	blockNumber := uint64(0)
 	// 从配置文件获取ETH RPC URL
 	chainConfig, exists := config.AppConfig.Blockchain.Chains["eth"]
-	if !exists || chainConfig.RPCURL == "" {
+	if !exists || (chainConfig.RPCURL == "" && len(chainConfig.RPCURLs) == 0) {
 		return blockNumber, "0", fmt.Errorf("未配置ETH RPC URL")
 	}
 
-	// 连接ETH客户端
-	client, err := ethclient.Dial(chainConfig.RPCURL)
+	// 使用故障转移管理器
+	fo, err := utils.NewEthFailoverFromChain("eth")
 	if err != nil {
-		return blockNumber, "0", fmt.Errorf("连接ETH RPC失败: %w", err)
+		return blockNumber, "0", fmt.Errorf("初始化ETH故障转移失败: %w", err)
 	}
-	defer client.Close()
+	defer fo.Close()
 
-	blockNumber, err = client.BlockNumber(ctx)
+	blockNumber, err = fo.BlockNumber(ctx)
 	if err != nil {
 		return blockNumber, "0", fmt.Errorf("获取当前区块高度失败: %w", err)
 	}
 
 	// 获取地址余额 (使用数据库中的最新区块高度)
-	balance, err := client.BalanceAt(ctx, common.HexToAddress(address), big.NewInt(int64(blockNumber)))
+	balance, err := fo.BalanceAt(ctx, common.HexToAddress(address), big.NewInt(int64(blockNumber)))
 	if err != nil {
 		return blockNumber, "0", fmt.Errorf("获取地址余额失败: %w", err)
 	}

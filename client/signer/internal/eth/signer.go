@@ -13,7 +13,6 @@ import (
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	ethcrypto "github.com/ethereum/go-ethereum/crypto"
-	"github.com/ethereum/go-ethereum/rlp"
 )
 
 // ETHSigner ETH签名器
@@ -42,10 +41,15 @@ func (es *ETHSigner) SignTransaction(transaction *pkg.TransactionData) (string, 
 		return "", fmt.Errorf("未找到地址 %s 对应的私钥", transaction.From)
 	}
 
-	// 获取解密密码（隐藏输入）
-	password, err := utils.ReadPassword("请输入私钥解密密码: ")
+	// 获取解密密码（隐藏输入）- 合并确认和密码输入步骤
+	password, err := utils.ReadPassword("请确认此交易并输入私钥解密密码（无密码回车则视为取消）: ")
 	if err != nil {
 		return "", fmt.Errorf("读取密码失败: %w", err)
+	}
+
+	// 如果密码为空，视为取消操作
+	if password == "" {
+		return "", fmt.Errorf("操作已取消")
 	}
 
 	// 解密私钥
@@ -66,15 +70,19 @@ func (es *ETHSigner) SignTransaction(transaction *pkg.TransactionData) (string, 
 		return "", fmt.Errorf("构建交易失败: %w", err)
 	}
 
-	// 3. 使用私钥签名交易
-	signer := types.NewLondonSigner(big.NewInt(1)) // 使用EIP-1559签名器
+	// 3. 使用私钥签名交易（严格按交易的链ID选择签名器）
+	parsedChainID, perr := strconv.ParseInt(transaction.ChainID, 10, 64)
+	if perr != nil {
+		return "", fmt.Errorf("解析链ID失败: %w", perr)
+	}
+	signer := types.LatestSignerForChainID(big.NewInt(parsedChainID))
 	signedTx, err := types.SignTx(tx, signer, privateKey)
 	if err != nil {
 		return "", fmt.Errorf("签名交易失败: %w", err)
 	}
 
-	// 4. 返回完整的签名交易
-	rawTx, err := rlp.EncodeToBytes(signedTx)
+	// 4. 返回完整的签名交易（包含EIP-1559类型前缀）
+	rawTx, err := signedTx.MarshalBinary()
 	if err != nil {
 		return "", fmt.Errorf("编码交易失败: %w", err)
 	}
@@ -108,13 +116,41 @@ func (es *ETHSigner) buildTransaction(transaction *pkg.TransactionData) (*types.
 	// 构建AccessList
 	accessList := es.buildAccessList(transaction.AccessList)
 
-	// 创建EIP-1559交易
+	// 解析费率设置 - 费率必须提供，不能为空
+	if transaction.MaxPriorityFeePerGas == "" {
+		return nil, fmt.Errorf("MaxPriorityFeePerGas不能为空，请在导出交易时设置费率")
+	}
+	if transaction.MaxFeePerGas == "" {
+		return nil, fmt.Errorf("MaxFeePerGas不能为空，请在导出交易时设置费率")
+	}
+
+	gasTipCap, err := strconv.ParseFloat(transaction.MaxPriorityFeePerGas, 64)
+	if err != nil {
+		return nil, fmt.Errorf("解析MaxPriorityFeePerGas失败: %w", err)
+	}
+	if gasTipCap <= 0 {
+		return nil, fmt.Errorf("MaxPriorityFeePerGas必须大于0，当前值: %f", gasTipCap)
+	}
+
+	gasFeeCap, err := strconv.ParseFloat(transaction.MaxFeePerGas, 64)
+	if err != nil {
+		return nil, fmt.Errorf("解析MaxFeePerGas失败: %w", err)
+	}
+	if gasFeeCap <= 0 {
+		return nil, fmt.Errorf("MaxFeePerGas必须大于0，当前值: %f", gasFeeCap)
+	}
+
+	// 转换为wei
+	gasTipCapWei := big.NewInt(int64(gasTipCap * 1e9))
+	gasFeeCapWei := big.NewInt(int64(gasFeeCap * 1e9))
+
+	// 创建EIP-1559交易，使用QR码中的费率设置
 	tx := &types.DynamicFeeTx{
 		ChainID:    big.NewInt(chainID),
 		Nonce:      transaction.Nonce,
-		GasTipCap:  big.NewInt(0), // 设置为0，实际应用中应该从网络获取
-		GasFeeCap:  big.NewInt(0), // 设置为0，实际应用中应该从网络获取
-		Gas:        21000,         // 默认gas limit
+		GasTipCap:  gasTipCapWei, // 使用QR码中的费率
+		GasFeeCap:  gasFeeCapWei, // 使用QR码中的费率
+		Gas:        21000,        // 默认gas limit
 		To:         &to,
 		Value:      value,
 		Data:       data,

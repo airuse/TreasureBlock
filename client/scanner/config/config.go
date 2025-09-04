@@ -48,6 +48,7 @@ type BlockchainConfig struct {
 
 // ChainConfig 链配置
 type ChainConfig struct {
+	ChainID         int      `yaml:"chain_id"`
 	Name            string   `yaml:"name"`
 	Symbol          string   `yaml:"symbol"`
 	Decimals        int      `yaml:"decimals"`

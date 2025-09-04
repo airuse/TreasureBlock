@@ -102,7 +102,6 @@
                     "total_transactions": 25,
                     "draft_count": 2,
                     "unsigned_count": 3,
-                    "unsent_count": 2,
                     "in_progress_count": 1,
                     "packed_count": 1,
                     "confirmed_count": 16,

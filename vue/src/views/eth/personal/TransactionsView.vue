@@ -34,10 +34,6 @@
             <div class="text-sm text-gray-500">未签名</div>
           </div>
           <div class="text-center">
-            <div class="text-2xl font-bold text-blue-600">{{ unsentCount }}</div>
-            <div class="text-sm text-gray-500">未发送</div>
-          </div>
-          <div class="text-center">
             <div class="text-2xl font-bold text-orange-600">{{ inProgressCount }}</div>
             <div class="text-sm text-gray-500">在途</div>
           </div>
@@ -67,7 +63,6 @@
               <option value="">全部状态</option>
               <option value="draft">草稿</option>
               <option value="unsigned">未签名</option>
-              <option value="unsent">未发送</option>
               <option value="in_progress">在途</option>
               <option value="packed">已打包</option>
               <option value="confirmed">已确认</option>
@@ -167,11 +162,11 @@
                     导出交易
                   </button>
                   <button
-                    v-if="tx.status === 'unsent'"
-                    @click="sendTransaction(tx)"
-                    class="text-green-600 hover:text-green-900"
+                    v-if="tx.status === 'unsigned'"
+                    @click="openImportModal(tx)"
+                    class="text-teal-600 hover:text-teal-900"
                   >
-                    发送交易
+                    导入签名
                   </button>
                   <button
                     v-if="tx.status === 'in_progress' || tx.status === 'packed' || tx.status === 'confirmed' || tx.status === 'failed'"
@@ -221,14 +216,6 @@
       @updated="handleTransactionUpdated"
     />
 
-    <!-- 发送交易模态框 -->
-    <SendTransactionModal
-      v-if="selectedTransaction"
-      :show="showSendModal"
-      :transaction="selectedTransaction"
-      @close="showSendModal = false"
-      @sent="handleTransactionSent"
-    />
 
     <!-- QR码预览模态框 -->
     <div v-if="showQRModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
@@ -289,6 +276,130 @@
             class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
           >
             下载QR码
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 费率设置模态框 -->
+    <div v-if="showFeeModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+      <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4">
+        <div class="px-6 py-4 border-b border-gray-200">
+          <h3 class="text-lg font-medium text-gray-900">设置交易费率</h3>
+        </div>
+        
+        <div class="px-6 py-4">
+          <div class="space-y-4">
+            <!-- 手续费模式选择 -->
+            <div>
+              <label class="block text-sm font-medium text-gray-700 mb-2">手续费模式</label>
+              <div class="flex space-x-4">
+                <label class="flex items-center">
+                  <input
+                    type="radio"
+                    v-model="feeMode"
+                    value="auto"
+                    class="mr-2 text-blue-600"
+                  />
+                  <span class="text-sm text-gray-700">自动模式</span>
+                </label>
+                <label class="flex items-center">
+                  <input
+                    type="radio"
+                    v-model="feeMode"
+                    value="manual"
+                    class="mr-2 text-blue-600"
+                  />
+                  <span class="text-sm text-gray-700">手动模式</span>
+                </label>
+              </div>
+            </div>
+
+            <!-- 自动模式 -->
+            <div v-if="feeMode === 'auto'" class="space-y-3">
+              <div class="grid grid-cols-3 gap-3">
+                <label class="flex items-center p-3 border border-gray-200 rounded-lg cursor-pointer hover:border-blue-300">
+                  <input
+                    type="radio"
+                    v-model="autoFeeSpeed"
+                    value="slow"
+                    class="mr-2 text-blue-600"
+                  />
+                  <div>
+                    <div class="font-medium text-gray-900">慢速</div>
+                    <div class="text-xs text-gray-500">{{ autoFeeRates.slow }} Gwei</div>
+                  </div>
+                </label>
+                
+                <label class="flex items-center p-3 border border-gray-200 rounded-lg cursor-pointer hover:border-blue-300">
+                  <input
+                    type="radio"
+                    v-model="autoFeeSpeed"
+                    value="normal"
+                    class="mr-2 text-blue-600"
+                  />
+                  <div>
+                    <div class="font-medium text-gray-900">普通</div>
+                    <div class="text-xs text-gray-500">{{ autoFeeRates.normal }} Gwei</div>
+                  </div>
+                </label>
+                
+                <label class="flex items-center p-3 border border-gray-200 rounded-lg cursor-pointer hover:border-blue-300">
+                  <input
+                    type="radio"
+                    v-model="autoFeeSpeed"
+                    value="fast"
+                    class="mr-2 text-blue-600"
+                  />
+                  <div>
+                    <div class="font-medium text-gray-900">快速</div>
+                    <div class="text-xs text-gray-500">{{ autoFeeRates.fast }} Gwei</div>
+                  </div>
+                </label>
+              </div>
+            </div>
+
+            <!-- 手动模式 -->
+            <div v-if="feeMode === 'manual'" class="space-y-4">
+              <div class="grid grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">矿工费 (Gwei)</label>
+                  <input
+                    v-model="manualFee.maxPriorityFeePerGas"
+                    type="number"
+                    step="0.1"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="1.5"
+                  />
+                </div>
+                
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">最大手续费 (Gwei)</label>
+                  <input
+                    v-model="manualFee.maxFeePerGas"
+                    type="number"
+                    step="0.1"
+                    class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    placeholder="20"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="px-6 py-4 border-t border-gray-200 flex justify-end space-x-3">
+          <button
+            @click="showFeeModal = false"
+            class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+          >
+            取消
+          </button>
+          <button
+            @click="confirmFeeAndExport"
+            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700"
+          >
+            确认并导出
           </button>
         </div>
       </div>
@@ -366,13 +477,12 @@
 import { ref, computed, onMounted, watch } from 'vue'
 import type { UserTransaction, UserTransactionStatsResponse } from '@/types'
 import CreateTransactionModal from '@/components/eth/personal/CreateTransactionModal.vue'
-import SendTransactionModal from '@/components/eth/personal/SendTransactionModal.vue'
-import { getUserTransactions, getUserTransactionStats, exportTransaction as exportTransactionAPI, sendTransaction as sendTransactionAPI, importSignature as importSignatureAPI } from '@/api/user-transactions'
+import { getUserTransactions, getUserTransactionStats, exportTransaction as exportTransactionAPI, importSignature as importSignatureAPI } from '@/api/user-transactions'
 
 // 响应式数据
 const showCreateModal = ref(false)
 const showImportModal = ref(false)
-const showSendModal = ref(false)
+const showFeeModal = ref(false) // 费率设置模态框
 const selectedStatus = ref('')
 const currentPage = ref(1)
 const pageSize = ref(10)
@@ -383,6 +493,19 @@ const selectedTransaction = ref<UserTransaction | null>(null)
 const selectedImportTransactionId = ref<number | ''>('')
 const isEditMode = ref(false) // 是否为编辑模式
 
+// 费率设置相关
+const feeMode = ref<'auto' | 'manual'>('auto')
+const autoFeeSpeed = ref<'slow' | 'normal' | 'fast'>('normal')
+const autoFeeRates = {
+  slow: 1.5,
+  normal: 2.0,
+  fast: 2.5
+}
+const manualFee = ref({
+  maxPriorityFeePerGas: '1.5',
+  maxFeePerGas: '20'
+})
+
 // QR码相关状态
 const showQRModal = ref(false)
 const qrCodeDataURL = ref<string>('')
@@ -391,7 +514,6 @@ const selectedQRTransaction = ref<UserTransaction | null>(null)
 // 交易统计
 const totalTransactions = ref(0)
 const unsignedCount = ref(0)
-const unsentCount = ref(0)
 const inProgressCount = ref(0)
 const confirmedCount = ref(0)
 const draftCount = ref(0)
@@ -414,7 +536,6 @@ const getStatusClass = (status: string) => {
   switch (status) {
     case 'draft': return 'bg-gray-100 text-gray-800'
     case 'unsigned': return 'bg-yellow-100 text-yellow-800'
-    case 'unsent': return 'bg-blue-100 text-blue-800'
     case 'in_progress': return 'bg-orange-100 text-orange-800'
     case 'packed': return 'bg-purple-100 text-purple-800'
     case 'confirmed': return 'bg-green-100 text-green-800'
@@ -428,7 +549,6 @@ const getStatusText = (status: string) => {
   switch (status) {
     case 'draft': return '草稿'
     case 'unsigned': return '未签名'
-    case 'unsent': return '未发送'
     case 'in_progress': return '在途'
     case 'packed': return '已打包'
     case 'confirmed': return '已确认'
@@ -481,53 +601,69 @@ const formatTime = (timestamp: string | undefined) => {
   })
 }
 
-// 格式化金额
+// 格式化金额 - 处理整数金额显示
 const formatAmount = (amount: string, symbol: string, decimals: number | undefined) => {
-  const numAmount = parseFloat(amount)
-  if (isNaN(numAmount)) return amount
+  if (!amount || amount === '0') return '0'
   
-  console.log(`格式化金额: amount=${amount}, symbol=${symbol}, decimals=${decimals}, numAmount=${numAmount}`)
+  // 检查是否是小数，如果是小数，直接返回（可能是旧数据或显示格式）
+  if (amount.includes('.')) {
+    console.log(`检测到小数格式金额: ${amount}，直接返回`)
+    return amount
+  }
+  
+  // 将字符串转换为整数（因为数据库中存储的是整数）
+  let intAmount: bigint
+  try {
+    intAmount = BigInt(amount)
+  } catch (error) {
+    console.error(`无法转换金额为BigInt: ${amount}`, error)
+    return amount // 如果转换失败，返回原始值
+  }
+  
+  if (intAmount === 0n) return '0'
+  
+  console.log(`格式化金额: amount=${amount}, symbol=${symbol}, decimals=${decimals}, intAmount=${intAmount}`)
   
   // 如果明确提供了精度，使用提供的精度
   if (decimals !== undefined && decimals >= 0) {
-    const factor = Math.pow(10, decimals)
-    const readableAmount = numAmount / factor
+    const factor = BigInt(Math.pow(10, decimals).toString())
+    const readableAmount = Number(intAmount) / Number(factor)
     const result = readableAmount.toFixed(Math.min(decimals, 8))
     console.log(`使用提供精度: factor=${factor}, readableAmount=${readableAmount}, result=${result}`)
     return result
   }
   
-  // 如果没有提供精度，根据币种和数值特征智能判断
+  // 如果没有提供精度，根据币种智能判断
   if (symbol === 'ETH') {
     // ETH使用18位精度
-    const factor = Math.pow(10, 18)
-    const readableAmount = numAmount / factor
+    const factor = BigInt('1000000000000000000') // 10^18
+    const readableAmount = Number(intAmount) / Number(factor)
     const result = readableAmount.toFixed(8)
     console.log(`ETH精度: factor=${factor}, readableAmount=${readableAmount}, result=${result}`)
     return result
   } else if (symbol === 'USDC' || symbol === 'USDT') {
     // USDC/USDT使用6位精度
-    const factor = Math.pow(10, 6)
-    const readableAmount = numAmount / factor
+    const factor = BigInt('1000000') // 10^6
+    const readableAmount = Number(intAmount) / Number(factor)
     const result = readableAmount.toFixed(6)
     console.log(`USDC/USDT精度: factor=${factor}, readableAmount=${readableAmount}, result=${result}`)
     return result
   } else if (symbol === 'DAI') {
     // DAI使用18位精度
-    const factor = Math.pow(10, 18)
-    const readableAmount = numAmount / factor
+    const factor = BigInt('1000000000000000000') // 10^18
+    const readableAmount = Number(intAmount) / Number(factor)
     const result = readableAmount.toFixed(8)
     console.log(`DAI精度: factor=${factor}, readableAmount=${readableAmount}, result=${result}`)
     return result
   } else {
     // 其他代币，尝试智能判断精度
-    // 如果数值很大（超过10^12），可能是原始精度，需要转换
-    if (numAmount > Math.pow(10, 12)) {
+    // 如果数值很大，可能是原始精度，需要转换
+    if (intAmount > BigInt('1000000000000')) { // 10^12
       // 尝试常见的精度：6, 8, 18
       const possibleDecimals = [6, 8, 18]
       for (const dec of possibleDecimals) {
-        const factor = Math.pow(10, dec)
-        const readableAmount = numAmount / factor
+        const factor = BigInt(Math.pow(10, dec).toString())
+        const readableAmount = Number(intAmount) / Number(factor)
         // 如果转换后的数值在合理范围内（0.000001 到 1000000），使用这个精度
         if (readableAmount >= 0.000001 && readableAmount <= 1000000) {
           const result = readableAmount.toFixed(Math.min(dec, 8))
@@ -577,18 +713,52 @@ const copyToClipboard = async (text: string) => {
   }
 }
 
-// 导出交易
-const exportTransaction = async (tx: UserTransaction) => {
+// 导出交易 - 先显示费率设置模态框
+const exportTransaction = (tx: UserTransaction) => {
+  selectedTransaction.value = tx
+  showFeeModal.value = true
+}
+
+// 确认费率并导出交易
+const confirmFeeAndExport = async () => {
+  if (!selectedTransaction.value) return
+  
   try {
-    const response = await exportTransactionAPI(tx.id)
+    // 准备费率数据
+    let feeData: any = {}
+    if (feeMode.value === 'auto') {
+      const gasPrice = autoFeeRates[autoFeeSpeed.value]
+      feeData = {
+        maxPriorityFeePerGas: gasPrice.toString(),
+        maxFeePerGas: (gasPrice * 1.5).toString() // 自动模式设置最大费用为优先费用的1.5倍
+      }
+    } else {
+      feeData = {
+        maxPriorityFeePerGas: manualFee.value.maxPriorityFeePerGas,
+        maxFeePerGas: manualFee.value.maxFeePerGas
+      }
+    }
+    
+    // 调用导出API，传递费率数据
+    const response = await exportTransactionAPI(selectedTransaction.value.id, feeData)
     if (response.success) {
+      // 成功导出后，更新本地状态为未签名
+      selectedTransaction.value.status = 'unsigned'
+      
+      // 刷新列表与统计，确保计数正确
+      loadTransactions()
+      loadTransactionStats()
+
+      // 关闭费率设置模态框
+      showFeeModal.value = false
+      
       // 显示QR码预览模态框
-      selectedQRTransaction.value = tx
+      selectedQRTransaction.value = selectedTransaction.value
       showQRModal.value = true
       qrCodeDataURL.value = '' // 重置QR码
       
       // 异步生成QR码
-      generateQRCode(response.data, tx)
+      generateQRCode(response.data, selectedTransaction.value)
       
       console.log('导出交易成功:', response.data)
     } else {
@@ -657,7 +827,7 @@ const generateQRCode = async (transactionData: any, tx: UserTransaction) => {
       nonce: 42, // 从区块链实时获取的nonce
       from: '0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6', // 发送地址，用于签名程序自动匹配私钥
       to: '0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6',
-      value: '0xde0b6b3a7640000', // 十六进制格式 (1 ETH = 10^18 wei)
+      value: '0xde0b6b3a7640000', // 十六进制格式 (1 ETH = 1000000000000000000 wei，数据库中存储为整数)
       data: '0x'
     })
     console.log('ERC-20查询余额:', {
@@ -724,13 +894,18 @@ const createMinimalTransactionData = (tx: UserTransaction, fullData: any) => {
     
     // 链信息 - 优先使用后端保存的chainId
     chainId: fullData.chain_id || (tx.chain === 'eth' ? '1' : tx.chain),
+    type: tx.chain, // 添加类型字段：eth 或 btc
     
     // 交易核心字段
     nonce: fullData.nonce || tx.nonce || 0, // 优先使用API返回的nonce
     from: tx.from_address, // 添加from字段用于签名程序自动匹配私钥
     to: tx.transaction_type === 'token' && tx.token_contract_address ? tx.token_contract_address : tx.to_address,
-    value: tx.transaction_type === 'token' ? '0x0' : convertToHexString(tx.amount || '0'), // 代币转账value为0，ETH转账使用十六进制格式
-    data: fullData.tx_data || generateContractData(tx, fullData) // 优先使用后端保存的tx_data
+    value: tx.transaction_type === 'token' ? '0x0' : convertToHexString(tx.amount || '0'), // 代币转账value为0，ETH转账使用整数金额的十六进制格式
+    data: fullData.tx_data || generateContractData(tx, fullData), // 优先使用后端保存的tx_data
+    
+    // EIP-1559费率字段
+    maxPriorityFeePerGas: fullData.max_priority_fee_per_gas || tx.max_priority_fee_per_gas || '2',
+    maxFeePerGas: fullData.max_fee_per_gas || tx.max_fee_per_gas || '30'
   }
   
   // 添加AccessList - 优先使用后端保存的accessList
@@ -760,15 +935,27 @@ const createMinimalTransactionData = (tx: UserTransaction, fullData: any) => {
 
 // 转换金额为十六进制格式
 const convertToHexString = (amount: string) => {
-  // 如果是浮点数，转换为wei单位（18位精度）
-  const numAmount = parseFloat(amount)
-  if (isNaN(numAmount)) return '0x0'
+  if (!amount || amount === '0') return '0x0'
   
-  // 转换为wei单位（乘以10^18）
-  const weiAmount = Math.floor(numAmount * Math.pow(10, 18))
+  // 检查是否是小数，如果是小数，先转换为整数
+  let intAmount: bigint
+  try {
+    if (amount.includes('.')) {
+      // 如果是小数，先转换为整数（假设是ETH，使用18位精度）
+      const numAmount = parseFloat(amount)
+      const weiAmount = Math.floor(numAmount * Math.pow(10, 18))
+      intAmount = BigInt(weiAmount.toString())
+    } else {
+      // 如果已经是整数格式，直接转换
+      intAmount = BigInt(amount)
+    }
+  } catch (error) {
+    console.error(`无法转换金额为BigInt: ${amount}`, error)
+    return '0x0'
+  }
   
   // 转换为十六进制字符串
-  const hexString = weiAmount.toString(16)
+  const hexString = intAmount.toString(16)
   return '0x' + hexString
 }
 
@@ -822,7 +1009,7 @@ const generateTransferData = (toAddress: string, amount: string) => {
   const functionSelector = '0xa9059cbb'
   // 接收地址参数（32字节，右对齐）
   const toParam = toAddress.slice(2).padStart(64, '0')
-  // 金额参数（32字节，转换为十六进制wei）
+  // 金额参数（32字节，直接使用整数金额的十六进制）
   const amountHex = convertToHexString(amount)
   const amountParam = amountHex.slice(2).padStart(64, '0')
   return functionSelector + toParam + amountParam
@@ -834,7 +1021,7 @@ const generateApproveData = (spenderAddress: string, amount: string) => {
   const functionSelector = '0x095ea7b3'
   // 被授权者地址参数（32字节，右对齐）
   const spenderParam = spenderAddress.slice(2).padStart(64, '0')
-  // 授权金额参数（32字节，转换为十六进制wei）
+  // 授权金额参数（32字节，直接使用整数金额的十六进制）
   const amountHex = convertToHexString(amount)
   const amountParam = amountHex.slice(2).padStart(64, '0')
   return functionSelector + spenderParam + amountParam
@@ -848,7 +1035,7 @@ const generateTransferFromData = (fromAddress: string, toAddress: string, amount
   const fromParam = fromAddress.slice(2).padStart(64, '0')
   // 接收者地址参数（32字节，右对齐）
   const toParam = toAddress.slice(2).padStart(64, '0')
-  // 金额参数（32字节，转换为十六进制wei）
+  // 金额参数（32字节，直接使用整数金额的十六进制）
   const amountHex = convertToHexString(amount)
   const amountParam = amountHex.slice(2).padStart(64, '0')
   return functionSelector + fromParam + toParam + amountParam
@@ -956,11 +1143,6 @@ const downloadQRCode = () => {
   }, 3000)
 }
 
-// 发送交易
-const sendTransaction = (tx: UserTransaction) => {
-  selectedTransaction.value = tx
-  showSendModal.value = true
-}
 
 // 查看交易
 const viewTransaction = (tx: UserTransaction) => {
@@ -1030,6 +1212,12 @@ const importSignatureData = async () => {
       return
     }
     
+    // 验证ID是否匹配
+    if (signatureData.id !== undefined && signatureData.id !== id) {
+      alert(`签名数据ID(${signatureData.id})与所选交易ID(${id})不匹配`)
+      return
+    }
+    
     // 调用导入签名API
     const response = await importSignatureAPI(id, { 
       id, 
@@ -1072,6 +1260,17 @@ const parseSignatureData = (signatureText: string) => {
       }
     }
     
+    // 支持格式：{"id":2,"signer":"0x..."}
+    if ((typeof data.id === 'number' || typeof data.id === 'string') && typeof data.signer === 'string') {
+      return {
+        id: typeof data.id === 'string' ? parseInt(data.id, 10) : data.id,
+        signedTx: data.signer,
+        v: null,
+        r: null,
+        s: null
+      }
+    }
+    
     // 如果只是签名交易字符串
     if (typeof data === 'string' || data.signedTx) {
       return {
@@ -1099,6 +1298,12 @@ const parseSignatureData = (signatureText: string) => {
   }
 }
 
+// 从操作列打开导入签名模态框并预选交易
+const openImportModal = (tx: UserTransaction) => {
+  selectedImportTransactionId.value = tx.id
+  showImportModal.value = true
+}
+
 // 处理交易创建成功
 const handleTransactionCreated = (transaction: any) => {
   console.log('交易创建成功:', transaction)
@@ -1109,13 +1314,6 @@ const handleTransactionCreated = (transaction: any) => {
   selectedTransaction.value = null // 清除选中的交易
 }
 
-// 处理交易发送成功
-const handleTransactionSent = (transaction: any) => {
-  console.log('交易发送成功:', transaction)
-  // 刷新交易列表和统计
-  loadTransactions()
-  loadTransactionStats()
-}
 
 // 处理模态框关闭
 const handleModalClose = () => {
@@ -1178,7 +1376,6 @@ const loadTransactionStats = async () => {
       totalTransactions.value = stats.total_transactions
       draftCount.value = stats.draft_count
       unsignedCount.value = stats.unsigned_count
-      unsentCount.value = stats.unsent_count
       inProgressCount.value = stats.in_progress_count
       packedCount.value = stats.packed_count
       confirmedCount.value = stats.confirmed_count

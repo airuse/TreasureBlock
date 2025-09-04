@@ -80,25 +80,27 @@ blockchain:
   max_verification_time: 20s       # 最大验证时间
   chains:
     btc:
+      chain_id: 0
       name: "Bitcoin"
       symbol: "BTC"
       decimals: 8
       enabled: true
-      rpc_url: "http://127.0.0.1:8332"
+      rpc_urls:
+        - "http://127.0.0.1:8332"
       username: "bitcoin"
       password: "bitcoin123"
     eth:
+      chain_id: 11155111
       name: "Ethereum"
       symbol: "ETH"
       decimals: 18
       enabled: true
-      rpc_url: "https://alpha-clean-yard.quiknode.pro/7979488c04b1a36bdc4230b23e3eaac3e9c1c1af" #"https://alpha-clean-yard.ethereum-sepolia.quiknode.pro/7979488c04b1a36bdc4230b23e3eaac3e9c1c1af"
-    bsc:
-      name: "Binance Smart Chain"
-      symbol: "BNB"
-      decimals: 18
-      enabled: false
-      rpc_url: "http://127.0.0.1:8545"
+      rpc_urls:
+        - "https://alpha-clean-yard.ethereum-sepolia.quiknode.pro/7979488c04b1a36bdc4230b23e3eaac3e9c1c1af"
+        - "https://newest-ultra-friday.ethereum-sepolia.quiknode.pro/7091d98af3809c189285739c3f4141b94f368fff"
+        - "https://yolo-smart-tree.ethereum-sepolia.quiknode.pro/52836b8f979fca7325258c42925d6c245ca45079"
+        - "https://thrilling-summer-frost.ethereum-sepolia.quiknode.pro/ca8e71700184f645a7935acf1487acd191e429a1"
+        - "https://warmhearted-bold-emerald.ethereum-sepolia.quiknode.pro/be4e6633f9443a4dd26046d40be1650a810db3a1"
 
 cache:
   enabled: false
