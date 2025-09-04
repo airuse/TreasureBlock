@@ -146,6 +146,21 @@ func (m *EthFailoverManager) BlockByHash(ctx context.Context, hash common.Hash) 
 	return nil, lastErr
 }
 
+// BlockByNumber 故障转移查询区块
+func (m *EthFailoverManager) BlockByNumber(ctx context.Context, number *big.Int) (*types.Block, error) {
+	var lastErr error
+	deadline := time.Now().Add(15 * time.Second)
+	for time.Now().Before(deadline) {
+		cli := m.next()
+		b, err := cli.BlockByNumber(ctx, number)
+		if err == nil {
+			return b, nil
+		}
+		lastErr = err
+	}
+	return nil, lastErr
+}
+
 // NonceAt 故障转移查询nonce
 func (m *EthFailoverManager) NonceAt(ctx context.Context, account common.Address, blockNumber *big.Int) (uint64, error) {
 	var lastErr error

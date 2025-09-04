@@ -6,6 +6,7 @@ import (
 	"strings"
 	"time"
 
+	"blockChainBrowser/server/internal/interfaces"
 	"blockChainBrowser/server/internal/models"
 	"blockChainBrowser/server/internal/repository"
 	"blockChainBrowser/server/internal/utils"
@@ -19,6 +20,7 @@ type TransactionStatusScheduler struct {
 	logger     *logrus.Logger
 	rpcManager *utils.RPCClientManager
 	baseCfgSvc BaseConfigService
+	wsHandler  interfaces.WebSocketBroadcaster // WebSocket广播接口
 }
 
 // NewTransactionStatusScheduler 创建交易状态调度器
@@ -29,6 +31,11 @@ func NewTransactionStatusScheduler() *TransactionStatusScheduler {
 		rpcManager: utils.NewRPCClientManager(),
 		baseCfgSvc: NewBaseConfigService(repository.NewBaseConfigRepository()),
 	}
+}
+
+// SetWebSocketHandler 设置WebSocket处理器
+func (s *TransactionStatusScheduler) SetWebSocketHandler(handler interfaces.WebSocketBroadcaster) {
+	s.wsHandler = handler
 }
 
 // Start 启动调度器
@@ -127,6 +134,9 @@ func (s *TransactionStatusScheduler) updateTransactionStatus(ctx context.Context
 			s.logger.Errorf("更新交易状态失败: ID=%d, Error=%v", tx.ID, err)
 		} else {
 			s.logger.Infof("交易状态已更新: ID=%d, 从 %s 到 %s", tx.ID, oldStatus, tx.Status)
+
+			// 广播状态更新事件
+			s.broadcastTransactionStatusUpdate(tx)
 		}
 	}
 }
@@ -143,6 +153,29 @@ func (s *TransactionStatusScheduler) getSafeConfirmations(ctx context.Context, c
 		return 0
 	}
 	return v
+}
+
+// broadcastTransactionStatusUpdate 广播交易状态更新
+func (s *TransactionStatusScheduler) broadcastTransactionStatusUpdate(tx *models.UserTransaction) {
+	if s.wsHandler == nil {
+		return
+	}
+
+	// 构建状态更新数据
+	statusUpdateData := map[string]interface{}{
+		"id":            tx.ID,
+		"status":        tx.Status,
+		"tx_hash":       tx.TxHash,
+		"block_height":  tx.BlockHeight,
+		"confirmations": tx.Confirmations,
+		"error_msg":     tx.ErrorMsg,
+		"updated_at":    tx.UpdatedAt,
+	}
+
+	s.logger.Infof("广播交易状态更新: ID=%d, Status=%s, Data=%+v", tx.ID, tx.Status, statusUpdateData)
+
+	// 通过接口调用WebSocket广播方法
+	s.wsHandler.BroadcastTransactionStatusUpdate(tx.Chain, statusUpdateData)
 }
 
 // Stop 停止调度器

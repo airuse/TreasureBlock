@@ -517,6 +517,125 @@ func (c *BitcoinRPCClient) GetTransaction(ctx context.Context, txHash string) (m
 	return result, nil
 }
 
+// GetBlockCount 获取最新区块高度（BTC）
+func (c *BitcoinRPCClient) GetBlockCount(ctx context.Context) (uint64, error) {
+	request := BitcoinRPCRequest{
+		JSONRPC: "1.0",
+		ID:      "1",
+		Method:  "getblockcount",
+		Params:  []interface{}{},
+	}
+
+	response, err := c.callRPC(ctx, request)
+	if err != nil {
+		return 0, err
+	}
+
+	if response.Error != nil {
+		return 0, fmt.Errorf("RPC错误: %s (代码: %d)", response.Error.Message, response.Error.Code)
+	}
+
+	count, ok := response.Result.(float64)
+	if !ok {
+		return 0, fmt.Errorf("无效的响应格式")
+	}
+
+	return uint64(count), nil
+}
+
+// GetBlockNumber 获取最新区块号
+func (m *RPCClientManager) GetBlockNumber(ctx context.Context, chain string) (uint64, error) {
+	chainName := strings.ToLower(chain)
+
+	switch chainName {
+	case "eth", "ethereum":
+		return m.getETHBlockNumber(ctx)
+	case "btc", "bitcoin":
+		return m.getBTCBlockNumber(ctx)
+	default:
+		return 0, fmt.Errorf("不支持的链类型: %s", chain)
+	}
+}
+
+// getETHBlockNumber 获取ETH最新区块号
+func (m *RPCClientManager) getETHBlockNumber(ctx context.Context) (uint64, error) {
+	// 获取ETH故障转移管理器
+	fo, exists := m.ethFailovers["eth"]
+	if !exists {
+		// 尝试其他可能的键名
+		for key, f := range m.ethFailovers {
+			if strings.Contains(strings.ToLower(key), "eth") {
+				fo = f
+				exists = true
+				break
+			}
+		}
+	}
+
+	if !exists {
+		return 0, fmt.Errorf("未找到ETH故障转移管理器")
+	}
+
+	return fo.BlockNumber(ctx)
+}
+
+// getBTCBlockNumber 获取BTC最新区块号
+func (m *RPCClientManager) getBTCBlockNumber(ctx context.Context) (uint64, error) {
+	// 获取BTC客户端
+	client, exists := m.btcClients["btc"]
+	if !exists {
+		for key, cli := range m.btcClients {
+			if strings.Contains(strings.ToLower(key), "btc") {
+				client = cli
+				exists = true
+				break
+			}
+		}
+	}
+
+	if !exists {
+		return 0, fmt.Errorf("未找到BTC客户端")
+	}
+
+	return client.GetBlockCount(ctx)
+}
+
+// GetBlockByNumber 根据区块号获取区块
+func (m *RPCClientManager) GetBlockByNumber(ctx context.Context, chain string, blockNumber *big.Int) (*types.Block, error) {
+	chainName := strings.ToLower(chain)
+
+	switch chainName {
+	case "eth", "ethereum":
+		return m.getETHBlockByNumber(ctx, blockNumber)
+	case "btc", "bitcoin":
+		return nil, fmt.Errorf("BTC不支持通过区块号获取区块，请使用GetBlockByHash")
+	default:
+		return nil, fmt.Errorf("不支持的链类型: %s", chain)
+	}
+}
+
+// getETHBlockByNumber 获取ETH区块
+func (m *RPCClientManager) getETHBlockByNumber(ctx context.Context, blockNumber *big.Int) (*types.Block, error) {
+	// 获取ETH故障转移管理器
+	fo, exists := m.ethFailovers["eth"]
+	if !exists {
+		// 尝试其他可能的键名
+		for key, f := range m.ethFailovers {
+			if strings.Contains(strings.ToLower(key), "eth") {
+				fo = f
+				exists = true
+				break
+			}
+		}
+	}
+
+	if !exists {
+		return nil, fmt.Errorf("未找到ETH故障转移管理器")
+	}
+
+	return fo.BlockByNumber(ctx, blockNumber)
+}
+
 // Close 关闭所有连接
 func (m *RPCClientManager) Close() {
 	for _, client := range m.ethFailovers {

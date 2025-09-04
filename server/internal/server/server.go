@@ -24,6 +24,7 @@ type Server struct {
 	httpServer                 *http.Server
 	tlsServer                  *http.Server
 	transactionStatusScheduler *services.TransactionStatusScheduler
+	feeScheduler               *services.FeeScheduler
 }
 
 // New 创建服务器实例
@@ -116,7 +117,13 @@ func New() *Server {
 
 	// 创建并启动交易状态调度器
 	transactionStatusScheduler := services.NewTransactionStatusScheduler()
+	transactionStatusScheduler.SetWebSocketHandler(wsHandler)
 	go transactionStatusScheduler.Start(context.Background())
+
+	// 创建并启动费率调度器
+	feeScheduler := services.NewFeeScheduler()
+	feeScheduler.SetWebSocketHandler(wsHandler)
+	go feeScheduler.Start(context.Background())
 
 	// 设置路由
 	router := routes.SetupRoutes(
@@ -169,6 +176,7 @@ func New() *Server {
 		httpServer:                 httpServer,
 		tlsServer:                  tlsServer,
 		transactionStatusScheduler: transactionStatusScheduler,
+		feeScheduler:               feeScheduler,
 	}
 }
 

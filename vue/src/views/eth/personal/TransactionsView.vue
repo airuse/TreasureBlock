@@ -8,10 +8,84 @@
             <h1 class="text-2xl font-bold text-gray-900">交易历史</h1>
             <p class="mt-1 text-sm text-gray-500">查看和管理您的交易记录</p>
           </div>
+          <div class="flex items-center space-x-4">
+            <!-- 网络状态 -->
           <div class="flex items-center space-x-2">
             <div class="w-3 h-3 bg-blue-500 rounded-full"></div>
             <span class="text-sm text-gray-600">ETH 网络</span>
           </div>
+            <!-- 网络拥堵状态 -->
+            <div v-if="networkCongestion" class="flex items-center space-x-2">
+              <div :class="[
+                'w-2 h-2 rounded-full',
+                networkCongestion === 'high' ? 'bg-red-500' : 
+                networkCongestion === 'medium' ? 'bg-yellow-500' : 'bg-green-500'
+              ]"></div>
+              <span class="text-xs text-gray-500">
+                {{ networkCongestion === 'high' ? '高拥堵' : 
+                   networkCongestion === 'medium' ? '中等拥堵' : '低拥堵' }}
+              </span>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <!-- 实时费率信息 -->
+    <div v-if="feeLevels" class="bg-white shadow rounded-lg">
+      <div class="px-4 py-5 sm:p-6">
+        <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">实时费率信息</h3>
+        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
+          <!-- 慢速费率 -->
+          <div class="border border-gray-200 rounded-lg p-4">
+            <div class="flex items-center justify-between mb-2">
+              <h4 class="text-sm font-medium text-gray-900">慢速</h4>
+              <span class="text-xs text-gray-500">较慢确认</span>
+            </div>
+            <div class="space-y-1">
+              <div class="text-sm text-gray-600">
+                Max Fee: <span class="font-mono">{{ formatFeeForDisplay(feeLevels.slow.max_fee) }} Gwei</span>
+              </div>
+              <div class="text-xs text-gray-500">
+                Priority: {{ formatFeeForDisplay(feeLevels.slow.max_priority_fee) }} Gwei
+              </div>
+            </div>
+          </div>
+          
+          <!-- 普通费率 -->
+          <div class="border border-blue-200 bg-blue-50 rounded-lg p-4">
+            <div class="flex items-center justify-between mb-2">
+              <h4 class="text-sm font-medium text-blue-900">普通</h4>
+              <span class="text-xs text-blue-600">推荐</span>
+            </div>
+            <div class="space-y-1">
+              <div class="text-sm text-blue-800">
+                Max Fee: <span class="font-mono">{{ formatFeeForDisplay(feeLevels.normal.max_fee) }} Gwei</span>
+              </div>
+              <div class="text-xs text-blue-600">
+                Priority: {{ formatFeeForDisplay(feeLevels.normal.max_priority_fee) }} Gwei
+              </div>
+            </div>
+          </div>
+          
+          <!-- 快速费率 -->
+          <div class="border border-gray-200 rounded-lg p-4">
+            <div class="flex items-center justify-between mb-2">
+              <h4 class="text-sm font-medium text-gray-900">快速</h4>
+              <span class="text-xs text-gray-500">快速确认</span>
+            </div>
+            <div class="space-y-1">
+              <div class="text-sm text-gray-600">
+                Max Fee: <span class="font-mono">{{ formatFeeForDisplay(feeLevels.fast.max_fee) }} Gwei</span>
+              </div>
+              <div class="text-xs text-gray-500">
+                Priority: {{ formatFeeForDisplay(feeLevels.fast.max_priority_fee) }} Gwei
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="mt-3 text-xs text-gray-500 text-center">
+          最后更新: {{ formatTime(feeLevels.normal.last_updated) }}
         </div>
       </div>
     </div>
@@ -327,11 +401,13 @@
                   />
                   <div>
                     <div class="font-medium text-gray-900">慢速</div>
-                    <div class="text-xs text-gray-500">{{ autoFeeRates.slow }} Gwei</div>
+                    <div class="text-xs text-gray-500">
+                      {{ feeLevels ? formatFeeForDisplay(feeLevels.slow.max_fee) + ' Gwei' : autoFeeRates.slow + ' Gwei' }}
+                    </div>
                   </div>
                 </label>
                 
-                <label class="flex items-center p-3 border border-gray-200 rounded-lg cursor-pointer hover:border-blue-300">
+                <label class="flex items-center p-3 border border-blue-200 bg-blue-50 rounded-lg cursor-pointer hover:border-blue-300">
                   <input
                     type="radio"
                     v-model="autoFeeSpeed"
@@ -339,8 +415,10 @@
                     class="mr-2 text-blue-600"
                   />
                   <div>
-                    <div class="font-medium text-gray-900">普通</div>
-                    <div class="text-xs text-gray-500">{{ autoFeeRates.normal }} Gwei</div>
+                    <div class="font-medium text-blue-900">普通</div>
+                    <div class="text-xs text-blue-600">
+                      {{ feeLevels ? formatFeeForDisplay(feeLevels.normal.max_fee) + ' Gwei' : autoFeeRates.normal + ' Gwei' }}
+                    </div>
                   </div>
                 </label>
                 
@@ -353,9 +431,35 @@
                   />
                   <div>
                     <div class="font-medium text-gray-900">快速</div>
-                    <div class="text-xs text-gray-500">{{ autoFeeRates.fast }} Gwei</div>
+                    <div class="text-xs text-gray-500">
+                      {{ feeLevels ? formatFeeForDisplay(feeLevels.fast.max_fee) + ' Gwei' : autoFeeRates.fast + ' Gwei' }}
+                    </div>
                   </div>
                 </label>
+              </div>
+              
+              <!-- 实时费率提示 -->
+              <div v-if="feeLevels" class="bg-blue-50 border border-blue-200 rounded-md p-3">
+                <div class="flex">
+                  <div class="flex-shrink-0">
+                    <svg class="h-5 w-5 text-blue-400" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                    </svg>
+                  </div>
+                  <div class="ml-3">
+                    <p class="text-sm text-blue-800">
+                      使用实时费率数据，网络拥堵状态: 
+                      <span :class="[
+                        'font-medium',
+                        networkCongestion === 'high' ? 'text-red-600' : 
+                        networkCongestion === 'medium' ? 'text-yellow-600' : 'text-green-600'
+                      ]">
+                        {{ networkCongestion === 'high' ? '高拥堵' : 
+                           networkCongestion === 'medium' ? '中等拥堵' : '低拥堵' }}
+                      </span>
+                    </p>
+                  </div>
+                </div>
               </div>
             </div>
 
@@ -478,6 +582,8 @@ import { ref, computed, onMounted, watch } from 'vue'
 import type { UserTransaction, UserTransactionStatsResponse } from '@/types'
 import CreateTransactionModal from '@/components/eth/personal/CreateTransactionModal.vue'
 import { getUserTransactions, getUserTransactionStats, exportTransaction as exportTransactionAPI, importSignature as importSignatureAPI } from '@/api/user-transactions'
+import { useChainWebSocket } from '@/composables/useWebSocket'
+import type { FeeLevels, TransactionStatusUpdate } from '@/utils/websocket'
 
 // 响应式数据
 const showCreateModal = ref(false)
@@ -522,6 +628,13 @@ const failedCount = ref(0)
 
 // 交易列表
 const transactionsList = ref<UserTransaction[]>([])
+
+// WebSocket相关
+const { subscribeChainEvent } = useChainWebSocket('eth')
+
+// 费率数据
+const feeLevels = ref<FeeLevels | null>(null)
+const networkCongestion = ref<string>('normal')
 
 // 计算属性
 const filteredTransactions = computed(() => {
@@ -590,14 +703,37 @@ const getContractOperationText = (type: string) => {
 }
 
 // 格式化时间
-const formatTime = (timestamp: string | undefined) => {
+const formatTime = (timestamp: string | number | undefined) => {
   if (!timestamp) return '未知时间'
-  return new Date(timestamp).toLocaleString('zh-CN', {
+  
+  let date: Date
+  if (typeof timestamp === 'number') {
+    // 判断是秒还是毫秒时间戳
+    // 如果时间戳小于 1e12，认为是秒时间戳，需要转换为毫秒
+    if (timestamp < 1e12) {
+      date = new Date(timestamp * 1000)
+    } else {
+      date = new Date(timestamp)
+    }
+  } else if (typeof timestamp === 'string') {
+    // 如果是字符串，尝试解析
+    date = new Date(timestamp)
+  } else {
+    return '未知时间'
+  }
+  
+  // 检查日期是否有效
+  if (isNaN(date.getTime())) {
+    return '无效时间'
+  }
+  
+  return date.toLocaleString('zh-CN', {
     year: 'numeric',
     month: '2-digit',
     day: '2-digit',
     hour: '2-digit',
-    minute: '2-digit'
+    minute: '2-digit',
+    second: '2-digit'
   })
 }
 
@@ -727,15 +863,28 @@ const confirmFeeAndExport = async () => {
     // 准备费率数据
     let feeData: any = {}
     if (feeMode.value === 'auto') {
-      const gasPrice = autoFeeRates[autoFeeSpeed.value]
-      feeData = {
-        maxPriorityFeePerGas: gasPrice.toString(),
-        maxFeePerGas: (gasPrice * 1.5).toString() // 自动模式设置最大费用为优先费用的1.5倍
+      // 使用实时费率数据
+      if (feeLevels.value) {
+        const selectedFee = feeLevels.value[autoFeeSpeed.value]
+        feeData = {
+          maxPriorityFeePerGas: selectedFee.max_priority_fee,
+          maxFeePerGas: selectedFee.max_fee
+        }
+      } else {
+        // 降级到默认费率
+        const gasPrice = autoFeeRates[autoFeeSpeed.value]
+        feeData = {
+          maxPriorityFeePerGas: (gasPrice * 1e9).toString(), // 转换为Wei
+          maxFeePerGas: (gasPrice * 1.5 * 1e9).toString() // 转换为Wei
+        }
       }
     } else {
+      // 手动模式，将Gwei转换为Wei
+      const priorityFeeWei = (parseFloat(manualFee.value.maxPriorityFeePerGas) * 1e9).toString()
+      const maxFeeWei = (parseFloat(manualFee.value.maxFeePerGas) * 1e9).toString()
       feeData = {
-        maxPriorityFeePerGas: manualFee.value.maxPriorityFeePerGas,
-        maxFeePerGas: manualFee.value.maxFeePerGas
+        maxPriorityFeePerGas: priorityFeeWei,
+        maxFeePerGas: maxFeeWei
       }
     }
     
@@ -1150,7 +1299,7 @@ const viewTransaction = (tx: UserTransaction) => {
   console.log('查看交易详情:', tx)
   
   let details = `交易详情:
-
+  
 ID: ${tx.id}
 状态: ${getStatusText(tx.status)}
 链类型: ${tx.chain.toUpperCase()}
@@ -1392,6 +1541,62 @@ watch(selectedStatus, () => {
   loadTransactions()
 })
 
+// 格式化费率显示（Wei转Gwei）
+const formatFeeForDisplay = (feeWei: string) => {
+  if (!feeWei) return '0'
+  
+  try {
+    const feeBig = BigInt(feeWei)
+    const gwei = Number(feeBig) / 1e9
+    return gwei.toFixed(2)
+  } catch (error) {
+    console.error('费率格式化失败:', error)
+    return '0'
+  }
+}
+
+// WebSocket监听
+const setupWebSocketListeners = () => {
+  // 监听费率更新
+  subscribeChainEvent('network', (message) => {
+    if (message.action === 'fee_update' && message.data) {
+      console.log('收到费率更新:', message.data)
+      feeLevels.value = message.data as unknown as FeeLevels
+      if (feeLevels.value?.normal?.network_congestion) {
+        networkCongestion.value = feeLevels.value.normal.network_congestion
+      }
+    }
+  })
+
+  // 监听交易状态更新
+  subscribeChainEvent('transaction', (message) => {
+    if (message.action === 'status_update' && message.data) {
+      console.log('收到交易状态更新:', message.data)
+      const statusUpdate = message.data as unknown as TransactionStatusUpdate
+      
+      // 更新本地交易列表中的对应交易
+      const txIndex = transactionsList.value.findIndex(tx => tx.id === statusUpdate.id)
+      if (txIndex !== -1) {
+        const tx = transactionsList.value[txIndex]
+        tx.status = statusUpdate.status
+        if (statusUpdate.tx_hash) tx.tx_hash = statusUpdate.tx_hash
+        if (statusUpdate.block_height) tx.block_height = statusUpdate.block_height
+        if (statusUpdate.confirmations) tx.confirmations = statusUpdate.confirmations
+        if (statusUpdate.error_msg) tx.error_msg = statusUpdate.error_msg
+        tx.updated_at = statusUpdate.updated_at
+        
+        // 触发响应式更新
+        transactionsList.value = [...transactionsList.value]
+        
+        // 刷新统计信息
+        loadTransactionStats()
+        
+        console.log(`交易 ${statusUpdate.id} 状态已更新为: ${statusUpdate.status}`)
+      }
+    }
+  })
+}
+
 // 监听模态框状态变化
 watch(showCreateModal, (newVal) => {
   if (!newVal) {
@@ -1404,5 +1609,6 @@ watch(showCreateModal, (newVal) => {
 onMounted(() => {
   loadTransactions()
   loadTransactionStats()
+  setupWebSocketListeners()
 })
 </script>

@@ -370,6 +370,52 @@ func (h *WebSocketHandler) BroadcastStatsEvent(chain ChainType, statsData interf
 	h.BroadcastMessage(message)
 }
 
+// BroadcastFeeEvent 广播费率信息事件
+func (h *WebSocketHandler) BroadcastFeeEvent(chain interface{}, feeData interface{}) {
+	chainType, ok := chain.(ChainType)
+	if !ok {
+		// 如果是字符串，转换为ChainType
+		if chainStr, ok := chain.(string); ok {
+			chainType = ChainType(chainStr)
+		} else {
+			chainType = ChainTypeETH // 默认值
+		}
+	}
+
+	message := WebSocketMessage{
+		Type:      MessageTypeEvent,
+		Category:  MessageCategoryNetwork,
+		Action:    "fee_update",
+		Data:      feeData,
+		Timestamp: time.Now().UnixMilli(),
+		Chain:     chainType,
+	}
+	h.BroadcastMessage(message)
+}
+
+// BroadcastTransactionStatusUpdate 广播交易状态更新事件
+func (h *WebSocketHandler) BroadcastTransactionStatusUpdate(chain interface{}, txData interface{}) {
+	chainType, ok := chain.(ChainType)
+	if !ok {
+		// 如果是字符串，转换为ChainType
+		if chainStr, ok := chain.(string); ok {
+			chainType = ChainType(chainStr)
+		} else {
+			chainType = ChainTypeETH // 默认值
+		}
+	}
+
+	message := WebSocketMessage{
+		Type:      MessageTypeEvent,
+		Category:  MessageCategoryTransaction,
+		Action:    "status_update",
+		Data:      txData,
+		Timestamp: time.Now().UnixMilli(),
+		Chain:     chainType,
+	}
+	h.BroadcastMessage(message)
+}
+
 // Start 启动WebSocket处理器
 func (h *WebSocketHandler) Start() {
 	go func() {

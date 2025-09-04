@@ -4,10 +4,40 @@ import { ref, computed } from 'vue'
 export interface WebSocketMessage {
   type: 'event' | 'notification'  // 第一级别：事件或通知
   category: 'transaction' | 'block' | 'address' | 'stats' | 'network'  // 第二级别：数据类型
-  action?: 'create' | 'update' | 'delete'  // 第三级别：动作类型（create, update, delete等）
+  action?: 'create' | 'update' | 'delete' | 'fee_update' | 'status_update'  // 第三级别：动作类型
   data: Record<string, unknown>  // 第四级别：真实数据
   timestamp: number
   chain: 'eth' | 'btc'  // 区块链类型
+}
+
+// 费率数据结构
+export interface FeeData {
+  chain: string
+  base_fee: string  // Base Fee (Wei)
+  max_priority_fee: string  // Max Priority Fee (Wei)
+  max_fee: string  // Max Fee (Wei)
+  gas_price: string  // Legacy Gas Price (Wei)
+  last_updated: number  // 最后更新时间戳
+  block_number: number  // 当前区块号
+  network_congestion: string  // 网络拥堵状态
+}
+
+// 费率等级
+export interface FeeLevels {
+  slow: FeeData
+  normal: FeeData
+  fast: FeeData
+}
+
+// 交易状态更新数据
+export interface TransactionStatusUpdate {
+  id: number
+  status: string
+  tx_hash?: string
+  block_height?: number
+  confirmations?: number
+  error_msg?: string
+  updated_at: string
 }
 
 // WebSocket事件类型
