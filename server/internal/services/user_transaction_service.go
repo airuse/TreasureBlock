@@ -9,6 +9,7 @@ import (
 	"blockChainBrowser/server/internal/utils"
 	"context"
 	"encoding/hex"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
@@ -17,6 +18,7 @@ import (
 	"time"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/sirupsen/logrus"
 )
 
@@ -194,6 +196,25 @@ func (s *userTransactionService) ExportTransaction(ctx context.Context, id uint,
 		return nil, errors.New("当前状态的交易无法导出")
 	}
 
+	// 如果交易已有hash，说明已经在途，需要检查是否已打包
+	if userTx.TxHash != nil && *userTx.TxHash != "" {
+		// 调用RPC检查交易是否已打包
+		isPacked, err := s.checkTransactionPacked(ctx, userTx.Chain, *userTx.TxHash)
+		if err != nil {
+			return nil, fmt.Errorf("检查交易状态失败: %w", err)
+		}
+
+		if isPacked {
+			// 交易已打包，更新数据库状态
+			userTx.Status = "packed"
+			userTx.UpdatedAt = time.Now()
+			if err := s.userTxRepo.Update(ctx, userTx); err != nil {
+				fmt.Printf("更新交易状态失败: %v\n", err)
+			}
+			return nil, errors.New("此交易已经被打包上线，不能替换！")
+		}
+	}
+
 	// 获取发送地址的当前nonce（如果交易中没有设置nonce）
 	currentNonce := userTx.Nonce
 	if currentNonce == nil {
@@ -362,8 +383,27 @@ func (s *userTransactionService) ImportSignature(ctx context.Context, id uint, u
 	}
 
 	// 检查是否可以导入签名
-	if userTx.Status != "unsigned" {
-		return nil, errors.New("只有未签名状态的交易才能导入签名")
+	if userTx.Status != "unsigned" && userTx.Status != "in_progress" {
+		return nil, errors.New("只有未签名或在途状态的交易才能导入签名")
+	}
+
+	// 如果交易已有hash，说明已经在途，需要检查是否已打包
+	if userTx.TxHash != nil && *userTx.TxHash != "" {
+		// 调用RPC检查交易是否已打包
+		isPacked, err := s.checkTransactionPacked(ctx, userTx.Chain, *userTx.TxHash)
+		if err != nil {
+			return nil, fmt.Errorf("检查交易状态失败: %w", err)
+		}
+
+		if isPacked {
+			// 交易已打包，更新数据库状态
+			userTx.Status = "packed"
+			userTx.UpdatedAt = time.Now()
+			if err := s.userTxRepo.Update(ctx, userTx); err != nil {
+				fmt.Printf("更新交易状态失败: %v\n", err)
+			}
+			return nil, errors.New("此交易已经被打包上线，不能替换！")
+		}
 	}
 
 	// 更新签名数据
@@ -864,12 +904,114 @@ func (s *userTransactionService) getParserConfigByOperation(ctx context.Context,
 func (s *userTransactionService) generateAccessList(userTx *models.UserTransaction) string {
 	// 如果是代币交易，生成AccessList
 	if userTx.TransactionType == "token" && userTx.TokenContractAddress != "" {
-		// 简化处理，返回空的AccessList
-		// TODO: 实现完整的AccessList生成逻辑
-		return "[]"
+		accessList := s.generateAccessListForTokenTransfer(userTx)
+		if len(accessList) == 0 {
+			return "[]"
+		}
+
+		// 转换为JSON字符串
+		jsonData, err := json.Marshal(accessList)
+		if err != nil {
+			s.logger.Errorf("序列化AccessList失败: %v", err)
+			return "[]"
+		}
+
+		return string(jsonData)
 	}
 
 	return "[]"
+}
+
+// generateAccessListForTokenTransfer 为代币转账生成AccessList
+func (s *userTransactionService) generateAccessListForTokenTransfer(userTx *models.UserTransaction) []map[string]interface{} {
+	if userTx.TokenContractAddress == "" {
+		return nil
+	}
+
+	accessList := []map[string]interface{}{}
+
+	// 根据合约操作类型生成不同的AccessList
+	switch userTx.ContractOperationType {
+	case "transfer":
+		// 标准transfer操作，通常只需要访问余额存储槽
+		accessList = append(accessList, map[string]interface{}{
+			"address": userTx.TokenContractAddress,
+			"storageKeys": []string{
+				// 发送者余额存储槽 (keccak256(abi.encodePacked(sender, balanceOf_slot)))
+				s.calculateStorageSlot(userTx.FromAddress, "0x0000000000000000000000000000000000000000000000000000000000000002"),
+				// 接收者余额存储槽
+				s.calculateStorageSlot(userTx.ToAddress, "0x0000000000000000000000000000000000000000000000000000000000000002"),
+			},
+		})
+
+	case "approve":
+		// approve操作，需要访问allowance存储槽
+		accessList = append(accessList, map[string]interface{}{
+			"address": userTx.TokenContractAddress,
+			"storageKeys": []string{
+				// allowance存储槽 (keccak256(abi.encodePacked(owner, spender, allowance_slot)))
+				s.calculateAllowanceStorageSlot(userTx.FromAddress, userTx.ToAddress, "0x0000000000000000000000000000000000000000000000000000000000000003"),
+			},
+		})
+
+	case "transferFrom":
+		// transferFrom操作，需要访问发送者、接收者余额和allowance
+		accessList = append(accessList, map[string]interface{}{
+			"address": userTx.TokenContractAddress,
+			"storageKeys": []string{
+				// 发送者余额
+				s.calculateStorageSlot(userTx.FromAddress, "0x0000000000000000000000000000000000000000000000000000000000000002"),
+				// 接收者余额
+				s.calculateStorageSlot(userTx.ToAddress, "0x0000000000000000000000000000000000000000000000000000000000000002"),
+				// allowance
+				s.calculateAllowanceStorageSlot(userTx.FromAddress, userTx.ToAddress, "0x0000000000000000000000000000000000000000000000000000000000000003"),
+			},
+		})
+
+	default:
+		// 其他操作类型，不添加AccessList
+		return nil
+	}
+
+	return accessList
+}
+
+// calculateStorageSlot 计算存储槽位置
+func (s *userTransactionService) calculateStorageSlot(address, slot string) string {
+	// 移除0x前缀
+	cleanAddr := strings.TrimPrefix(address, "0x")
+	cleanSlot := strings.TrimPrefix(slot, "0x")
+
+	// 填充地址到64个字符
+	paddedAddr := fmt.Sprintf("%064s", cleanAddr)
+
+	// 拼接地址和槽位
+	combined := paddedAddr + cleanSlot
+
+	// 计算keccak256哈希
+	hashBytes := crypto.Keccak256([]byte(combined))
+
+	return "0x" + hex.EncodeToString(hashBytes)
+}
+
+// calculateAllowanceStorageSlot 计算allowance存储槽位置
+func (s *userTransactionService) calculateAllowanceStorageSlot(owner, spender, slot string) string {
+	// 移除0x前缀
+	cleanOwner := strings.TrimPrefix(owner, "0x")
+	cleanSpender := strings.TrimPrefix(spender, "0x")
+	cleanSlot := strings.TrimPrefix(slot, "0x")
+
+	// 填充地址到64个字符
+	paddedOwner := fmt.Sprintf("%064s", cleanOwner)
+	paddedSpender := fmt.Sprintf("%064s", cleanSpender)
+
+	// 拼接owner、spender和槽位
+	combined := paddedOwner + paddedSpender + cleanSlot
+
+	// 计算keccak256哈希
+	hashBytes := crypto.Keccak256([]byte(combined))
+
+	return "0x" + hex.EncodeToString(hashBytes)
 }
 
 // padAddress 将地址填充为32字节
@@ -993,4 +1135,20 @@ func (s *userTransactionService) validateEthBalance(ctx context.Context, userTx 
 		balance.String(), amountBig.String(), gasCost.String(), totalCost.String())
 
 	return nil
+}
+
+// checkTransactionPacked 检查交易是否已打包
+func (s *userTransactionService) checkTransactionPacked(ctx context.Context, chain, txHash string) (bool, error) {
+	// 创建RPC客户端管理器
+	rpcManager := utils.NewRPCClientManager()
+	defer rpcManager.Close()
+
+	// 调用RPC获取交易状态
+	statusResp, err := rpcManager.GetTransactionStatus(ctx, chain, txHash)
+	if err != nil {
+		return false, fmt.Errorf("获取交易状态失败: %w", err)
+	}
+
+	// 检查交易是否已确认（有区块高度说明已打包）
+	return statusResp.BlockHeight > 0, nil
 }

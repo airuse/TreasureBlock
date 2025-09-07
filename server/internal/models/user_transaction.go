@@ -112,7 +112,7 @@ func (t *UserTransaction) IsFailed() bool {
 
 // CanExport 检查是否可以导出
 func (t *UserTransaction) CanExport() bool {
-	return t.IsDraft() || t.IsUnsigned()
+	return t.IsDraft() || t.IsUnsigned() || t.IsInProgress()
 }
 
 // CanSend 检查是否可以发送

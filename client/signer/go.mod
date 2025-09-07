@@ -29,6 +29,7 @@ require (
 	github.com/holiman/uint256 v1.2.3 // indirect
 	github.com/mmcloughlin/addchain v0.4.0 // indirect
 	github.com/supranational/blst v0.3.11 // indirect
+	github.com/yushulx/goBarcodeQrSDK v1.0.6 // indirect
 	golang.org/x/crypto v0.14.0 // indirect
 	golang.org/x/sync v0.16.0 // indirect
 	golang.org/x/sys v0.35.0 // indirect

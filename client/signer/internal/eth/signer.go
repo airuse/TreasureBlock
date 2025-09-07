@@ -132,9 +132,9 @@ func (es *ETHSigner) buildTransaction(transaction *pkg.TransactionData) (*types.
 	if err != nil {
 		return nil, fmt.Errorf("解析MaxPriorityFeePerGas失败: %w", err)
 	}
-	if gasTipCap <= 0 {
-		return nil, fmt.Errorf("MaxPriorityFeePerGas必须大于0，当前值: %f", gasTipCap)
-	}
+	// if gasTipCap <= 0 {
+	// 	return nil, fmt.Errorf("MaxPriorityFeePerGas必须大于0，当前值: %f", gasTipCap)
+	// }
 
 	gasFeeCap, err := strconv.ParseFloat(transaction.MaxFeePerGas, 64)
 	if err != nil {

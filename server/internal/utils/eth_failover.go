@@ -21,6 +21,7 @@ import (
 type EthFailoverManager struct {
 	clients []*ethclient.Client
 	current int64
+	timeout time.Duration
 }
 
 // NewEthFailoverFromChain 基于链名创建故障转移管理器（读取 config.Blockchain.Chains）
@@ -51,7 +52,7 @@ func NewEthFailoverFromChain(chainName string) (*EthFailoverManager, error) {
 	if len(clients) == 0 {
 		return nil, fmt.Errorf("failed to connect any ETH RPC for chain: %s", chainName)
 	}
-	return &EthFailoverManager{clients: clients}, nil
+	return &EthFailoverManager{clients: clients, timeout: 10 * time.Second}, nil
 }
 
 // Close 关闭所有连接
@@ -74,7 +75,7 @@ func (m *EthFailoverManager) next() *ethclient.Client {
 func (m *EthFailoverManager) SendTransaction(ctx context.Context, tx *types.Transaction) error {
 	fmt.Printf("🔷 开始发送交易: %s\n", tx.Hash().Hex())
 	var lastErr error
-	deadline := time.Now().Add(30 * time.Second)
+	deadline := time.Now().Add(m.timeout)
 	for time.Now().Before(deadline) {
 		cli := m.next()
 		if err := cli.SendTransaction(ctx, tx); err == nil {
@@ -97,7 +98,7 @@ func (m *EthFailoverManager) SendTransaction(ctx context.Context, tx *types.Tran
 // TransactionByHash 故障转移查询交易
 func (m *EthFailoverManager) TransactionByHash(ctx context.Context, hash common.Hash) (*types.Transaction, bool, error) {
 	var lastErr error
-	deadline := time.Now().Add(15 * time.Second)
+	deadline := time.Now().Add(m.timeout)
 	for time.Now().Before(deadline) {
 		cli := m.next()
 		tx, pending, err := cli.TransactionByHash(ctx, hash)
@@ -112,7 +113,7 @@ func (m *EthFailoverManager) TransactionByHash(ctx context.Context, hash common.
 // TransactionReceipt 故障转移查询收据
 func (m *EthFailoverManager) TransactionReceipt(ctx context.Context, hash common.Hash) (*types.Receipt, error) {
 	var lastErr error
-	deadline := time.Now().Add(15 * time.Second)
+	deadline := time.Now().Add(m.timeout)
 	for time.Now().Before(deadline) {
 		cli := m.next()
 		receipt, err := cli.TransactionReceipt(ctx, hash)
@@ -127,7 +128,7 @@ func (m *EthFailoverManager) TransactionReceipt(ctx context.Context, hash common
 // BlockNumber 故障转移查询最新区块
 func (m *EthFailoverManager) BlockNumber(ctx context.Context) (uint64, error) {
 	var lastErr error
-	deadline := time.Now().Add(10 * time.Second)
+	deadline := time.Now().Add(m.timeout)
 	for time.Now().Before(deadline) {
 		cli := m.next()
 		bn, err := cli.BlockNumber(ctx)
@@ -142,7 +143,7 @@ func (m *EthFailoverManager) BlockNumber(ctx context.Context) (uint64, error) {
 // BlockByHash 故障转移查询区块
 func (m *EthFailoverManager) BlockByHash(ctx context.Context, hash common.Hash) (*types.Block, error) {
 	var lastErr error
-	deadline := time.Now().Add(15 * time.Second)
+	deadline := time.Now().Add(m.timeout)
 	for time.Now().Before(deadline) {
 		cli := m.next()
 		b, err := cli.BlockByHash(ctx, hash)
@@ -157,7 +158,7 @@ func (m *EthFailoverManager) BlockByHash(ctx context.Context, hash common.Hash) 
 // BlockByNumber 故障转移查询区块
 func (m *EthFailoverManager) BlockByNumber(ctx context.Context, number *big.Int) (*types.Block, error) {
 	var lastErr error
-	deadline := time.Now().Add(15 * time.Second)
+	deadline := time.Now().Add(m.timeout)
 	for time.Now().Before(deadline) {
 		cli := m.next()
 		b, err := cli.BlockByNumber(ctx, number)
@@ -172,7 +173,7 @@ func (m *EthFailoverManager) BlockByNumber(ctx context.Context, number *big.Int)
 // NonceAt 故障转移查询nonce
 func (m *EthFailoverManager) NonceAt(ctx context.Context, account common.Address, blockNumber *big.Int) (uint64, error) {
 	var lastErr error
-	deadline := time.Now().Add(10 * time.Second)
+	deadline := time.Now().Add(m.timeout)
 	for time.Now().Before(deadline) {
 		cli := m.next()
 		n, err := cli.NonceAt(ctx, account, blockNumber)
@@ -187,7 +188,7 @@ func (m *EthFailoverManager) NonceAt(ctx context.Context, account common.Address
 // EstimateGas 故障转移估算Gas
 func (m *EthFailoverManager) EstimateGas(ctx context.Context, msg ethereum.CallMsg) (uint64, error) {
 	var lastErr error
-	deadline := time.Now().Add(10 * time.Second)
+	deadline := time.Now().Add(m.timeout)
 	for time.Now().Before(deadline) {
 		cli := m.next()
 		gas, err := cli.EstimateGas(ctx, msg)
@@ -202,7 +203,7 @@ func (m *EthFailoverManager) EstimateGas(ctx context.Context, msg ethereum.CallM
 // BalanceAt 故障转移查询余额
 func (m *EthFailoverManager) BalanceAt(ctx context.Context, account common.Address, blockNumber *big.Int) (*big.Int, error) {
 	var lastErr error
-	deadline := time.Now().Add(10 * time.Second)
+	deadline := time.Now().Add(m.timeout)
 	for time.Now().Before(deadline) {
 		cli := m.next()
 		bal, err := cli.BalanceAt(ctx, account, blockNumber)

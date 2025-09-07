@@ -33,59 +33,70 @@
 
     <!-- 实时费率信息 -->
     <div v-if="feeLevels" class="bg-white shadow rounded-lg">
-      <div class="px-4 py-5 sm:p-6">
-        <h3 class="text-lg leading-6 font-medium text-gray-900 mb-4">实时费率信息</h3>
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-4">
-          <!-- 慢速费率 -->
-          <div class="border border-gray-200 rounded-lg p-4">
-            <div class="flex items-center justify-between mb-2">
-              <h4 class="text-sm font-medium text-gray-900">慢速</h4>
-              <span class="text-xs text-gray-500">较慢确认</span>
-            </div>
-            <div class="space-y-1">
-              <div class="text-sm text-gray-600">
-                Max Fee: <span class="font-mono">{{ formatFeeForDisplay(feeLevels.slow.max_fee) }} Gwei</span>
-              </div>
-              <div class="text-xs text-gray-500">
-                Priority: {{ formatFeeForDisplay(feeLevels.slow.max_priority_fee) }} Gwei
-              </div>
-            </div>
-          </div>
-          
-          <!-- 普通费率 -->
-          <div class="border border-blue-200 bg-blue-50 rounded-lg p-4">
-            <div class="flex items-center justify-between mb-2">
-              <h4 class="text-sm font-medium text-blue-900">普通</h4>
-              <span class="text-xs text-blue-600">推荐</span>
-            </div>
-            <div class="space-y-1">
-              <div class="text-sm text-blue-800">
-                Max Fee: <span class="font-mono">{{ formatFeeForDisplay(feeLevels.normal.max_fee) }} Gwei</span>
-              </div>
-              <div class="text-xs text-blue-600">
-                Priority: {{ formatFeeForDisplay(feeLevels.normal.max_priority_fee) }} Gwei
-              </div>
-            </div>
-          </div>
-          
-          <!-- 快速费率 -->
-          <div class="border border-gray-200 rounded-lg p-4">
-            <div class="flex items-center justify-between mb-2">
-              <h4 class="text-sm font-medium text-gray-900">快速</h4>
-              <span class="text-xs text-gray-500">快速确认</span>
-            </div>
-            <div class="space-y-1">
-              <div class="text-sm text-gray-600">
-                Max Fee: <span class="font-mono">{{ formatFeeForDisplay(feeLevels.fast.max_fee) }} Gwei</span>
-              </div>
-              <div class="text-xs text-gray-500">
-                Priority: {{ formatFeeForDisplay(feeLevels.fast.max_priority_fee) }} Gwei
-              </div>
-            </div>
+      <div class="px-4 py-3">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-lg leading-6 font-medium text-gray-900">实时费率信息</h3>
+          <div class="text-sm text-gray-500">
+            最后更新: {{ formatTime(feeLevels.normal.last_updated) }}
           </div>
         </div>
-        <div class="mt-3 text-xs text-gray-500 text-center">
-          最后更新: {{ formatTime(feeLevels.normal.last_updated) }}
+        <div class="flex flex-col lg:flex-row gap-3">
+          <!-- 左侧：费率信息 -->
+          <div class="lg:w-80 flex-shrink-0">
+            <div class="space-y-1.5">
+              <!-- Base Fee 显示在最上方 -->
+              <div class="border border-gray-200 rounded-lg p-2.5 bg-gray-50">
+                <div class="flex items-center justify-between mb-1">
+                  <h4 class="text-sm font-medium text-gray-900">Base Fee</h4>
+                  <span class="text-xs text-gray-500">基础费用</span>
+                </div>
+                <div class="text-sm text-gray-700">
+                  <span class="font-mono">{{ formatFeeWithPrecision(feeLevels.normal.base_fee) }} Gwei</span>
+                </div>
+              </div>
+              
+              <!-- 慢速费率 -->
+              <div class="border border-gray-200 rounded-lg p-2.5">
+                <div class="flex items-center justify-between mb-1">
+                  <h4 class="text-sm font-medium text-gray-900">慢速</h4>
+                  <span class="text-xs text-gray-500">0.5x 倍率</span>
+                </div>
+                <div class="text-sm text-gray-600">
+                  Priority: <span class="font-mono">{{ formatFeeWithPrecision(feeLevels.slow.max_priority_fee) }} Gwei</span>
+                </div>
+              </div>
+              
+              <!-- 普通费率 -->
+              <div class="border border-blue-200 bg-blue-50 rounded-lg p-2.5">
+                <div class="flex items-center justify-between mb-1">
+                  <h4 class="text-sm font-medium text-blue-900">普通</h4>
+                  <span class="text-xs text-blue-600">1.0x 倍率</span>
+                </div>
+                <div class="text-sm text-blue-800">
+                  Priority: <span class="font-mono">{{ formatFeeWithPrecision(feeLevels.normal.max_priority_fee) }} Gwei</span>
+                </div>
+              </div>
+              
+              <!-- 快速费率 -->
+              <div class="border border-gray-200 rounded-lg p-2.5">
+                <div class="flex items-center justify-between mb-1">
+                  <h4 class="text-sm font-medium text-gray-900">快速</h4>
+                  <span class="text-xs text-gray-500">2.0x 倍率</span>
+                </div>
+                <div class="text-sm text-gray-600">
+                  Priority: <span class="font-mono">{{ formatFeeWithPrecision(feeLevels.fast.max_priority_fee) }} Gwei</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 右侧：趋势图 -->
+          <div class="flex-1 min-w-0">
+            <!-- 折线图容器 - 调整高度与左侧内容对齐 -->
+            <div class="h-72">
+              <canvas ref="feeChartCanvas" class="w-full h-full"></canvas>
+            </div>
+          </div>
         </div>
       </div>
     </div>
@@ -243,7 +254,21 @@
                     导入签名
                   </button>
                   <button
-                    v-if="tx.status === 'in_progress' || tx.status === 'packed' || tx.status === 'confirmed' || tx.status === 'failed'"
+                    v-if="tx.status === 'in_progress'"
+                    @click="exportTransaction(tx)"
+                    class="text-blue-600 hover:text-blue-900"
+                  >
+                    导出交易
+                  </button>
+                  <button
+                    v-if="tx.status === 'in_progress'"
+                    @click="openImportModal(tx)"
+                    class="text-teal-600 hover:text-teal-900"
+                  >
+                    导入签名
+                  </button>
+                  <button
+                    v-if="tx.status === 'packed' || tx.status === 'confirmed' || tx.status === 'failed'"
                     @click="viewTransaction(tx)"
                     class="text-purple-600 hover:text-purple-900"
                   >
@@ -324,16 +349,7 @@
               </div>
             </div>
             
-            <div class="text-left bg-gray-50 p-4 rounded-lg mb-4">
-              <h5 class="text-sm font-medium text-gray-900 mb-2">交易信息：</h5>
-              <div class="text-xs text-gray-600 space-y-1">
-                <div>交易ID: {{ selectedQRTransaction?.id }}</div>
-                <div>链类型: {{ selectedQRTransaction?.chain?.toUpperCase() }}</div>
-                <div>币种: {{ selectedQRTransaction?.symbol }}</div>
-                <div>状态: {{ getStatusText(selectedQRTransaction?.status || '') }}</div>
-                <div>创建时间: {{ formatTime(selectedQRTransaction?.created_at) }}</div>
-              </div>
-            </div>
+            
           </div>
         </div>
         
@@ -391,7 +407,22 @@
 
             <!-- 自动模式 -->
             <div v-if="feeMode === 'auto'" class="space-y-3">
-              <div class="grid grid-cols-3 gap-3">
+              <div class="grid grid-cols-4 gap-3">
+                <label class="flex items-center p-3 border border-gray-200 rounded-lg cursor-pointer hover:border-blue-300">
+                  <input
+                    type="radio"
+                    v-model="autoFeeSpeed"
+                    value="ultra-low"
+                    class="mr-2 text-blue-600"
+                  />
+                  <div>
+                    <div class="font-medium text-gray-900">极低</div>
+                    <div class="text-xs text-gray-500">
+                      {{ feeLevels ? formatFeeForDisplay((BigInt(feeLevels.normal.base_fee) + BigInt(1)).toString()) + ' Gwei' : '1 Wei + 20 Gwei' }}
+                    </div>
+                  </div>
+                </label>
+                
                 <label class="flex items-center p-3 border border-gray-200 rounded-lg cursor-pointer hover:border-blue-300">
                   <input
                     type="radio"
@@ -523,7 +554,7 @@
               <label class="block text-sm font-medium text-gray-700 mb-2">选择要导入签名的交易</label>
               <select v-model="selectedImportTransactionId" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
                 <option value="">请选择交易</option>
-                <option v-for="tx in transactionsList.filter(t => t.status === 'unsigned')" :key="tx.id" :value="tx.id">
+                <option v-for="tx in transactionsList.filter(t => t.status === 'unsigned' || t.status === 'in_progress')" :key="tx.id" :value="tx.id">
                   ID: {{ tx.id }} - {{ tx.from_address.substring(0, 10) }}... → {{ tx.to_address.substring(0, 10) }}... ({{ tx.amount }} {{ tx.symbol }})
                 </option>
               </select>
@@ -566,10 +597,14 @@
           </button>
           <button
             @click="importSignatureData"
-            :disabled="!importSignature.trim() || !selectedImportTransactionId"
-            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+            :disabled="!importSignature.trim() || !selectedImportTransactionId || isImporting"
+            class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50 flex items-center"
           >
-            导入签名
+            <svg v-if="isImporting" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+              <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+              <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+            </svg>
+            {{ isImporting ? '导入中...' : '导入签名' }}
           </button>
         </div>
       </div>
@@ -605,8 +640,9 @@ const isEditMode = ref(false) // 是否为编辑模式
 
 // 费率设置相关
 const feeMode = ref<'auto' | 'manual'>('auto')
-const autoFeeSpeed = ref<'slow' | 'normal' | 'fast'>('normal')
+const autoFeeSpeed = ref<'ultra-low' | 'slow' | 'normal' | 'fast'>('normal')
 const autoFeeRates = {
+  'ultra-low': 0.000000001, // 1 Wei
   slow: 1.5,
   normal: 2.0,
   fast: 2.5
@@ -620,6 +656,9 @@ const manualFee = ref({
 const showQRModal = ref(false)
 const qrCodeDataURL = ref<string>('')
 const selectedQRTransaction = ref<UserTransaction | null>(null)
+
+// 导入签名相关状态
+const isImporting = ref(false)
 
 // 交易统计
 const totalTransactions = ref(0)
@@ -641,6 +680,18 @@ const wsUnsubscribes: Array<() => void> = []
 // 费率数据
 const feeLevels = ref<FeeLevels | null>(null)
 const networkCongestion = ref<string>('normal')
+
+// 费率历史数据存储（用于折线图）
+const feeHistory = ref<Array<{
+  timestamp: number
+  baseFee: number
+  maxPriorityFee: number
+  maxFee: number
+}>>([])
+
+// 图表相关
+const feeChartCanvas = ref<HTMLCanvasElement | null>(null)
+let chartInstance: any = null
 
 // 计算属性
 const filteredTransactions = computed(() => {
@@ -706,6 +757,17 @@ const getContractOperationText = (type: string) => {
     case 'transferOwnership': return '转让所有权'
     default: return type
   }
+}
+
+// 格式化费率，保留9位小数（Gwei精度）
+const formatFeeWithPrecision = (feeInWei: string | number) => {
+  if (!feeInWei) return '0.000000000'
+  
+  // 转换为Gwei（除以1e9）
+  const feeInGwei = typeof feeInWei === 'string' ? parseFloat(feeInWei) / 1e9 : feeInWei / 1e9
+  
+  // 保留9位小数
+  return feeInGwei.toFixed(9)
 }
 
 // 格式化时间
@@ -800,22 +862,44 @@ const confirmFeeAndExport = async () => {
     if (feeMode.value === 'auto') {
       // 使用实时费率数据
       if (feeLevels.value) {
-        const selectedFee = feeLevels.value[autoFeeSpeed.value]
-        console.log('  selectedFee:', selectedFee)
-        // 实时费率数据已经是Wei单位，直接使用
-        feeData = {
-          maxPriorityFeePerGas: selectedFee.max_priority_fee,
-          maxFeePerGas: selectedFee.max_fee
+        if (autoFeeSpeed.value === 'ultra-low') {
+          // 极低模式：Priority = 1 Wei, Max = Base + 1 Wei
+          const baseFeeWei = feeLevels.value.normal.base_fee
+          const maxFeeWei = (BigInt(baseFeeWei) + BigInt(1)).toString()
+          feeData = {
+            maxPriorityFeePerGas: '1', // 1 Wei
+            maxFeePerGas: maxFeeWei    // Base + 1 Wei
+          }
+          console.log('  ✅ 使用极低费率数据 (Wei):', feeData)
+        } else {
+          const selectedFee = feeLevels.value[autoFeeSpeed.value]
+          console.log('  selectedFee:', selectedFee)
+          // 实时费率数据已经是Wei单位，直接使用
+          feeData = {
+            maxPriorityFeePerGas: selectedFee.max_priority_fee,
+            maxFeePerGas: selectedFee.max_fee
+          }
+          console.log('  ✅ 使用实时费率数据 (Wei):', feeData)
         }
-        console.log('  ✅ 使用实时费率数据 (Wei):', feeData)
       } else {
         // 降级到默认费率，转换为Wei
-        const gasPrice = autoFeeRates[autoFeeSpeed.value]
-        feeData = {
-          maxPriorityFeePerGas: (gasPrice * 1e9).toString(), // 转换为Wei
-          maxFeePerGas: (gasPrice * 1.5 * 1e9).toString() // 转换为Wei
+        if (autoFeeSpeed.value === 'ultra-low') {
+          // 极低模式：Priority = 1 Wei, Max = 20 Gwei + 1 Wei
+          const baseFeeWei = (20 * 1e9).toString() // 20 Gwei
+          const maxFeeWei = (BigInt(baseFeeWei) + BigInt(1)).toString()
+          feeData = {
+            maxPriorityFeePerGas: '1', // 1 Wei
+            maxFeePerGas: maxFeeWei    // 20 Gwei + 1 Wei
+          }
+          console.log('  ⚠️ 使用极低默认费率数据 (Wei):', feeData)
+        } else {
+          const gasPrice = autoFeeRates[autoFeeSpeed.value]
+          feeData = {
+            maxPriorityFeePerGas: (gasPrice * 1e9).toString(), // 转换为Wei
+            maxFeePerGas: (gasPrice * 1.5 * 1e9).toString() // 转换为Wei
+          }
+          console.log('  ⚠️ 使用默认费率数据 (Wei):', feeData)
         }
-        console.log('  ⚠️ 使用默认费率数据 (Wei):', feeData)
       }
     } else {
       // 手动模式，将Gwei转换为Wei
@@ -871,27 +955,104 @@ const generateQRCode = async (transactionData: any, tx: UserTransaction) => {
     // 将精简数据转换为JSON字符串
     const transactionJson = JSON.stringify(minimalTxData, null, 0) // 不格式化，减少字符数
     
+    console.log('准备生成QR码:', {
+      dataLength: transactionJson.length,
+      dataPreview: transactionJson.substring(0, 100) + '...'
+    })
     
     
     
     
     
-    // 生成QR码配置 - 使用更高的错误纠正级别
+    
+    // 生成QR码配置 - 大幅提高分辨率和质量
     const qrOptions = {
       type: 'image/png' as const,
-      quality: 0.92,
-      margin: 4, // 增加边距
+      quality: 1.0, // 最高质量
+      margin: 4, // 进一步增加边距，提高识别率
       color: {
         dark: '#000000',
         light: '#FFFFFF'
       },
-      width: 512, // 增加尺寸提高识别率
-      errorCorrectionLevel: 'H' as const // 使用最高错误纠正级别
+      width: 2048, // 大幅增加尺寸，从512提升到2048
+      errorCorrectionLevel: 'H' as const, // 使用最高错误纠正级别
+      scale: 16, // 增加缩放比例，提高清晰度
+      rendererOpts: {
+        quality: 1.0, // 渲染质量
+        precision: 'high' // 高精度渲染
+      }
     }
     
-    // 生成QR码数据URL
-    const qrDataURL = await QRCode.toDataURL(transactionJson, qrOptions)
+    // 生成QR码数据URL - 使用多种策略
+    let qrDataURL: string
+    try {
+      // 策略1: 尝试生成SVG格式的QR码，然后转换为PNG
+      console.log('尝试生成SVG格式QR码...')
+      const svgString = await QRCode.toString(transactionJson, {
+        type: 'svg',
+        width: 2048,
+        margin: 12,
+        color: {
+          dark: '#000000',
+          light: '#FFFFFF'
+        },
+        errorCorrectionLevel: 'H'
+      })
+      
+      // 将SVG转换为PNG
+      const canvas = document.createElement('canvas')
+      const ctx = canvas.getContext('2d')
+      const img = new Image()
+      
+      qrDataURL = await new Promise<string>((resolve, reject) => {
+        img.onload = () => {
+          canvas.width = 2048
+          canvas.height = 2048
+          ctx?.drawImage(img, 0, 0, 2048, 2048)
+          const pngDataURL = canvas.toDataURL('image/png', 1.0)
+          console.log('SVG转PNG成功，QR码尺寸:', 2048)
+          resolve(pngDataURL)
+        }
+        img.onerror = () => {
+          console.warn('SVG转PNG失败，尝试标准PNG生成...')
+          // 回退到标准PNG生成
+          QRCode.toDataURL(transactionJson, qrOptions).then(resolve).catch(reject)
+        }
+        img.src = 'data:image/svg+xml;base64,' + btoa(svgString)
+      })
+      
+    } catch (error) {
+      console.warn('SVG生成失败，尝试标准PNG生成:', error)
+      try {
+        qrDataURL = await QRCode.toDataURL(transactionJson, qrOptions)
+      } catch (fallbackError) {
+        console.warn('高分辨率PNG生成失败，尝试标准分辨率:', fallbackError)
+        // 如果高分辨率失败，使用标准分辨率
+        const fallbackOptions = {
+          type: 'image/png' as const,
+          quality: 1.0,
+          margin: 8,
+          color: {
+            dark: '#000000',
+            light: '#FFFFFF'
+          },
+          width: 1024,
+          errorCorrectionLevel: 'H' as const,
+          scale: 8
+        }
+        qrDataURL = await QRCode.toDataURL(transactionJson, fallbackOptions)
+      }
+    }
+    
     qrCodeDataURL.value = qrDataURL
+    
+    console.log('QR码生成完成:', {
+      dataLength: transactionJson.length,
+      qrSize: qrOptions.width,
+      errorCorrection: qrOptions.errorCorrectionLevel,
+      margin: qrOptions.margin,
+      actualSize: qrDataURL.length
+    })
     
 
   } catch (error) {
@@ -934,25 +1095,13 @@ const createMinimalTransactionData = (tx: UserTransaction, fullData: any) => {
     }
   }
   
-  // 添加AccessList - 优先使用后端保存的accessList
+  // 添加AccessList - 直接使用后端计算好的数据
   if (fullData.access_list && fullData.access_list !== '[]') {
     try {
       minimalData.accessList = JSON.parse(fullData.access_list)
     } catch (error) {
-      console.warn('解析AccessList失败，使用前端生成:', error)
-      // 如果解析失败，使用前端生成的AccessList
-      if (tx.transaction_type === 'token' && tx.token_contract_address) {
-        const accessList = generateAccessListForTokenTransfer(tx)
-        if (accessList && accessList.length > 0) {
-          minimalData.accessList = accessList
-        }
-      }
-    }
-  } else if (tx.transaction_type === 'token' && tx.token_contract_address) {
-    // 如果后端没有AccessList，使用前端生成
-    const accessList = generateAccessListForTokenTransfer(tx)
-    if (accessList && accessList.length > 0) {
-      minimalData.accessList = accessList
+      console.warn('解析AccessList失败:', error)
+      // 如果解析失败，不添加AccessList
     }
   }
   
@@ -1075,81 +1224,6 @@ const generateTransferFromData = (fromAddress: string, toAddress: string, amount
   return functionSelector + fromParam + toParam + amountParam
 }
 
-// 为代币转账生成AccessList
-const generateAccessListForTokenTransfer = (tx: UserTransaction) => {
-  if (!tx.token_contract_address) return null
-  
-  const accessList = []
-  
-  // 根据合约操作类型生成不同的AccessList
-  switch (tx.contract_operation_type) {
-    case 'transfer':
-      // 标准transfer操作，通常只需要访问余额存储槽
-      accessList.push({
-        address: tx.token_contract_address,
-        storageKeys: [
-          // 发送者余额存储槽 (keccak256(abi.encodePacked(sender, balanceOf_slot)))
-          `0x${keccak256(`0x${tx.from_address.slice(2).padStart(64, '0')}0000000000000000000000000000000000000000000000000000000000000002`).slice(2)}`,
-          // 接收者余额存储槽
-          `0x${keccak256(`0x${tx.to_address.slice(2).padStart(64, '0')}0000000000000000000000000000000000000000000000000000000000000002`).slice(2)}`
-        ]
-      })
-      break
-      
-    case 'approve':
-      // approve操作，需要访问allowance存储槽
-      accessList.push({
-        address: tx.token_contract_address,
-        storageKeys: [
-          // allowance存储槽 (keccak256(abi.encodePacked(owner, spender, allowance_slot)))
-          `0x${keccak256(`0x${tx.from_address.slice(2).padStart(64, '0')}${tx.to_address.slice(2).padStart(64, '0')}0000000000000000000000000000000000000000000000000000000000000003`).slice(2)}`
-        ]
-      })
-      break
-      
-    case 'transferFrom':
-      // transferFrom操作，需要访问发送者、接收者余额和allowance
-      accessList.push({
-        address: tx.token_contract_address,
-        storageKeys: [
-          // 发送者余额
-          `0x${keccak256(`0x${tx.from_address.slice(2).padStart(64, '0')}0000000000000000000000000000000000000000000000000000000000000002`).slice(2)}`,
-          // 接收者余额
-          `0x${keccak256(`0x${tx.to_address.slice(2).padStart(64, '0')}0000000000000000000000000000000000000000000000000000000000000002`).slice(2)}`,
-          // allowance
-          `0x${keccak256(`0x${tx.from_address.slice(2).padStart(64, '0')}${tx.to_address.slice(2).padStart(64, '0')}0000000000000000000000000000000000000000000000000000000000000003`).slice(2)}`
-        ]
-      })
-      break
-      
-    default:
-      // 其他操作类型，不添加AccessList
-      return null
-  }
-  
-  return accessList
-}
-
-// 使用crypto-js实现keccak256（用于生成存储槽）
-const keccak256 = (input: string) => {
-  try {
-    // 动态导入crypto-js
-    const CryptoJS = require('crypto-js')
-    
-    // 移除0x前缀并转换为字节数组
-    const hexString = input.startsWith('0x') ? input.slice(2) : input
-    const wordArray = CryptoJS.enc.Hex.parse(hexString)
-    
-    // 计算keccak256哈希
-    const hash = CryptoJS.SHA3(wordArray, { outputLength: 256 })
-    
-    return '0x' + hash.toString(CryptoJS.enc.Hex)
-  } catch (error) {
-    console.warn('keccak256计算失败，使用占位符:', error)
-    // 如果计算失败，返回占位符
-    return '0x' + '0'.repeat(64)
-  }
-}
 
 // 下载QR码
 const downloadQRCode = () => {
@@ -1200,6 +1274,14 @@ Nonce: ${tx.nonce || '自动获取'}
 创建时间: ${formatTime(tx.created_at)}
 更新时间: ${formatTime(tx.updated_at)}`
 
+  // 添加错误信息（如果有）
+  if (tx.error_msg) {
+    details += `
+
+=== 错误信息 ===
+错误详情: ${tx.error_msg}`
+  }
+
   // 添加ERC-20相关信息
   if (tx.transaction_type === 'token') {
     details += `
@@ -1229,11 +1311,17 @@ const editTransaction = (tx: UserTransaction) => {
 
 // 导入签名数据
 const importSignatureData = async () => {
+  // 防止重复提交
+  if (isImporting.value) return
+  
   try {
     if (!selectedImportTransactionId.value) {
       alert('请选择要导入签名的交易')
       return
     }
+    
+    // 设置加载状态
+    isImporting.value = true
     
     const id = selectedImportTransactionId.value as number
     
@@ -1272,6 +1360,9 @@ const importSignatureData = async () => {
   } catch (error) {
     console.error('导入签名失败:', error)
     alert('导入签名失败，请重试')
+  } finally {
+    // 无论成功还是失败，都要重置加载状态
+    isImporting.value = false
   }
 }
 
@@ -1423,6 +1514,142 @@ const loadTransactionStats = async () => {
   }
 }
 
+// 添加费率历史数据
+const addFeeHistory = (feeData: FeeLevels) => {
+  const now = Date.now()
+  const historyItem = {
+    timestamp: now,
+    baseFee: parseFloat(feeData.normal.base_fee || '0') / 1e9, // 转换为Gwei
+    maxPriorityFee: parseFloat(feeData.normal.max_priority_fee) / 1e9,
+    maxFee: parseFloat(feeData.normal.max_fee) / 1e9
+  }
+  
+  // 添加到历史数据
+  feeHistory.value.push(historyItem)
+  
+  // 只保留最近20条记录
+  if (feeHistory.value.length > 20) {
+    feeHistory.value = feeHistory.value.slice(-20)
+  }
+  
+  // 更新图表
+  updateChart()
+}
+
+// 更新折线图
+const updateChart = () => {
+  if (!feeChartCanvas.value || feeHistory.value.length === 0) return
+  
+  const canvas = feeChartCanvas.value
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+  
+  // 设置canvas尺寸
+  const rect = canvas.getBoundingClientRect()
+  canvas.width = rect.width * window.devicePixelRatio
+  canvas.height = rect.height * window.devicePixelRatio
+  ctx.scale(window.devicePixelRatio, window.devicePixelRatio)
+  
+  // 清空画布
+  ctx.clearRect(0, 0, rect.width, rect.height)
+  
+  if (feeHistory.value.length < 2) return
+  
+  // 计算数据范围
+  const allValues = feeHistory.value.flatMap(item => [item.baseFee, item.maxPriorityFee, item.maxFee])
+  const minValue = Math.min(...allValues)
+  const maxValue = Math.max(...allValues)
+  const valueRange = maxValue - minValue || 1
+  
+  // 设置边距 - 增加左侧边距以容纳Y轴标签
+  const padding = { top: 20, right: 20, bottom: 40, left: 60 }
+  const chartWidth = rect.width - padding.left - padding.right
+  const chartHeight = rect.height - padding.top - padding.bottom
+  
+  // 绘制背景网格 - 更细腻的网格线
+  ctx.strokeStyle = '#f3f4f6'
+  ctx.lineWidth = 1
+  for (let i = 0; i <= 8; i++) {
+    const y = padding.top + (chartHeight / 8) * i
+    ctx.beginPath()
+    ctx.moveTo(padding.left, y)
+    ctx.lineTo(padding.left + chartWidth, y)
+    ctx.stroke()
+  }
+  
+  // 绘制折线
+  const drawLine = (data: number[], color: string, label: string) => {
+    ctx.strokeStyle = color
+    ctx.lineWidth = 2
+    ctx.beginPath()
+    
+    data.forEach((value, index) => {
+      const x = padding.left + (chartWidth / (data.length - 1)) * index
+      const y = padding.top + chartHeight - ((value - minValue) / valueRange) * chartHeight
+      
+      if (index === 0) {
+        ctx.moveTo(x, y)
+      } else {
+        ctx.lineTo(x, y)
+      }
+    })
+    
+    ctx.stroke()
+    
+    // 绘制数据点
+    ctx.fillStyle = color
+    data.forEach((value, index) => {
+      const x = padding.left + (chartWidth / (data.length - 1)) * index
+      const y = padding.top + chartHeight - ((value - minValue) / valueRange) * chartHeight
+      
+      ctx.beginPath()
+      ctx.arc(x, y, 3, 0, 2 * Math.PI)
+      ctx.fill()
+    })
+  }
+  
+  // 绘制三条线
+  const baseFeeData = feeHistory.value.map(item => item.baseFee)
+  const maxPriorityFeeData = feeHistory.value.map(item => item.maxPriorityFee)
+  const maxFeeData = feeHistory.value.map(item => item.maxFee)
+  
+  drawLine(baseFeeData, '#6b7280', 'Base Fee') // 灰色
+  drawLine(maxPriorityFeeData, '#3b82f6', 'Max Priority Fee') // 蓝色
+  drawLine(maxFeeData, '#10b981', 'Max Fee') // 绿色
+  
+  // 绘制Y轴标签 - 更细腻的刻度
+  ctx.fillStyle = '#6b7280'
+  ctx.font = '11px sans-serif'
+  ctx.textAlign = 'right'
+  for (let i = 0; i <= 8; i++) {
+    const value = minValue + (valueRange / 8) * (8 - i)
+    const y = padding.top + (chartHeight / 8) * i
+    ctx.fillText(value.toFixed(4), padding.left - 8, y + 3)
+  }
+  
+  // 绘制图例
+  const legendItems = [
+    { color: '#6b7280', label: 'Base Fee' },
+    { color: '#3b82f6', label: 'Max Priority Fee' },
+    { color: '#10b981', label: 'Max Fee' }
+  ]
+  
+  ctx.textAlign = 'left'
+  legendItems.forEach((item, index) => {
+    const x = padding.left + index * 100
+    const y = padding.top + chartHeight + 20
+    
+    // 绘制颜色块
+    ctx.fillStyle = item.color
+    ctx.fillRect(x, y - 8, 10, 10)
+    
+    // 绘制标签
+    ctx.fillStyle = '#374151'
+    ctx.font = '10px sans-serif'
+    ctx.fillText(item.label, x + 14, y - 1)
+  })
+}
+
 // 加载Gas费率数据
 const loadGasRates = async () => {
   try {
@@ -1432,6 +1659,9 @@ const loadGasRates = async () => {
     if (response.success) {
       console.log('✅ Gas费率数据加载成功:', response.data)
       feeLevels.value = response.data
+      
+      // 添加历史数据
+      addFeeHistory(response.data)
       
       // 更新网络拥堵状态
       if (response.data?.normal?.network_congestion) {
@@ -1459,6 +1689,10 @@ const setupWebSocketListeners = () => {
     if (message.action === 'fee_update' && message.data) {
       // console.log('收到费率更新:', message.data)
       feeLevels.value = message.data as unknown as FeeLevels
+      
+      // 添加历史数据
+      addFeeHistory(message.data as unknown as FeeLevels)
+      
       if (feeLevels.value?.normal?.network_congestion) {
         networkCongestion.value = feeLevels.value.normal.network_congestion
       }
@@ -1512,6 +1746,9 @@ onMounted(async () => {
   loadTransactions()
   loadTransactionStats()
   setupWebSocketListeners()
+  
+  // 监听窗口大小变化，重新绘制图表
+  window.addEventListener('resize', updateChart)
 })
 
 onUnmounted(() => {
@@ -1519,5 +1756,8 @@ onUnmounted(() => {
   wsUnsubscribes.forEach(unsub => { try { unsub() } catch {}
   })
   wsUnsubscribes.length = 0
+  
+  // 移除窗口大小变化监听
+  window.removeEventListener('resize', updateChart)
 })
 </script>
