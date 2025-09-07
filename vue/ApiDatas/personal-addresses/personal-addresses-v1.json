@@ -167,6 +167,71 @@
           }
         }
       }
+    },
+    "/api/user/addresses/authorized": {
+      "get": {
+        "summary": "查询授权关系",
+        "description": "根据发送地址查询可操作的代币持有者地址",
+        "parameters": [
+          {
+            "name": "spender_address",
+            "in": "query",
+            "required": true,
+            "description": "发送地址（被授权地址）",
+            "schema": {
+              "type": "string"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "查询授权关系成功",
+                  "data": [
+                      {
+                        "id": 1,
+                        "address": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
+                        "label": "主钱包",
+                        "type": "wallet",
+                        "contract_id": null,
+                        "authorized_addresses": ["0xd479fB7a1952c4Cc313fda8Aeaddb84EA66bE4e7"],
+                        "notes": "授权给DEX合约使用",
+                        "balance": "1.2",
+                        "contract_balance": "0.0",
+                        "contract_balance_height": 18945678,
+                        "transaction_count": 8,
+                        "is_active": true,
+                        "balance_height": 18945678,
+                        "created_at": "2023-12-21T10:30:56Z",
+                        "updated_at": "2023-12-21T10:30:56Z"
+                      },
+                      {
+                        "id": 2,
+                        "address": "0x8ba1f109551bD432803012645Hac136c22C177e9",
+                        "label": "交易钱包",
+                        "type": "wallet",
+                        "contract_id": null,
+                        "authorized_addresses": ["0xd479fB7a1952c4Cc313fda8Aeaddb84EA66bE4e7"],
+                        "notes": "授权给DeFi协议使用",
+                        "balance": "0.8",
+                        "contract_balance": "0.0",
+                        "contract_balance_height": 18945679,
+                        "transaction_count": 5,
+                        "is_active": true,
+                        "balance_height": 18945679,
+                        "created_at": "2023-12-21T10:30:56Z",
+                        "updated_at": "2023-12-21T10:30:56Z"
+                      }
+                    ]
+                }
+              }
+            }
+          }
+        }
+      }
     }
   }
 }

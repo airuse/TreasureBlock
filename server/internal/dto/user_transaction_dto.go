@@ -23,6 +23,7 @@ type CreateUserTransactionRequest struct {
 	TransactionType       string `json:"transaction_type" binding:"omitempty" validate:"omitempty,oneof=coin token"`
 	ContractOperationType string `json:"contract_operation_type" binding:"omitempty" validate:"omitempty,oneof=transfer approve transferFrom balanceOf"`
 	TokenContractAddress  string `json:"token_contract_address" binding:"omitempty" validate:"omitempty"`
+	AllowanceAddress      string `json:"allowance_address" binding:"omitempty" validate:"omitempty"`
 }
 
 // UpdateUserTransactionRequest 更新用户交易请求
@@ -67,6 +68,9 @@ type UserTransactionResponse struct {
 	TransactionType       string `json:"transaction_type,omitempty"`
 	ContractOperationType string `json:"contract_operation_type,omitempty"`
 	TokenContractAddress  string `json:"token_contract_address,omitempty"`
+	AllowanceAddress      string `json:"allowance_address,omitempty"`
+	TokenName             string `json:"token_name,omitempty"`
+	TokenDecimals         *uint8 `json:"token_decimals,omitempty"`
 
 	// QR码导出相关字段
 	ChainID    *string `json:"chain_id,omitempty"`
@@ -91,8 +95,8 @@ type UserTransactionListResponse struct {
 // ExportTransactionRequest 导出交易请求
 type ExportTransactionRequest struct {
 	// EIP-1559费率设置（可选，如果不提供则使用默认值）
-	MaxPriorityFeePerGas *string `json:"max_priority_fee_per_gas" validate:"omitempty"`
-	MaxFeePerGas         *string `json:"max_fee_per_gas" validate:"omitempty"`
+	MaxPriorityFeePerGas *string `json:"maxPriorityFeePerGas" validate:"omitempty"`
+	MaxFeePerGas         *string `json:"maxFeePerGas" validate:"omitempty"`
 }
 
 // ExportTransactionResponse 导出交易响应

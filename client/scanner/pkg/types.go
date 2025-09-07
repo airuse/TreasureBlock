@@ -75,6 +75,7 @@ type BlockUploadRequest struct {
 	Confirmations    uint64    `json:"confirmations"`
 	IsOrphan         bool      `json:"is_orphan"`
 	Chain            string    `json:"chain"`
+	ChainID          int       `json:"chain_id"`
 
 	// BTC特有字段
 	MerkleRoot string `json:"merkle_root,omitempty"`

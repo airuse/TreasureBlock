@@ -58,6 +58,11 @@ type UserTransaction struct {
 	TransactionType       string `json:"transaction_type" gorm:"type:varchar(20);default:'coin';comment:交易类型(coin,token)"`
 	ContractOperationType string `json:"contract_operation_type" gorm:"type:varchar(20);comment:合约操作类型(transfer,approve,transferFrom,balanceOf)"`
 	TokenContractAddress  string `json:"token_contract_address" gorm:"type:varchar(120);comment:代币合约地址"`
+	AllowanceAddress      string `json:"allowance_address" gorm:"type:varchar(120);comment:授权地址（代币持有者地址）"`
+
+	// 代币信息字段（非数据库字段，仅用于API响应）
+	TokenName     string `json:"token_name,omitempty" gorm:"-"`     // 代币全名（非数据库字段）
+	TokenDecimals *uint8 `json:"token_decimals,omitempty" gorm:"-"` // 代币精度（非数据库字段）
 
 	// 时间字段
 	CreatedAt time.Time      `json:"created_at" gorm:"autoCreateTime"`

@@ -59,6 +59,7 @@ export interface CreateUserTransactionRequest {
   transaction_type?: string
   contract_operation_type?: string
   token_contract_address?: string
+  allowance_address?: string // 授权地址（代币持有者地址）
 }
 
 // 更新用户交易请求

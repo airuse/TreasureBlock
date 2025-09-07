@@ -28,6 +28,7 @@ type UserAddressService interface {
 	GetAllWalletAddressModels() ([]*models.UserAddress, error)
 	UpdateAddWalletBalance(ID uint, amount uint64) error
 	UpdateReduceWalletBalance(ID uint, amount uint64) error
+	GetAddressesByAuthorizedAddress(authorizedAddr string) ([]dto.UserAddressResponse, error)
 }
 
 // userAddressService 用户地址服务实现
@@ -51,12 +52,6 @@ func (s *userAddressService) CreateAddress(userID uint, req *dto.CreateUserAddre
 	// 验证地址格式
 	if !s.isValidAddress(req.Address) {
 		return nil, errors.New("无效的地址格式")
-	}
-
-	// 检查地址是否已存在
-	existingAddress, err := s.userAddressRepo.GetByAddress(req.Address)
-	if err == nil && existingAddress != nil {
-		return nil, errors.New("该地址已存在")
 	}
 
 	// 自动获取当前区块高度和地址余额

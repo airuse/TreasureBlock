@@ -143,7 +143,7 @@
               <option value="failed">失败</option>
             </select>
             <button
-              @click="showCreateModal = true"
+              @click="openCreateModal"
               class="px-4 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 transition-colors"
             >
               新建交易
@@ -206,7 +206,7 @@
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                   <div class="flex flex-col">
-                    <span>{{ formatAmount(tx.amount, tx.symbol, tx.token_decimals) }} {{ tx.symbol }}</span>
+                    <span>{{ formatTokenAmount(tx.amount, tx.symbol, tx.token_decimals) }} {{ tx.symbol }}</span>
                     <span v-if="tx.transaction_type === 'token' && tx.token_name" class="text-xs text-gray-500">
                       {{ tx.token_name }}
                     </span>
@@ -578,12 +578,16 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import type { UserTransaction, UserTransactionStatsResponse } from '@/types'
 import CreateTransactionModal from '@/components/eth/personal/CreateTransactionModal.vue'
 import { getUserTransactions, getUserTransactionStats, exportTransaction as exportTransactionAPI, importSignature as importSignatureAPI } from '@/api/user-transactions'
+import { getGasRates } from '@/api/gas'
 import { useChainWebSocket } from '@/composables/useWebSocket'
-import type { FeeLevels, TransactionStatusUpdate } from '@/utils/websocket'
+import { formatTokenAmount } from '@/utils/amountFormatter'
+import { convertWeiToGwei, formatFeeForDisplay } from '@/utils/unitConverter'
+import type { FeeLevels } from '@/types'
+import type { TransactionStatusUpdate } from '@/utils/websocket'
 
 // 响应式数据
 const showCreateModal = ref(false)
@@ -631,6 +635,8 @@ const transactionsList = ref<UserTransaction[]>([])
 
 // WebSocket相关
 const { subscribeChainEvent } = useChainWebSocket('eth')
+// 收集本组件的取消订阅函数，避免重复回调
+const wsUnsubscribes: Array<() => void> = []
 
 // 费率数据
 const feeLevels = ref<FeeLevels | null>(null)
@@ -737,83 +743,6 @@ const formatTime = (timestamp: string | number | undefined) => {
   })
 }
 
-// 格式化金额 - 处理整数金额显示
-const formatAmount = (amount: string, symbol: string, decimals: number | undefined) => {
-  if (!amount || amount === '0') return '0'
-  
-  // 检查是否是小数，如果是小数，直接返回（可能是旧数据或显示格式）
-  if (amount.includes('.')) {
-    console.log(`检测到小数格式金额: ${amount}，直接返回`)
-    return amount
-  }
-  
-  // 将字符串转换为整数（因为数据库中存储的是整数）
-  let intAmount: bigint
-  try {
-    intAmount = BigInt(amount)
-  } catch (error) {
-    console.error(`无法转换金额为BigInt: ${amount}`, error)
-    return amount // 如果转换失败，返回原始值
-  }
-  
-  if (intAmount === 0n) return '0'
-  
-  console.log(`格式化金额: amount=${amount}, symbol=${symbol}, decimals=${decimals}, intAmount=${intAmount}`)
-  
-  // 如果明确提供了精度，使用提供的精度
-  if (decimals !== undefined && decimals >= 0) {
-    const factor = BigInt(Math.pow(10, decimals).toString())
-    const readableAmount = Number(intAmount) / Number(factor)
-    const result = readableAmount.toFixed(Math.min(decimals, 8))
-    console.log(`使用提供精度: factor=${factor}, readableAmount=${readableAmount}, result=${result}`)
-    return result
-  }
-  
-  // 如果没有提供精度，根据币种智能判断
-  if (symbol === 'ETH') {
-    // ETH使用18位精度
-    const factor = BigInt('1000000000000000000') // 10^18
-    const readableAmount = Number(intAmount) / Number(factor)
-    const result = readableAmount.toFixed(8)
-    console.log(`ETH精度: factor=${factor}, readableAmount=${readableAmount}, result=${result}`)
-    return result
-  } else if (symbol === 'USDC' || symbol === 'USDT') {
-    // USDC/USDT使用6位精度
-    const factor = BigInt('1000000') // 10^6
-    const readableAmount = Number(intAmount) / Number(factor)
-    const result = readableAmount.toFixed(6)
-    console.log(`USDC/USDT精度: factor=${factor}, readableAmount=${readableAmount}, result=${result}`)
-    return result
-  } else if (symbol === 'DAI') {
-    // DAI使用18位精度
-    const factor = BigInt('1000000000000000000') // 10^18
-    const readableAmount = Number(intAmount) / Number(factor)
-    const result = readableAmount.toFixed(8)
-    console.log(`DAI精度: factor=${factor}, readableAmount=${readableAmount}, result=${result}`)
-    return result
-  } else {
-    // 其他代币，尝试智能判断精度
-    // 如果数值很大，可能是原始精度，需要转换
-    if (intAmount > BigInt('1000000000000')) { // 10^12
-      // 尝试常见的精度：6, 8, 18
-      const possibleDecimals = [6, 8, 18]
-      for (const dec of possibleDecimals) {
-        const factor = BigInt(Math.pow(10, dec).toString())
-        const readableAmount = Number(intAmount) / Number(factor)
-        // 如果转换后的数值在合理范围内（0.000001 到 1000000），使用这个精度
-        if (readableAmount >= 0.000001 && readableAmount <= 1000000) {
-          const result = readableAmount.toFixed(Math.min(dec, 8))
-          console.log(`智能判断精度: 使用${dec}位精度, factor=${factor}, readableAmount=${readableAmount}, result=${result}`)
-          return result
-        }
-      }
-    }
-    
-    // 如果无法确定，直接返回原始值
-    console.log(`无法确定精度，返回原始值: ${amount}`)
-    return amount
-  }
-}
 
 // 复制到剪贴板
 const copyToClipboard = async (text: string) => {
@@ -862,21 +791,31 @@ const confirmFeeAndExport = async () => {
   try {
     // 准备费率数据
     let feeData: any = {}
+    console.log('🔍 前端费率设置调试信息:')
+    console.log('  feeMode.value:', feeMode.value)
+    console.log('  feeLevels.value:', feeLevels.value)
+    console.log('  autoFeeSpeed.value:', autoFeeSpeed.value)
+    console.log('  manualFee.value:', manualFee.value)
+    
     if (feeMode.value === 'auto') {
       // 使用实时费率数据
       if (feeLevels.value) {
         const selectedFee = feeLevels.value[autoFeeSpeed.value]
+        console.log('  selectedFee:', selectedFee)
+        // 实时费率数据已经是Wei单位，直接使用
         feeData = {
           maxPriorityFeePerGas: selectedFee.max_priority_fee,
           maxFeePerGas: selectedFee.max_fee
         }
+        console.log('  ✅ 使用实时费率数据 (Wei):', feeData)
       } else {
-        // 降级到默认费率
+        // 降级到默认费率，转换为Wei
         const gasPrice = autoFeeRates[autoFeeSpeed.value]
         feeData = {
           maxPriorityFeePerGas: (gasPrice * 1e9).toString(), // 转换为Wei
           maxFeePerGas: (gasPrice * 1.5 * 1e9).toString() // 转换为Wei
         }
+        console.log('  ⚠️ 使用默认费率数据 (Wei):', feeData)
       }
     } else {
       // 手动模式，将Gwei转换为Wei
@@ -886,6 +825,7 @@ const confirmFeeAndExport = async () => {
         maxPriorityFeePerGas: priorityFeeWei,
         maxFeePerGas: maxFeeWei
       }
+      console.log('  ✅ 使用手动费率数据 (Wei):', feeData)
     }
     
     // 调用导出API，传递费率数据
@@ -909,7 +849,7 @@ const confirmFeeAndExport = async () => {
       // 异步生成QR码
       generateQRCode(response.data, selectedTransaction.value)
       
-      console.log('导出交易成功:', response.data)
+      
     } else {
       alert('导出交易失败: ' + response.message)
     }
@@ -933,81 +873,8 @@ const generateQRCode = async (transactionData: any, tx: UserTransaction) => {
     
     
     
-    console.log('极简交易数据:', minimalTxData)
-    console.log('QR码数据长度:', transactionJson.length, '字符')
-    console.log('数据结构说明: 只包含签名必需字段，Gas相关字段由签名程序自动填充')
-    console.log('数据来源分析:', {
-      nonce: {
-        apiNonce: transactionData.nonce,
-        txNonce: tx.nonce,
-        finalNonce: minimalTxData.nonce,
-        source: '从区块链实时获取'
-      },
-      chainId: {
-        apiChainId: transactionData.chain_id,
-        txChain: tx.chain,
-        finalChainId: minimalTxData.chainId,
-        source: transactionData.chain_id ? '后端保存' : '前端计算'
-      },
-      txData: {
-        apiTxData: transactionData.tx_data,
-        generatedData: generateContractData(tx, transactionData),
-        finalData: minimalTxData.data,
-        source: transactionData.tx_data ? '后端保存' : '前端生成'
-      },
-      accessList: {
-        apiAccessList: transactionData.access_list,
-        finalAccessList: minimalTxData.accessList,
-        source: transactionData.access_list ? '后端保存' : '前端生成'
-      }
-    })
     
-    if (minimalTxData.accessList) {
-      console.log('包含AccessList: 用于优化ERC-20代币交易的Gas成本')
-      console.log('AccessList详情:', minimalTxData.accessList)
-    } else {
-      console.log('不包含AccessList: ETH转账或简单操作')
-    }
     
-    console.log('示例数据结构:')
-    console.log('ETH转账:', {
-      id: 123,
-      chainId: '1',
-      nonce: 42, // 从区块链实时获取的nonce
-      from: '0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6', // 发送地址，用于签名程序自动匹配私钥
-      to: '0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6',
-      value: '0xde0b6b3a7640000', // 十六进制格式 (1 ETH = 1000000000000000000 wei，数据库中存储为整数)
-      data: '0x'
-    })
-    console.log('ERC-20查询余额:', {
-      id: 124,
-      chainId: '1',
-      nonce: 43, // 从区块链实时获取的nonce
-      from: '0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6', // 发送地址，用于签名程序自动匹配私钥
-      to: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
-      value: '0x0', // 代币操作value为0
-      data: '0x70a08231000000000000000000000000742d35cc6634c0532925a3b8d4c9db96c4b4d8b6' // balanceOf(address)
-    })
-    console.log('ERC-20代币转账:', {
-      id: 125,
-      chainId: '1',
-      nonce: 44, // 从区块链实时获取的nonce
-      from: '0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6', // 发送地址，用于签名程序自动匹配私钥
-      to: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
-      value: '0x0', // 代币操作value为0
-      data: '0xa9059cbb000000000000000000000000742d35cc6634c0532925a3b8d4c9db96c4b4d8b600000000000000000000000000000000000000000000000000000000000f4240', // transfer(address,uint256)
-      accessList: '可选，用于优化Gas成本'
-    })
-    console.log('ERC-20授权转账:', {
-      id: 126,
-      chainId: '1',
-      nonce: 45, // 从区块链实时获取的nonce
-      from: '0x26248Ec61fC83a24F958faF435f8254ce65D08d9', // 发送地址，用于签名程序自动匹配私钥
-      to: '0xA0b86991c6218b36c1d19D4a2e9Eb0cE3606eB48',
-      value: '0x0', // 代币操作value为0
-      data: '0x23b872dd00000000000000000000000026248ec61fc83a24f958faf435f8254ce65d08d9000000000000000000000000320b0306fa5917cb12109d5404b5fd00056b37b500000000000000000000000000000000000000000000000000000000d09dc300', // transferFrom(address,address,uint256)
-      accessList: '可选，用于优化Gas成本'
-    })
     
     // 生成QR码配置 - 使用更高的错误纠正级别
     const qrOptions = {
@@ -1026,7 +893,7 @@ const generateQRCode = async (transactionData: any, tx: UserTransaction) => {
     const qrDataURL = await QRCode.toDataURL(transactionJson, qrOptions)
     qrCodeDataURL.value = qrDataURL
     
-    console.log('QR码生成成功:', qrDataURL)
+
   } catch (error) {
     console.error('生成QR码失败:', error)
     qrCodeDataURL.value = ''
@@ -1052,9 +919,19 @@ const createMinimalTransactionData = (tx: UserTransaction, fullData: any) => {
     value: tx.transaction_type === 'token' ? '0x0' : convertToHexString(tx.amount || '0'), // 代币转账value为0，ETH转账使用整数金额的十六进制格式
     data: fullData.tx_data || generateContractData(tx, fullData), // 优先使用后端保存的tx_data
     
-    // EIP-1559费率字段
-    maxPriorityFeePerGas: fullData.max_priority_fee_per_gas || tx.max_priority_fee_per_gas || '2',
-    maxFeePerGas: fullData.max_fee_per_gas || tx.max_fee_per_gas || '30'
+    // EIP-1559费率字段 - 转换为Gwei单位供签名程序使用
+    maxPriorityFeePerGas: convertWeiToGwei(fullData.max_priority_fee_per_gas || tx.max_priority_fee_per_gas || '2000000000'),
+    maxFeePerGas: convertWeiToGwei(fullData.max_fee_per_gas || tx.max_fee_per_gas || '30000000000')
+  }
+
+  // 将后端估算的GasLimit透传给签名器（数字类型）
+  if (fullData.gas_limit || tx.gas_limit) {
+    try {
+      const gas = fullData.gas_limit ?? tx.gas_limit
+      minimalData.gas = typeof gas === 'string' ? parseInt(gas, 10) : Number(gas)
+    } catch (e) {
+      // 忽略解析失败，保持未设置
+    }
   }
   
   // 添加AccessList - 优先使用后端保存的accessList
@@ -1082,9 +959,15 @@ const createMinimalTransactionData = (tx: UserTransaction, fullData: any) => {
   return minimalData
 }
 
+
 // 转换金额为十六进制格式
 const convertToHexString = (amount: string) => {
   if (!amount || amount === '0') return '0x0'
+  
+  // 如果已经包含0x前缀，直接返回
+  if (amount.startsWith('0x')) {
+    return amount
+  }
   
   // 检查是否是小数，如果是小数，先转换为整数
   let intAmount: bigint
@@ -1160,8 +1043,10 @@ const generateTransferData = (toAddress: string, amount: string) => {
   const toParam = toAddress.slice(2).padStart(64, '0')
   // 金额参数（32字节，直接使用整数金额的十六进制）
   const amountHex = convertToHexString(amount)
-  const amountParam = amountHex.slice(2).padStart(64, '0')
-  return functionSelector + toParam + amountParam
+  // 确保去掉0x前缀
+  const amountParam = amountHex.startsWith('0x') ? amountHex.slice(2) : amountHex
+  const paddedAmountParam = amountParam.padStart(64, '0')
+  return functionSelector + toParam + paddedAmountParam
 }
 
 // 生成approve函数调用数据
@@ -1296,17 +1181,15 @@ const downloadQRCode = () => {
 // 查看交易
 const viewTransaction = (tx: UserTransaction) => {
   // 显示交易详情
-  console.log('查看交易详情:', tx)
   
   let details = `交易详情:
   
-ID: ${tx.id}
 状态: ${getStatusText(tx.status)}
 链类型: ${tx.chain.toUpperCase()}
 币种: ${tx.symbol}
 ${tx.contract_operation_type === 'balanceOf' ? '查询地址' : '发送地址'}: ${tx.from_address}
 ${tx.contract_operation_type === 'balanceOf' ? '' : `接收地址: ${tx.to_address}
-金额: ${formatAmount(tx.amount, tx.symbol, tx.token_decimals)} ${tx.symbol}`}
+金额: ${formatTokenAmount(tx.amount, tx.symbol, tx.token_decimals)} ${tx.symbol}`}
 Gas限制: ${tx.gas_limit || '未设置'}
 Gas价格: ${tx.gas_price || '未设置'} Gwei
 Nonce: ${tx.nonce || '自动获取'}
@@ -1377,7 +1260,6 @@ const importSignatureData = async () => {
     })
     
     if (response.success) {
-      console.log('导入签名成功:', response.data)
       alert('导入签名成功！')
       loadTransactions()
       loadTransactionStats()
@@ -1455,7 +1337,6 @@ const openImportModal = (tx: UserTransaction) => {
 
 // 处理交易创建成功
 const handleTransactionCreated = (transaction: any) => {
-  console.log('交易创建成功:', transaction)
   // 刷新交易列表和统计
   loadTransactions()
   loadTransactionStats()
@@ -1463,6 +1344,14 @@ const handleTransactionCreated = (transaction: any) => {
   selectedTransaction.value = null // 清除选中的交易
 }
 
+
+// 打开创建交易模态框
+const openCreateModal = () => {
+  // 重置所有状态
+  isEditMode.value = false
+  selectedTransaction.value = null
+  showCreateModal.value = true
+}
 
 // 处理模态框关闭
 const handleModalClose = () => {
@@ -1473,7 +1362,6 @@ const handleModalClose = () => {
 
 // 处理交易更新
 const handleTransactionUpdated = (transaction: any) => {
-  console.log('交易更新成功:', transaction)
   // 刷新交易列表和统计
   loadTransactions()
   loadTransactionStats()
@@ -1535,43 +1423,53 @@ const loadTransactionStats = async () => {
   }
 }
 
+// 加载Gas费率数据
+const loadGasRates = async () => {
+  try {
+    console.log('🔄 加载Gas费率数据...')
+    const response = await getGasRates({ chain: 'eth' })
+    
+    if (response.success) {
+      console.log('✅ Gas费率数据加载成功:', response.data)
+      feeLevels.value = response.data
+      
+      // 更新网络拥堵状态
+      if (response.data?.normal?.network_congestion) {
+        networkCongestion.value = response.data.normal.network_congestion
+      }
+    } else {
+      console.warn('⚠️ Gas费率数据加载失败:', response.message)
+    }
+  } catch (error) {
+    console.error('❌ 加载Gas费率数据失败:', error)
+  }
+}
+
 // 监听状态筛选变化
 watch(selectedStatus, () => {
   currentPage.value = 1
   loadTransactions()
 })
 
-// 格式化费率显示（Wei转Gwei）
-const formatFeeForDisplay = (feeWei: string) => {
-  if (!feeWei) return '0'
-  
-  try {
-    const feeBig = BigInt(feeWei)
-    const gwei = Number(feeBig) / 1e9
-    return gwei.toFixed(2)
-  } catch (error) {
-    console.error('费率格式化失败:', error)
-    return '0'
-  }
-}
 
 // WebSocket监听
 const setupWebSocketListeners = () => {
   // 监听费率更新
-  subscribeChainEvent('network', (message) => {
+  const unsubNetwork = subscribeChainEvent('network', (message) => {
     if (message.action === 'fee_update' && message.data) {
-      console.log('收到费率更新:', message.data)
+      // console.log('收到费率更新:', message.data)
       feeLevels.value = message.data as unknown as FeeLevels
       if (feeLevels.value?.normal?.network_congestion) {
         networkCongestion.value = feeLevels.value.normal.network_congestion
       }
     }
   })
+  wsUnsubscribes.push(unsubNetwork)
 
   // 监听交易状态更新
-  subscribeChainEvent('transaction', (message) => {
+  const unsubTx = subscribeChainEvent('transaction', (message) => {
     if (message.action === 'status_update' && message.data) {
-      console.log('收到交易状态更新:', message.data)
+      // console.log('收到交易状态更新:', message.data)
       const statusUpdate = message.data as unknown as TransactionStatusUpdate
       
       // 更新本地交易列表中的对应交易
@@ -1591,10 +1489,10 @@ const setupWebSocketListeners = () => {
         // 刷新统计信息
         loadTransactionStats()
         
-        console.log(`交易 ${statusUpdate.id} 状态已更新为: ${statusUpdate.status}`)
       }
     }
   })
+  wsUnsubscribes.push(unsubTx)
 }
 
 // 监听模态框状态变化
@@ -1606,9 +1504,20 @@ watch(showCreateModal, (newVal) => {
   }
 })
 
-onMounted(() => {
+onMounted(async () => {
+  // 先加载Gas费率数据，确保页面打开时立即显示费率信息
+  await loadGasRates()
+  
+  // 然后加载其他数据
   loadTransactions()
   loadTransactionStats()
   setupWebSocketListeners()
+})
+
+onUnmounted(() => {
+  // 组件卸载时取消订阅，避免重复注册导致一次数据多次回调
+  wsUnsubscribes.forEach(unsub => { try { unsub() } catch {}
+  })
+  wsUnsubscribes.length = 0
 })
 </script>

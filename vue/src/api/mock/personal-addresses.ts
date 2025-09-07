@@ -150,3 +150,18 @@ export const handleMockGetAddressTransactions = (): Promise<any> => {
     }, 300)
   })
 }
+
+/**
+ * 模拟查询授权关系接口
+ */
+export const handleMockGetAuthorizedAddresses = (data: any): Promise<any> => {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      const response = apiData.paths['/api/user/addresses/authorized'].get.responses['200'].content['application/json'].example
+      resolve({
+        ...response,
+        timestamp: Date.now()
+      })
+    }, 300)
+  })
+}

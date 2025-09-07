@@ -1,7 +1,7 @@
 <template>
   <Teleport to="body">
-    <div v-if="show" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-      <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4 max-h-[90vh] overflow-y-auto">
+    <div v-if="show" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50 p-4">
+      <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full max-h-[95vh] flex flex-col">
         <div class="px-6 py-4 border-b border-gray-200">
           <div class="flex items-center justify-between">
             <h3 class="text-lg font-medium text-gray-900">{{ isEditMode ? '编辑交易' : '新建交易' }}</h3>
@@ -16,8 +16,9 @@
           </div>
         </div>
         
-        <form @submit.prevent="handleSubmit" class="px-6 py-4">
-          <div class="space-y-6">
+        <form @submit.prevent="handleSubmit" class="flex flex-col flex-1 overflow-hidden">
+          <div class="px-6 py-4 flex-1 overflow-y-auto">
+            <div class="space-y-6">
             <!-- 链类型 - 固定为ETH -->
             <div>
               <label class="block text-sm font-medium text-gray-700 mb-2">链类型</label>
@@ -175,6 +176,47 @@
               </div>
             </div>
 
+            <!-- 授权地址选择 - 仅在transferFrom时显示 -->
+            <div v-if="contractOperationType === 'transferFrom' && form.from_address">
+              <label class="block text-sm font-medium text-gray-700 mb-2">
+                代币持有者地址
+              </label>
+              <div class="relative">
+                <input
+                  v-model="form.allowance_address"
+                  type="text"
+                  @focus="showAllowanceAddressDropdown = true"
+                  @blur="handleAllowanceAddressBlur"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  placeholder="选择或输入代币持有者地址"
+                  required
+                />
+                <!-- 下拉选择 -->
+                <div v-if="showAllowanceAddressDropdown && authorizedAddresses.length > 0" class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg max-h-60 overflow-y-auto">
+                  <div
+                    v-for="address in authorizedAddresses"
+                    :key="address.address"
+                    @click="selectAllowanceAddress(address)"
+                    class="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
+                  >
+                    <div class="flex items-center justify-between">
+                      <div>
+                        <div class="font-medium text-gray-900">{{ address.label }}</div>
+                        <div class="text-sm text-gray-500 font-mono">{{ address.address }}</div>
+                      </div>
+                      <div class="text-right">
+                        <div class="text-sm text-gray-600">{{ address.type }}</div>
+                        <div class="text-xs text-gray-500">{{ formatBalance(address.balance) }} {{ form.symbol }}</div>
+                      </div>
+                    </div>
+                  </div>
+                </div>
+              </div>
+              <p class="mt-1 text-sm text-gray-500">
+                选择被授权地址 {{ form.from_address }} 可以操作的代币持有者地址
+              </p>
+            </div>
+
             <!-- 接收地址 - 智能下拉选择 -->
             <div v-if="shouldShowToAddress">
               <label class="block text-sm font-medium text-gray-700 mb-2">
@@ -233,17 +275,20 @@
               </div>
             </div>
 
+            </div>
           </div>
 
-          <!-- 操作按钮 -->
-          <div class="flex justify-end mt-6 pt-4 border-t border-gray-200">
-            <button
-              type="submit"
-              :disabled="isSubmitting"
-              class="px-6 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
-            >
-              {{ isSubmitting ? (isEditMode ? '更新中...' : '创建中...') : (isEditMode ? '更新交易' : '创建交易') }}
-            </button>
+          <!-- 操作按钮 - 固定在底部 -->
+          <div class="px-6 py-4 border-t border-gray-200 bg-white flex-shrink-0">
+            <div class="flex justify-end">
+              <button
+                type="submit"
+                :disabled="isSubmitting"
+                class="px-6 py-2 bg-blue-600 text-white text-sm font-medium rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed transition-colors"
+              >
+                {{ isSubmitting ? (isEditMode ? '更新中...' : '创建中...') : (isEditMode ? '更新交易' : '创建交易') }}
+              </button>
+            </div>
           </div>
         </form>
       </div>
@@ -298,7 +343,8 @@ const form = ref<CreateUserTransactionRequest>({
   gas_limit: undefined,
   gas_price: undefined,
   nonce: undefined, // Nonce自动获取
-  remark: ''
+  remark: '',
+  allowance_address: '' // 授权地址（代币持有者地址）
 })
 
 // 编辑模式下初始化表单数据
@@ -338,7 +384,8 @@ const initEditForm = () => {
       remark: tx.remark || '',
       transaction_type: tx.transaction_type,
       contract_operation_type: tx.contract_operation_type,
-      token_contract_address: tx.token_contract_address
+      token_contract_address: tx.token_contract_address,
+      allowance_address: tx.allowance_address || ''
     }
     
     // 设置交易类型
@@ -371,6 +418,8 @@ const contractOperationType = ref<'transfer' | 'approve' | 'transferFrom' | 'bal
 // 地址相关
 const addresses = ref<PersonalAddressItem[]>([])
 const showFromAddressDropdown = ref(false)
+const authorizedAddresses = ref<PersonalAddressItem[]>([])
+const showAllowanceAddressDropdown = ref(false)
 const showToAddressDropdown = ref(false)
 
 // 代币相关
@@ -589,6 +638,36 @@ const loadTokens = async () => {
 const selectFromAddress = (address: PersonalAddressItem) => {
   form.value.from_address = address.address
   showFromAddressDropdown.value = false
+  
+  // 如果是transferFrom操作，查询授权关系
+  if (contractOperationType.value === 'transferFrom') {
+    loadAuthorizedAddresses(address.address)
+  }
+}
+
+// 查询授权地址
+const loadAuthorizedAddresses = async (spenderAddress: string) => {
+  try {
+    const { getAuthorizedAddresses } = await import('@/api/personal-addresses')
+    const response = await getAuthorizedAddresses({ spender_address: spenderAddress })
+    
+    if (response.success) {
+      // 后端直接返回数组，不是包装在authorized_addresses字段中
+      const addresses = Array.isArray(response.data) ? response.data : []
+      authorizedAddresses.value = addresses
+    } else {
+      authorizedAddresses.value = []
+    }
+  } catch (error) {
+    console.error('查询授权地址失败:', error)
+    authorizedAddresses.value = []
+  }
+}
+
+// 选择授权地址
+const selectAllowanceAddress = (address: PersonalAddressItem) => {
+  form.value.allowance_address = address.address
+  showAllowanceAddressDropdown.value = false
 }
 
 // 选择接收地址
@@ -602,6 +681,14 @@ const handleFromAddressBlur = () => {
   // 延迟隐藏，让用户有时间点击下拉选项
   setTimeout(() => {
     showFromAddressDropdown.value = false
+  }, 200)
+}
+
+// 处理授权地址输入框失去焦点
+const handleAllowanceAddressBlur = () => {
+  // 延迟隐藏，让用户有时间点击下拉选项
+  setTimeout(() => {
+    showAllowanceAddressDropdown.value = false
   }, 200)
 }
 
@@ -643,6 +730,13 @@ const handleContractOperationTypeChange = () => {
     case 'transferFrom':
       // 授权转账：需要发送地址、接收地址、金额
       // 确保接收地址字段可见
+      // 清空授权地址，需要重新选择
+      form.value.allowance_address = ''
+      authorizedAddresses.value = []
+      // 如果已有发送地址，查询授权关系
+      if (form.value.from_address) {
+        loadAuthorizedAddresses(form.value.from_address)
+      }
       break
     case 'balanceOf':
       // 查询余额：只需要查询地址，清空接收地址和金额
@@ -738,6 +832,12 @@ const handleSubmit = async () => {
       }
     }
     
+    // transferFrom操作需要授权地址
+    if (contractOperationType.value === 'transferFrom' && !form.value.allowance_address) {
+      alert('请选择代币持有者地址')
+      return
+    }
+    
     // 构建完整的提交数据
     const submitData = {
       ...form.value,
@@ -797,17 +897,47 @@ const resetForm = () => {
     gas_limit: 21000,
     gas_price: '20',
     nonce: undefined,
-    remark: ''
+    remark: '',
+    allowance_address: ''
   }
+  
+  // 重置所有状态
+  transactionType.value = 'eth'
+  contractOperationType.value = 'transfer'
+  selectedToken.value = null
+  selectedTokenSearch.value = ''
+  authorizedAddresses.value = []
+  
+  // 重置下拉框状态
+  showFromAddressDropdown.value = false
+  showAllowanceAddressDropdown.value = false
+  showToAddressDropdown.value = false
+  showTokenDropdown.value = false
+  
   // 重新初始化ETH字段
   initEthFields()
 }
+
+// 监听模态框显示状态，每次打开时重置表单
+watch(() => props.show, (newShow) => {
+  if (newShow) {
+    // 模态框打开时重置表单
+    resetForm()
+    // 如果是编辑模式，重新初始化编辑数据
+    if (props.isEditMode && props.transaction) {
+      initEditForm()
+    }
+  }
+})
 
 // 组件挂载时加载地址列表和初始化ETH字段
 onMounted(() => {
   loadAddresses()
   loadTokens()
   initEthFields()
-  initEditForm() // 在组件挂载时初始化编辑模式下的表单数据
+  // 如果初始就是编辑模式，初始化编辑数据
+  if (props.isEditMode && props.transaction) {
+    initEditForm()
+  }
 })
 </script>

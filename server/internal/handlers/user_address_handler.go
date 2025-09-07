@@ -230,3 +230,36 @@ func (h *UserAddressHandler) GetAddressTransactions(c *gin.Context) {
 
 	utils.SuccessResponse(c, http.StatusOK, "获取交易列表成功", transactions)
 }
+
+// GetAuthorizedAddresses 根据发送地址查询授权关系
+// @Summary 查询授权关系
+// @Description 根据发送地址查询可操作的代币持有者地址
+// @Tags 用户地址管理
+// @Produce json
+// @Param spender_address query string true "发送地址（被授权地址）"
+// @Success 200 {object} utils.Response{data=[]dto.UserAddressResponse}
+// @Failure 400 {object} utils.Response
+// @Failure 401 {object} utils.Response
+// @Router /api/user/addresses/authorized [get]
+func (h *UserAddressHandler) GetAuthorizedAddresses(c *gin.Context) {
+	userID := c.GetUint("user_id")
+	if userID == 0 {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "未授权")
+		return
+	}
+
+	spenderAddress := c.Query("spender_address")
+	if spenderAddress == "" {
+		utils.ErrorResponse(c, http.StatusBadRequest, "spender_address参数不能为空")
+		return
+	}
+
+	// 查询授权关系
+	addresses, err := h.userAddressService.GetAddressesByAuthorizedAddress(spenderAddress)
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusInternalServerError, "查询授权关系失败: "+err.Error())
+		return
+	}
+
+	utils.SuccessResponse(c, http.StatusOK, "查询授权关系成功", addresses)
+}

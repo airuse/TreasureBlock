@@ -83,3 +83,13 @@ export type PersonalAddressType = 'wallet' | 'contract' | 'exchange' | 'other'
 
 // 地址状态枚举
 export type PersonalAddressStatus = 'active' | 'inactive'
+
+// 授权地址查询请求类型
+export interface GetAuthorizedAddressesRequest {
+  spender_address: string
+}
+
+// 授权地址响应类型
+export interface AuthorizedAddressesResponse {
+  authorized_addresses: PersonalAddressItem[]
+}

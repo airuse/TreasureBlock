@@ -2,11 +2,13 @@ package services
 
 import (
 	"blockChainBrowser/server/config"
+	"blockChainBrowser/server/internal/database"
 	"blockChainBrowser/server/internal/dto"
 	"blockChainBrowser/server/internal/models"
 	"blockChainBrowser/server/internal/repository"
 	"blockChainBrowser/server/internal/utils"
 	"context"
+	"encoding/hex"
 	"errors"
 	"fmt"
 	"math/big"
@@ -33,15 +35,19 @@ type UserTransactionService interface {
 
 // userTransactionService 用户交易服务实现
 type userTransactionService struct {
-	userTxRepo repository.UserTransactionRepository
-	logger     *logrus.Logger
+	userTxRepo       repository.UserTransactionRepository
+	coinConfigRepo   repository.CoinConfigRepository
+	parserConfigRepo repository.ParserConfigRepository
+	logger           *logrus.Logger
 }
 
 // NewUserTransactionService 创建用户交易服务实例
 func NewUserTransactionService() UserTransactionService {
 	return &userTransactionService{
-		userTxRepo: repository.NewUserTransactionRepository(),
-		logger:     logrus.New(),
+		userTxRepo:       repository.NewUserTransactionRepository(),
+		coinConfigRepo:   repository.NewCoinConfigRepository(),
+		parserConfigRepo: repository.NewParserConfigRepository(database.GetDB()),
+		logger:           logrus.New(),
 	}
 }
 
@@ -66,6 +72,7 @@ func (s *userTransactionService) CreateTransaction(ctx context.Context, userID u
 		TransactionType:       req.TransactionType,
 		ContractOperationType: req.ContractOperationType,
 		TokenContractAddress:  req.TokenContractAddress,
+		AllowanceAddress:      req.AllowanceAddress,
 	}
 
 	// 保存到数据库
@@ -94,9 +101,25 @@ func (s *userTransactionService) GetUserTransactions(ctx context.Context, userID
 		return nil, fmt.Errorf("获取交易列表失败: %w", err)
 	}
 
+	// 获取代币配置信息，用于填充代币精度
+	tokenConfigs, err := s.getTokenConfigs(ctx)
+	if err != nil {
+		// 如果获取代币配置失败，记录错误但不影响交易列表返回
+		fmt.Printf("Warning: Failed to get token configs: %v\n", err)
+	}
+
 	// 转换为响应DTO
 	var responses []dto.UserTransactionResponse
 	for _, tx := range transactions {
+		// 如果是代币交易，尝试获取代币精度信息
+		if tx.TransactionType == "token" && tx.TokenContractAddress != "" {
+			if config, exists := tokenConfigs[strings.ToLower(tx.TokenContractAddress)]; exists {
+				tx.TokenName = config.Name
+				// 转换类型：*uint -> *uint8
+				decimals := uint8(config.Decimals)
+				tx.TokenDecimals = &decimals
+			}
+		}
 		responses = append(responses, *s.convertToResponse(tx))
 	}
 
@@ -211,20 +234,93 @@ func (s *userTransactionService) ExportTransaction(ctx context.Context, id uint,
 	accessList := s.generateAccessList(userTx)
 
 	// 处理费率设置
+	fmt.Printf("🔍 费率设置调试信息:\n")
+	fmt.Printf("  req.MaxPriorityFeePerGas: %v\n", req.MaxPriorityFeePerGas)
+	fmt.Printf("  req.MaxFeePerGas: %v\n", req.MaxFeePerGas)
+	fmt.Printf("  userTx.MaxPriorityFeePerGas (before): %v\n", userTx.MaxPriorityFeePerGas)
+	fmt.Printf("  userTx.MaxFeePerGas (before): %v\n", userTx.MaxFeePerGas)
+
 	if req.MaxPriorityFeePerGas != nil {
+		// 前端传递的已经是Wei单位，直接使用
 		userTx.MaxPriorityFeePerGas = req.MaxPriorityFeePerGas
+		fmt.Printf("  ✅ 使用请求中的 MaxPriorityFeePerGas: %s wei\n", *req.MaxPriorityFeePerGas)
 	} else if userTx.MaxPriorityFeePerGas == nil {
-		// 如果没有设置费率，使用默认值
-		defaultTip := "2" // 2 Gwei
+		// 如果没有设置费率，使用默认值 2 Gwei = 2,000,000,000 wei
+		defaultTip := "2000000000" // 2 Gwei in wei
 		userTx.MaxPriorityFeePerGas = &defaultTip
+		fmt.Printf("  ⚠️ 使用默认 MaxPriorityFeePerGas: 2 Gwei -> %s wei\n", defaultTip)
+	} else {
+		// 数据库中已存在的值，检查是否需要从Gwei转换为Wei
+		if s.isGweiValue(*userTx.MaxPriorityFeePerGas) {
+			priorityFeeWei, err := s.convertGweiToWei(*userTx.MaxPriorityFeePerGas)
+			if err == nil {
+				userTx.MaxPriorityFeePerGas = &priorityFeeWei
+				fmt.Printf("  🔄 转换数据库中的 MaxPriorityFeePerGas: %s Gwei -> %s wei\n", *userTx.MaxPriorityFeePerGas, priorityFeeWei)
+			}
+		}
 	}
 
 	if req.MaxFeePerGas != nil {
+		// 前端传递的已经是Wei单位，直接使用
 		userTx.MaxFeePerGas = req.MaxFeePerGas
+		fmt.Printf("  ✅ 使用请求中的 MaxFeePerGas: %s wei\n", *req.MaxFeePerGas)
 	} else if userTx.MaxFeePerGas == nil {
-		// 如果没有设置费率，使用默认值
-		defaultFee := "30" // 30 Gwei
+		// 如果没有设置费率，使用默认值 30 Gwei = 30,000,000,000 wei
+		defaultFee := "30000000000" // 30 Gwei in wei
 		userTx.MaxFeePerGas = &defaultFee
+		fmt.Printf("  ⚠️ 使用默认 MaxFeePerGas: 30 Gwei -> %s wei\n", defaultFee)
+	} else {
+		// 数据库中已存在的值，检查是否需要从Gwei转换为Wei
+		if s.isGweiValue(*userTx.MaxFeePerGas) {
+			maxFeeWei, err := s.convertGweiToWei(*userTx.MaxFeePerGas)
+			if err == nil {
+				userTx.MaxFeePerGas = &maxFeeWei
+				fmt.Printf("  🔄 转换数据库中的 MaxFeePerGas: %s Gwei -> %s wei\n", *userTx.MaxFeePerGas, maxFeeWei)
+			}
+		}
+	}
+
+	fmt.Printf("  userTx.MaxPriorityFeePerGas (after): %v\n", userTx.MaxPriorityFeePerGas)
+	fmt.Printf("  userTx.MaxFeePerGas (after): %v\n", userTx.MaxFeePerGas)
+	fmt.Printf("开始进行估算GasLimit")
+	fmt.Printf("参数 查验 userTx.Chain = %s,userTx.GasLimit = %v \n", userTx.Chain, userTx.GasLimit)
+	// 估算GasLimit（未设置时；ETH链；合约调用或代币交易）
+	if strings.ToLower(userTx.Chain) == "eth" {
+		fmt.Printf("参数 查验 userTx.TransactionType %s\n", userTx.TransactionType)
+		// ETH + token/合约调用 -> 估算；ETH 原生 -> 固定21000
+		if userTx.TransactionType == "token" {
+			rpcManager := utils.NewRPCClientManager()
+			defer rpcManager.Close()
+
+			value := big.NewInt(0)
+			var dataBytes []byte
+			if txData != "" && txData != "0x" {
+				hexStr := strings.TrimPrefix(txData, "0x")
+				if b, err := hex.DecodeString(hexStr); err == nil {
+					dataBytes = b
+				}
+			}
+
+			toForGas := userTx.ToAddress
+			if userTx.TokenContractAddress != "" { // 代币调用时 To 是合约
+				toForGas = userTx.TokenContractAddress
+			}
+
+			fmt.Printf("🔍 估算Gas  txData: %+v\n", txData)
+
+			if gas, err := rpcManager.EstimateEthGas(ctx, userTx.FromAddress, toForGas, value, dataBytes); err == nil {
+				gasWithBuffer := gas + gas/5
+				gasU := uint(gasWithBuffer)
+				userTx.GasLimit = &gasU
+				fmt.Printf("Gas估算成功: %d\n", gasU)
+			} else {
+				s.logger.Warnf("Gas估算失败，保持原值: %v", err)
+			}
+		} else {
+			g := uint(21000)
+			userTx.GasLimit = &g
+			fmt.Printf("Gas估算失败，保持原值: %d type=%s txData=%s\n", g, userTx.TransactionType, txData)
+		}
 	}
 
 	// 更新交易状态为未签名，并保存QR码数据
@@ -293,11 +389,9 @@ func (s *userTransactionService) ImportSignature(ctx context.Context, id uint, u
 	// 自动发送交易
 	sendResp, err := s.SendTransaction(ctx, id, userID)
 	if err != nil {
-		// 发送失败，更新状态为失败
-		userTx.Status = "failed"
-		errorMsg := err.Error()
-		userTx.ErrorMsg = &errorMsg
-		s.userTxRepo.Update(ctx, userTx)
+		// 发送失败，保存错误到数据库
+		errorMsg := fmt.Sprintf("自动发送交易失败: %v", err)
+		s.saveTransactionError(ctx, userTx, errorMsg)
 		return nil, fmt.Errorf("自动发送交易失败: %w", err)
 	}
 
@@ -321,6 +415,16 @@ func (s *userTransactionService) SendTransaction(ctx context.Context, id uint, u
 		return nil, errors.New("交易尚未签名，无法发送")
 	}
 
+	// 对于ETH交易，检查账户余额是否足够
+	if strings.ToLower(userTx.Chain) == "eth" && userTx.TransactionType == "coin" {
+		if err := s.validateEthBalance(ctx, userTx); err != nil {
+			// 余额验证失败，保存错误到数据库
+			errorMsg := fmt.Sprintf("余额验证失败: %v", err)
+			s.saveTransactionError(ctx, userTx, errorMsg)
+			return nil, fmt.Errorf("余额验证失败: %w", err)
+		}
+	}
+
 	// 创建RPC客户端管理器
 	rpcManager := utils.NewRPCClientManager()
 	defer rpcManager.Close()
@@ -331,27 +435,26 @@ func (s *userTransactionService) SendTransaction(ctx context.Context, id uint, u
 		SignedTx:    *userTx.SignedTx,
 		FromAddress: userTx.FromAddress,
 		ToAddress:   userTx.ToAddress,
-		Amount:      userTx.Amount,
+		Amount:      userTx.Amount, //代币交易时，Amount为0
 		Fee:         userTx.Fee,
+	}
+	if strings.ToLower(userTx.Chain) == "eth" && userTx.TransactionType == "token" {
+		sendReq.Amount = "0x0"
 	}
 
 	// 调用RPC发送交易
 	sendResp, err := rpcManager.SendTransaction(ctx, sendReq)
 	if err != nil {
-		s.logger.Errorf("发送交易失败: %v", err)
+		// RPC调用失败，保存错误到数据库
+		errorMsg := fmt.Sprintf("RPC调用失败: %v", err)
+		s.saveTransactionError(ctx, userTx, errorMsg)
 		return nil, fmt.Errorf("发送交易失败: %w", err)
 	}
 
 	if !sendResp.Success {
-		// 发送失败，更新状态为失败
-		userTx.Status = "failed"
-		errorMsg := sendResp.Message
-		userTx.ErrorMsg = &errorMsg
-
-		if err := s.userTxRepo.Update(ctx, userTx); err != nil {
-			s.logger.Errorf("更新交易状态失败: %v", err)
-		}
-
+		// 发送失败，保存错误到数据库
+		errorMsg := fmt.Sprintf("交易发送失败: %s", sendResp.Message)
+		s.saveTransactionError(ctx, userTx, errorMsg)
 		return nil, fmt.Errorf("发送交易失败: %s", sendResp.Message)
 	}
 
@@ -401,7 +504,9 @@ func (s *userTransactionService) updateTransactionStatusAsync(ctx context.Contex
 	// 查询交易状态
 	txStatus, err := rpcManager.GetTransactionStatus(ctx, userTx.Chain, *userTx.TxHash)
 	if err != nil {
-		s.logger.Errorf("查询交易状态失败: %v", err)
+		// 查询失败，保存错误信息到数据库
+		errorMsg := fmt.Sprintf("查询交易状态失败: %v", err)
+		s.saveTransactionError(ctx, userTx, errorMsg)
 		return
 	}
 
@@ -459,8 +564,9 @@ func (s *userTransactionService) updateTransactionStatus(ctx context.Context, id
 	// 查询交易状态
 	txStatus, err := rpcManager.GetTransactionStatus(ctx, userTx.Chain, *userTx.TxHash)
 	if err != nil {
-		s.logger.Errorf("查询交易状态失败: %v", err)
-		// 查询失败不影响返回，只是不更新状态
+		// 查询失败，保存错误信息到数据库
+		errorMsg := fmt.Sprintf("查询交易状态失败: %v", err)
+		s.saveTransactionError(ctx, userTx, errorMsg)
 		return s.convertToResponse(userTx), nil
 	}
 
@@ -558,6 +664,9 @@ func (s *userTransactionService) convertToResponse(userTx *models.UserTransactio
 		TransactionType:       userTx.TransactionType,
 		ContractOperationType: userTx.ContractOperationType,
 		TokenContractAddress:  userTx.TokenContractAddress,
+		AllowanceAddress:      userTx.AllowanceAddress,
+		TokenName:             userTx.TokenName,
+		TokenDecimals:         userTx.TokenDecimals,
 
 		// QR码导出相关字段
 		ChainID:    userTx.ChainID,
@@ -569,6 +678,27 @@ func (s *userTransactionService) convertToResponse(userTx *models.UserTransactio
 		R: userTx.R,
 		S: userTx.S,
 	}
+}
+
+// getTokenConfigs 获取代币配置信息
+func (s *userTransactionService) getTokenConfigs(ctx context.Context) (map[string]*models.CoinConfig, error) {
+	// 获取所有代币配置
+	configs, err := s.coinConfigRepo.GetAll(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("获取代币配置失败: %w", err)
+	}
+
+	// 构建代币地址到配置的映射
+	tokenMap := make(map[string]*models.CoinConfig)
+	for _, config := range configs {
+		if config.ContractAddr != "" {
+			// 使用小写地址作为key，确保匹配
+			address := strings.ToLower(config.ContractAddr)
+			tokenMap[address] = config
+		}
+	}
+
+	return tokenMap, nil
 }
 
 // generateUnsignedTx 生成未签名交易数据（简化实现）
@@ -654,27 +784,80 @@ func (s *userTransactionService) getAddressNonce(ctx context.Context, address st
 func (s *userTransactionService) generateTxData(userTx *models.UserTransaction) string {
 	// 根据交易类型生成不同的数据
 	if userTx.TransactionType == "token" && userTx.TokenContractAddress != "" {
-		switch userTx.ContractOperationType {
-		case "balanceOf":
-			// balanceOf(address) 函数选择器: 0x70a08231
-			return fmt.Sprintf("0x70a08231%s", s.padAddress(userTx.FromAddress))
-		case "transfer":
-			// transfer(address,uint256) 函数选择器: 0xa9059cbb
-			amountHex := s.convertAmountToHex(userTx.Amount)
-			return fmt.Sprintf("0xa9059cbb%s%s", s.padAddress(userTx.ToAddress), amountHex)
-		case "approve":
-			// approve(address,uint256) 函数选择器: 0x095ea7b3
-			amountHex := s.convertAmountToHex(userTx.Amount)
-			return fmt.Sprintf("0x095ea7b3%s%s", s.padAddress(userTx.ToAddress), amountHex)
-		case "transferFrom":
-			// transferFrom(address,address,uint256) 函数选择器: 0x23b872dd
-			amountHex := s.convertAmountToHex(userTx.Amount)
-			return fmt.Sprintf("0x23b872dd%s%s%s", s.padAddress(userTx.FromAddress), s.padAddress(userTx.ToAddress), amountHex)
-		}
+		// 使用parser_config表的配置动态生成交易数据
+		return s.generateContractCallData(userTx)
 	}
 
 	// ETH转账，data为空
 	return "0x"
+}
+
+// generateContractCallData 根据parser_config配置生成合约调用数据
+func (s *userTransactionService) generateContractCallData(userTx *models.UserTransaction) string {
+	// 获取parser_config配置
+	config, err := s.getParserConfigByOperation(context.Background(), userTx.ContractOperationType)
+	if err != nil {
+		s.logger.Errorf("获取parser_config失败: %v", err)
+		return "0x"
+	}
+
+	// 构建交易数据
+	data := config.FunctionSignature // 函数选择器
+
+	// 根据参数配置添加参数
+	for _, param := range config.ParamConfig {
+		var paramValue string
+		switch param.Name {
+		case "to":
+			paramValue = s.padAddress(userTx.ToAddress)
+		case "from":
+			// 对于transferFrom操作，from参数应该是代币持有者地址（allowance_address）
+			if userTx.ContractOperationType == "transferFrom" && userTx.AllowanceAddress != "" {
+				paramValue = s.padAddress(userTx.AllowanceAddress)
+			} else {
+				paramValue = s.padAddress(userTx.FromAddress)
+			}
+		case "owner":
+			paramValue = s.padAddress(userTx.FromAddress)
+		case "spender":
+			paramValue = s.padAddress(userTx.ToAddress)
+		case "value":
+			paramValue = s.convertAmountToHex(userTx.Amount)
+			// 去掉0x前缀
+			paramValue = strings.TrimPrefix(paramValue, "0x")
+		case "wad":
+			paramValue = s.convertAmountToHex(userTx.Amount)
+			// 去掉0x前缀
+			paramValue = strings.TrimPrefix(paramValue, "0x")
+		default:
+			s.logger.Warnf("未知参数名: %s", param.Name)
+			continue
+		}
+
+		// 确保参数长度正确
+		if len(paramValue) < param.Length*2 { // 每个字节2个十六进制字符
+			paramValue = strings.Repeat("0", param.Length*2-len(paramValue)) + paramValue
+		}
+
+		data += paramValue
+	}
+
+	return data
+}
+
+// getParserConfigByOperation 根据操作类型获取parser_config配置
+func (s *userTransactionService) getParserConfigByOperation(ctx context.Context, operationType string) (*models.ParserConfig, error) {
+	// 从数据库查询parser_config配置
+	config, err := s.parserConfigRepo.GetByFunctionName(ctx, operationType)
+	if err != nil {
+		return nil, fmt.Errorf("查询parser_config失败: %w", err)
+	}
+
+	if config == nil {
+		return nil, fmt.Errorf("未找到操作类型 %s 的parser_config配置", operationType)
+	}
+
+	return config, nil
 }
 
 // generateAccessList 生成AccessList
@@ -692,10 +875,7 @@ func (s *userTransactionService) generateAccessList(userTx *models.UserTransacti
 // padAddress 将地址填充为32字节
 func (s *userTransactionService) padAddress(address string) string {
 	// 移除0x前缀并填充到64个字符（32字节）
-	cleanAddr := address
-	if len(address) > 2 && address[:2] == "0x" {
-		cleanAddr = address[2:]
-	}
+	cleanAddr := strings.TrimPrefix(address, "0x")
 	return fmt.Sprintf("%064s", cleanAddr)
 }
 
@@ -712,4 +892,105 @@ func (s *userTransactionService) convertAmountToHex(amount string) string {
 	// 转换为十六进制并添加0x前缀
 	hexStr := fmt.Sprintf("0x%s", amountBig.Text(16))
 	return hexStr
+}
+
+// convertGweiToWei 将Gwei转换为Wei
+func (s *userTransactionService) convertGweiToWei(gweiStr string) (string, error) {
+	// 解析Gwei值
+	gweiBig, ok := new(big.Int).SetString(gweiStr, 10)
+	if !ok {
+		return "", fmt.Errorf("无效的Gwei值: %s", gweiStr)
+	}
+
+	// 1 Gwei = 10^9 Wei
+	weiMultiplier := big.NewInt(1000000000) // 10^9
+	weiBig := new(big.Int).Mul(gweiBig, weiMultiplier)
+
+	return weiBig.String(), nil
+}
+
+// isGweiValue 判断值是否为Gwei单位（小于10^9的值通常是Gwei）
+func (s *userTransactionService) isGweiValue(valueStr string) bool {
+	valueBig, ok := new(big.Int).SetString(valueStr, 10)
+	if !ok {
+		return false
+	}
+
+	// 如果值小于10^9，很可能是Gwei单位
+	// 典型的Gwei值范围：1-1000 Gwei
+	gweiThreshold := big.NewInt(1000000000) // 10^9
+	return valueBig.Cmp(gweiThreshold) < 0
+}
+
+// saveTransactionError 保存交易错误到数据库
+func (s *userTransactionService) saveTransactionError(ctx context.Context, userTx *models.UserTransaction, errorMsg string) {
+	userTx.Status = "failed"
+	userTx.ErrorMsg = &errorMsg
+
+	if err := s.userTxRepo.Update(ctx, userTx); err != nil {
+		s.logger.Errorf("更新交易状态失败: %v", err)
+	}
+
+	s.logger.Errorf("交易失败: %s", errorMsg)
+}
+
+// validateEthBalance 验证ETH账户余额是否足够支付交易
+func (s *userTransactionService) validateEthBalance(ctx context.Context, userTx *models.UserTransaction) error {
+	// 获取账户余额
+	fo, err := utils.NewEthFailoverFromChain("eth")
+	if err != nil {
+		return fmt.Errorf("初始化ETH故障转移失败: %w", err)
+	}
+	defer fo.Close()
+
+	balance, err := fo.BalanceAt(ctx, common.HexToAddress(userTx.FromAddress), nil)
+	if err != nil {
+		return fmt.Errorf("获取账户余额失败: %w", err)
+	}
+
+	// 计算交易金额
+	amountBig, ok := new(big.Int).SetString(userTx.Amount, 10)
+	if !ok {
+		return fmt.Errorf("无效的交易金额: %s", userTx.Amount)
+	}
+
+	// 计算Gas费用
+	var gasCost *big.Int
+	if userTx.GasLimit != nil && userTx.MaxFeePerGas != nil {
+		// EIP-1559交易：使用MaxFeePerGas
+		maxFeeBig, ok := new(big.Int).SetString(*userTx.MaxFeePerGas, 10)
+		if !ok {
+			return fmt.Errorf("无效的MaxFeePerGas: %s", *userTx.MaxFeePerGas)
+		}
+		gasCost = new(big.Int).Mul(maxFeeBig, big.NewInt(int64(*userTx.GasLimit)))
+	} else if userTx.GasLimit != nil && userTx.GasPrice != nil {
+		// Legacy交易：使用GasPrice
+		gasPriceBig, ok := new(big.Int).SetString(*userTx.GasPrice, 10)
+		if !ok {
+			return fmt.Errorf("无效的GasPrice: %s", *userTx.GasPrice)
+		}
+		gasCost = new(big.Int).Mul(gasPriceBig, big.NewInt(int64(*userTx.GasLimit)))
+	} else {
+		return fmt.Errorf("缺少Gas费用信息")
+	}
+
+	// 计算总成本：交易金额 + Gas费用
+	totalCost := new(big.Int).Add(amountBig, gasCost)
+
+	// 检查余额是否足够
+	if balance.Cmp(totalCost) < 0 {
+		// 转换wei到ETH用于显示
+		balanceEth := new(big.Float).Quo(new(big.Float).SetInt(balance), big.NewFloat(1e18))
+		totalCostEth := new(big.Float).Quo(new(big.Float).SetInt(totalCost), big.NewFloat(1e18))
+		shortfall := new(big.Int).Sub(totalCost, balance)
+		shortfallEth := new(big.Float).Quo(new(big.Float).SetInt(shortfall), big.NewFloat(1e18))
+
+		return fmt.Errorf("余额不足: 当前余额 %.6f ETH, 需要 %.6f ETH, 缺少 %.6f ETH",
+			balanceEth, totalCostEth, shortfallEth)
+	}
+
+	s.logger.Infof("余额验证通过: 余额=%s wei, 交易金额=%s wei, Gas费用=%s wei, 总成本=%s wei",
+		balance.String(), amountBig.String(), gasCost.String(), totalCost.String())
+
+	return nil
 }

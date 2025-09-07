@@ -12,6 +12,7 @@ import * as earnings from './earnings'
 import * as personalAddresses from './personal-addresses'
 import * as noAuth from './no-auth'
 import * as userTransactions from './user-transactions'
+import * as gas from './gas'
 
 // 统一导出所有API模块
 export {
@@ -27,7 +28,8 @@ export {
   earnings,
   personalAddresses,
   noAuth,
-  userTransactions
+  userTransactions,
+  gas
 }
 
 // 默认导出所有模块
@@ -44,5 +46,6 @@ export default {
   earnings,
   personalAddresses,
   noAuth,
-  userTransactions
+  userTransactions,
+  gas
 }

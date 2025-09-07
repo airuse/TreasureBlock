@@ -13,6 +13,7 @@ import (
 	"strings"
 	"time"
 
+	ethereum "github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/sirupsen/logrus"
@@ -634,6 +635,40 @@ func (m *RPCClientManager) getETHBlockByNumber(ctx context.Context, blockNumber 
 	}
 
 	return fo.BlockByNumber(ctx, blockNumber)
+}
+
+// EstimateEthGas 估算以太坊交易的Gas上限
+func (m *RPCClientManager) EstimateEthGas(ctx context.Context, from, to string, value *big.Int, data []byte) (uint64, error) {
+	// 获取ETH故障转移管理器
+	fo, exists := m.ethFailovers["eth"]
+	if !exists {
+		for key, f := range m.ethFailovers {
+			if strings.Contains(strings.ToLower(key), "eth") {
+				fo = f
+				exists = true
+				break
+			}
+		}
+	}
+	if !exists {
+		return 0, fmt.Errorf("ETH RPC故障转移未初始化")
+	}
+
+	var toAddr *common.Address
+	if to != "" {
+		addr := common.HexToAddress(to)
+		toAddr = &addr
+	}
+
+	msg := ethereum.CallMsg{
+		From:  common.HexToAddress(from),
+		To:    toAddr,
+		Value: value,
+		Data:  data,
+	}
+	fmt.Printf("🔍 估算Gas: %+v\n", msg)
+	fmt.Printf("🔍 估算Gas: %+v\n", data)
+	return fo.EstimateGas(ctx, msg)
 }
 
 // Close 关闭所有连接

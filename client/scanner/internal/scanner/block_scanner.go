@@ -371,6 +371,7 @@ func (bs *BlockScanner) submitBlockToServer(block *models.Block) (uint64, error)
 		Confirmations:    block.Confirmations,
 		IsOrphan:         block.IsOrphan,
 		Chain:            block.Chain, // BTC特有
+		ChainID:          block.ChainID,
 		MerkleRoot:       block.MerkleRoot,
 		Bits:             block.Bits,
 		Version:          uint32(block.Version),

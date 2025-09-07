@@ -5,13 +5,16 @@ import {
   handleMockGetPersonalAddressById,
   handleMockUpdatePersonalAddress, 
   handleMockDeletePersonalAddress,
-  handleMockGetAddressTransactions
+  handleMockGetAddressTransactions,
+  handleMockGetAuthorizedAddresses
 } from '../mock/personal-addresses'
 import type { 
   PersonalAddressItem, 
   PersonalAddressDetail, 
   CreatePersonalAddressRequest, 
-  UpdatePersonalAddressRequest 
+  UpdatePersonalAddressRequest,
+  GetAuthorizedAddressesRequest,
+  AuthorizedAddressesResponse
 } from '@/types/personal-address'
 import type { AddressTransactionsResponse } from '@/types/transaction'
 import type { ApiResponse } from '../types'
@@ -136,5 +139,22 @@ export function getAddressTransactions(
   return request({
     url: `/api/user/addresses/transactions?${params.toString()}`,
     method: 'GET'
+  })
+}
+
+/**
+ * 查询授权关系
+ */
+export function getAuthorizedAddresses(data: GetAuthorizedAddressesRequest): Promise<ApiResponse<PersonalAddressItem[]>> {
+  if (__USE_MOCK__) {
+    console.log('🔧 使用Mock数据 - getAuthorizedAddresses')
+    return handleMockGetAuthorizedAddresses(data)
+  }
+  
+  console.log('🌐 使用真实API - getAuthorizedAddresses')
+  return request({
+    url: '/api/user/addresses/authorized',
+    method: 'GET',
+    params: data
   })
 }

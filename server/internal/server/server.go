@@ -125,6 +125,9 @@ func New() *Server {
 	feeScheduler.SetWebSocketHandler(wsHandler)
 	go feeScheduler.Start(context.Background())
 
+	// 创建Gas费率处理器
+	gasHandler := handlers.NewGasHandler(feeScheduler)
+
 	// 设置路由
 	router := routes.SetupRoutes(
 		blockHandler,
@@ -142,6 +145,7 @@ func New() *Server {
 		baseConfigHandler,
 		homeHandler,
 		earningsHandler,
+		gasHandler,
 		authService,
 		apiKeyRepo,
 		requestLogRepo,

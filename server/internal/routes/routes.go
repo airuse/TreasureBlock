@@ -29,6 +29,7 @@ func SetupRoutes(
 	baseConfigHandler *handlers.BaseConfigHandler,
 	homeHandler *handlers.HomeHandler,
 	earningsHandler *handlers.EarningsHandler,
+	gasHandler *handlers.GasHandler,
 	authService services.AuthService,
 	apiKeyRepo repository.APIKeyRepository,
 	requestLogRepo repository.RequestLogRepository,
@@ -107,6 +108,7 @@ func SetupRoutes(
 			addresses.PUT("/:id", userAddressHandler.UpdateAddress)                   // 更新地址
 			addresses.DELETE("/:id", userAddressHandler.DeleteAddress)                // 删除地址
 			addresses.GET("/transactions", userAddressHandler.GetAddressTransactions) // 获取地址交易列表
+			addresses.GET("/authorized", userAddressHandler.GetAuthorizedAddresses)   // 根据发送地址查询授权关系
 		}
 
 		// 用户交易管理
@@ -122,6 +124,10 @@ func SetupRoutes(
 			userTransactions.POST("/:id/import-signature", userTransactionHandler.ImportSignature) // 导入签名
 			userTransactions.POST("/:id/send", userTransactionHandler.SendTransaction)             // 发送交易
 		}
+
+		// Gas费率管理
+		userAPI.GET("/gas", gasHandler.GetGasRates)        // 获取Gas费率
+		userAPI.GET("/gas/all", gasHandler.GetAllGasRates) // 获取所有链的Gas费率
 	}
 
 	// 创建公开API限流器（每小时100次请求）

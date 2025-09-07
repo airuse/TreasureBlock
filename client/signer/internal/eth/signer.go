@@ -108,7 +108,11 @@ func (es *ETHSigner) buildTransaction(transaction *pkg.TransactionData) (*types.
 	}
 
 	// 解析交易数据
-	data, err := hex.DecodeString(strings.TrimPrefix(transaction.Data, "0x"))
+	dataHex := transaction.Data
+	if strings.HasPrefix(dataHex, "0x") {
+		dataHex = dataHex[2:]
+	}
+	data, err := hex.DecodeString(dataHex)
 	if err != nil {
 		return nil, fmt.Errorf("解析交易数据失败: %w", err)
 	}
@@ -145,12 +149,18 @@ func (es *ETHSigner) buildTransaction(transaction *pkg.TransactionData) (*types.
 	gasFeeCapWei := big.NewInt(int64(gasFeeCap * 1e9))
 
 	// 创建EIP-1559交易，使用QR码中的费率设置
+	// 优先使用从QR数据传入的 Gas 上限（如果提供）
+	gasLimit := uint64(21000)
+	if transaction.Gas > 0 {
+		gasLimit = transaction.Gas
+	}
+
 	tx := &types.DynamicFeeTx{
 		ChainID:    big.NewInt(chainID),
 		Nonce:      transaction.Nonce,
 		GasTipCap:  gasTipCapWei, // 使用QR码中的费率
 		GasFeeCap:  gasFeeCapWei, // 使用QR码中的费率
-		Gas:        21000,        // 默认gas limit
+		Gas:        gasLimit,     // 使用后端估算的gas limit
 		To:         &to,
 		Value:      value,
 		Data:       data,
@@ -208,6 +218,9 @@ func (es *ETHSigner) DisplayTransaction(transaction *pkg.TransactionData) {
 	fmt.Printf("接收地址: %s\n", transaction.To)
 	fmt.Printf("交易金额: %s wei\n", transaction.Value)
 	fmt.Printf("交易数据: %s\n", transaction.Data)
+	fmt.Printf("交易gas limit: %d\n", transaction.Gas)
+	fmt.Printf("交易gas tip cap: %s\n", transaction.MaxPriorityFeePerGas)
+	fmt.Printf("交易gas fee cap: %s\n", transaction.MaxFeePerGas)
 
 	if len(transaction.AccessList) > 0 {
 		fmt.Printf("访问列表: %d 项\n", len(transaction.AccessList))

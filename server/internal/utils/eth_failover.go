@@ -11,6 +11,7 @@ import (
 
 	"math/big"
 
+	ethereum "github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/ethereum/go-ethereum/ethclient"
@@ -71,18 +72,25 @@ func (m *EthFailoverManager) next() *ethclient.Client {
 
 // SendTransaction 故障转移发送交易
 func (m *EthFailoverManager) SendTransaction(ctx context.Context, tx *types.Transaction) error {
-	fmt.Printf("🔷 开始发送交易: %s", tx.Hash().Hex())
+	fmt.Printf("🔷 开始发送交易: %s\n", tx.Hash().Hex())
 	var lastErr error
 	deadline := time.Now().Add(30 * time.Second)
 	for time.Now().Before(deadline) {
 		cli := m.next()
 		if err := cli.SendTransaction(ctx, tx); err == nil {
+			fmt.Printf("✅ 交易发送成功: %s\n", tx.Hash().Hex())
 			return nil
 		} else {
 			lastErr = err
+			// 检查是否是余额不足错误
+			if strings.Contains(err.Error(), "insufficient funds") {
+				fmt.Printf("❌ 余额不足错误: %v\n", err)
+				return fmt.Errorf("余额不足: %w", err)
+			}
+			fmt.Printf("⚠️ RPC调用失败: %v\n", err)
 		}
 	}
-	fmt.Printf("🔷 发送交易失败,所有转移均不可用！: %v", lastErr)
+	fmt.Printf("🔷 发送交易失败,所有转移均不可用！: %v\n", lastErr)
 	return lastErr
 }
 
@@ -170,6 +178,21 @@ func (m *EthFailoverManager) NonceAt(ctx context.Context, account common.Address
 		n, err := cli.NonceAt(ctx, account, blockNumber)
 		if err == nil {
 			return n, nil
+		}
+		lastErr = err
+	}
+	return 0, lastErr
+}
+
+// EstimateGas 故障转移估算Gas
+func (m *EthFailoverManager) EstimateGas(ctx context.Context, msg ethereum.CallMsg) (uint64, error) {
+	var lastErr error
+	deadline := time.Now().Add(10 * time.Second)
+	for time.Now().Before(deadline) {
+		cli := m.next()
+		gas, err := cli.EstimateGas(ctx, msg)
+		if err == nil {
+			return gas, nil
 		}
 		lastErr = err
 	}

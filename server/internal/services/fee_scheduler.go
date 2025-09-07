@@ -19,6 +19,9 @@ type FeeScheduler struct {
 	baseCfgSvc BaseConfigService
 	logger     *logrus.Logger
 	wsHandler  interfaces.WebSocketBroadcaster // WebSocket广播接口
+
+	// 缓存上一次推送的费率信息
+	lastFeeData map[string]*FeeLevels // key: chain (eth, btc), value: 费率数据
 }
 
 // FeeData 费率数据结构
@@ -43,9 +46,10 @@ type FeeLevels struct {
 // NewFeeScheduler 创建费率调度器
 func NewFeeScheduler() *FeeScheduler {
 	return &FeeScheduler{
-		rpcManager: utils.NewRPCClientManager(),
-		baseCfgSvc: NewBaseConfigService(repository.NewBaseConfigRepository()),
-		logger:     logrus.New(),
+		rpcManager:  utils.NewRPCClientManager(),
+		baseCfgSvc:  NewBaseConfigService(repository.NewBaseConfigRepository()),
+		logger:      logrus.New(),
+		lastFeeData: make(map[string]*FeeLevels), // 初始化缓存map
 	}
 }
 
@@ -240,35 +244,47 @@ func (fs *FeeScheduler) getBaseFeeFromBlock(ctx context.Context, block *BlockInf
 	return block.BaseFee.String(), nil
 }
 
-// calculateMaxPriorityFeeFromHistory 从历史区块计算Max Priority Fee
+// calculateMaxPriorityFeeFromHistory 从上一个区块计算Max Priority Fee
 func (fs *FeeScheduler) calculateMaxPriorityFeeFromHistory(ctx context.Context, currentBlockNumber uint64) (string, error) {
-	// 获取最近几个区块的矿工费数据
+	// 只分析上一个区块，获取最新的费率信息
+	if currentBlockNumber == 0 {
+		return "2000000000", nil // 默认2 Gwei
+	}
+
+	previousBlockNumber := currentBlockNumber - 1
+	block, err := fs.rpcManager.GetBlockByNumber(ctx, "eth", big.NewInt(int64(previousBlockNumber)))
+	if err != nil {
+		fs.logger.Warnf("获取上一个区块失败，使用默认费率: %v", err)
+		return "2000000000", nil // 默认2 Gwei
+	}
+
+	// 收集上一个区块中所有EIP-1559交易的矿工费
 	var priorityFees []*big.Int
-	blockCount := 5 // 分析最近5个区块
+	var totalTxs, eip1559Txs int
 
-	for i := uint64(0); i < uint64(blockCount) && currentBlockNumber > i; i++ {
-		blockNumber := currentBlockNumber - i
-		block, err := fs.rpcManager.GetBlockByNumber(ctx, "eth", big.NewInt(int64(blockNumber)))
-		if err != nil {
-			continue
-		}
-
-		// 分析区块中的交易，计算平均矿工费
-		for _, tx := range block.Transactions() {
-			if tx.Type() == 2 { // EIP-1559 交易
-				if tx.GasTipCap() != nil {
-					priorityFees = append(priorityFees, tx.GasTipCap())
-				}
+	for _, tx := range block.Transactions() {
+		totalTxs++
+		if tx.Type() == 2 { // EIP-1559 交易
+			eip1559Txs++
+			if tx.GasTipCap() != nil && tx.GasTipCap().Cmp(big.NewInt(0)) > 0 {
+				priorityFees = append(priorityFees, tx.GasTipCap())
 			}
 		}
 	}
 
+	// fs.logger.Infof("区块 %d 统计: 总交易数=%d, EIP-1559交易数=%d, 有效矿工费交易数=%d",
+	// 	previousBlockNumber, totalTxs, eip1559Txs, len(priorityFees))
+
 	if len(priorityFees) == 0 {
+		fs.logger.Warn("上一个区块中没有有效的EIP-1559矿工费，使用默认费率")
 		return "2000000000", nil // 默认2 Gwei
 	}
 
 	// 计算中位数
 	medianPriorityFee := fs.calculateMedian(priorityFees)
+	// fs.logger.Infof("基于上一个区块(%d)的%d笔EIP-1559交易，计算得出Max Priority Fee: %s Gwei",
+	// 	previousBlockNumber, len(priorityFees), medianPriorityFee.String())
+
 	return medianPriorityFee.String(), nil
 }
 
@@ -419,15 +435,12 @@ func (fs *FeeScheduler) calculateNetworkCongestion(baseFee string) string {
 
 // broadcastFeeData 广播费率数据
 func (fs *FeeScheduler) broadcastFeeData(chain string, feeLevels *FeeLevels) {
+	// 更新缓存
+	fs.lastFeeData[chain] = feeLevels
+
 	if fs.wsHandler == nil {
 		return
 	}
-
-	fs.logger.Infof("广播%s费率数据: Slow=%s, Normal=%s, Fast=%s",
-		chain,
-		fs.formatFeeForLog(feeLevels.Slow.MaxFee),
-		fs.formatFeeForLog(feeLevels.Normal.MaxFee),
-		fs.formatFeeForLog(feeLevels.Fast.MaxFee))
 
 	// 通过接口调用WebSocket广播方法
 	fs.wsHandler.BroadcastFeeEvent(chain, feeLevels)
@@ -448,6 +461,19 @@ func (fs *FeeScheduler) formatFeeForLog(feeWei string) string {
 // GetETHFeeData 公开方法，用于测试
 func (fs *FeeScheduler) GetETHFeeData(ctx context.Context) (*FeeLevels, error) {
 	return fs.getETHFeeData(ctx)
+}
+
+// GetLastFeeData 获取上一次推送的费率数据
+func (fs *FeeScheduler) GetLastFeeData(chain string) *FeeLevels {
+	if feeData, exists := fs.lastFeeData[chain]; exists {
+		return feeData
+	}
+	return nil
+}
+
+// GetAllLastFeeData 获取所有链的上一次推送的费率数据
+func (fs *FeeScheduler) GetAllLastFeeData() map[string]*FeeLevels {
+	return fs.lastFeeData
 }
 
 // Stop 停止费率调度器

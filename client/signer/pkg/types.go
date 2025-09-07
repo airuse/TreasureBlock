@@ -14,6 +14,9 @@ type TransactionData struct {
 	Data       string           `json:"data"`                 // 交易数据（十六进制）
 	AccessList []AccessListItem `json:"accessList,omitempty"` // 访问列表（ETH EIP-2930）
 
+	// Gas 限制（由后端在导出时估算并下发，签名时直接使用）
+	Gas uint64 `json:"gas,omitempty"`
+
 	// EIP-1559费率字段
 	MaxPriorityFeePerGas string `json:"maxPriorityFeePerGas,omitempty"` // 最大优先费用（Gwei）
 	MaxFeePerGas         string `json:"maxFeePerGas,omitempty"`         // 最大费用（Gwei）

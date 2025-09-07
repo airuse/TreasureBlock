@@ -1,0 +1,196 @@
+{
+  "openapi": "3.0.0",
+  "info": {
+    "title": "Gas费率API",
+    "version": "v1",
+    "description": "Gas费率相关接口"
+  },
+  "paths": {
+    "/api/user/gas": {
+      "get": {
+        "summary": "获取指定链的Gas费率",
+        "description": "获取指定链的最新Gas费率信息",
+        "tags": ["Gas费率"],
+        "parameters": [
+          {
+            "name": "chain",
+            "in": "query",
+            "required": true,
+            "description": "链名称 (e.g., eth)",
+            "schema": {
+              "type": "string",
+              "example": "eth"
+            }
+          }
+        ],
+        "responses": {
+          "200": {
+            "description": "获取成功",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "获取Gas费率成功",
+                  "data": {
+                    "slow": {
+                      "chain": "eth",
+                      "base_fee": "20000000000",
+                      "max_priority_fee": "1000000000",
+                      "max_fee": "30000000000",
+                      "gas_price": "20000000000",
+                      "last_updated": 1703123456,
+                      "block_number": 18500000,
+                      "network_congestion": "normal"
+                    },
+                    "normal": {
+                      "chain": "eth",
+                      "base_fee": "20000000000",
+                      "max_priority_fee": "2000000000",
+                      "max_fee": "40000000000",
+                      "gas_price": "22000000000",
+                      "last_updated": 1703123456,
+                      "block_number": 18500000,
+                      "network_congestion": "normal"
+                    },
+                    "fast": {
+                      "chain": "eth",
+                      "base_fee": "20000000000",
+                      "max_priority_fee": "3000000000",
+                      "max_fee": "50000000000",
+                      "gas_price": "23000000000",
+                      "last_updated": 1703123456,
+                      "block_number": 18500000,
+                      "network_congestion": "normal"
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "400": {
+            "description": "请求参数错误",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": false,
+                  "message": "链名称不能为空",
+                  "data": null
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "未找到费率数据",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": false,
+                  "message": "未找到该链的费率数据",
+                  "data": null
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "/api/user/gas/all": {
+      "get": {
+        "summary": "获取所有链的Gas费率",
+        "description": "获取所有链的最新Gas费率信息",
+        "tags": ["Gas费率"],
+        "responses": {
+          "200": {
+            "description": "获取成功",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": true,
+                  "message": "获取所有Gas费率成功",
+                  "data": {
+                    "eth": {
+                      "slow": {
+                        "chain": "eth",
+                        "base_fee": "20000000000",
+                        "max_priority_fee": "1000000000",
+                        "max_fee": "30000000000",
+                        "gas_price": "20000000000",
+                        "last_updated": 1703123456,
+                        "block_number": 18500000,
+                        "network_congestion": "normal"
+                      },
+                      "normal": {
+                        "chain": "eth",
+                        "base_fee": "20000000000",
+                        "max_priority_fee": "2000000000",
+                        "max_fee": "40000000000",
+                        "gas_price": "22000000000",
+                        "last_updated": 1703123456,
+                        "block_number": 18500000,
+                        "network_congestion": "normal"
+                      },
+                      "fast": {
+                        "chain": "eth",
+                        "base_fee": "20000000000",
+                        "max_priority_fee": "3000000000",
+                        "max_fee": "50000000000",
+                        "gas_price": "23000000000",
+                        "last_updated": 1703123456,
+                        "block_number": 18500000,
+                        "network_congestion": "normal"
+                      }
+                    },
+                    "btc": {
+                      "slow": {
+                        "chain": "btc",
+                        "base_fee": "0",
+                        "max_priority_fee": "0",
+                        "max_fee": "0",
+                        "gas_price": "1000",
+                        "last_updated": 1703123456,
+                        "block_number": 820000,
+                        "network_congestion": "low"
+                      },
+                      "normal": {
+                        "chain": "btc",
+                        "base_fee": "0",
+                        "max_priority_fee": "0",
+                        "max_fee": "0",
+                        "gas_price": "2000",
+                        "last_updated": 1703123456,
+                        "block_number": 820000,
+                        "network_congestion": "low"
+                      },
+                      "fast": {
+                        "chain": "btc",
+                        "base_fee": "0",
+                        "max_priority_fee": "0",
+                        "max_fee": "0",
+                        "gas_price": "3000",
+                        "last_updated": 1703123456,
+                        "block_number": 820000,
+                        "network_congestion": "low"
+                      }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "404": {
+            "description": "未找到任何费率数据",
+            "content": {
+              "application/json": {
+                "example": {
+                  "success": false,
+                  "message": "未找到任何费率数据",
+                  "data": null
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

@@ -15,6 +15,7 @@ type ParserConfigRepository interface {
 	GetParserConfigByID(ctx context.Context, id uint) (*models.ParserConfig, error)
 	GetParserConfigsByContract(ctx context.Context, contractAddress string) ([]*models.ParserConfig, error)
 	GetParserConfigBySignature(ctx context.Context, contractAddress, signature string) (*models.ParserConfig, error)
+	GetByFunctionName(ctx context.Context, functionName string) (*models.ParserConfig, error)
 	ListParserConfigs(ctx context.Context, page, pageSize int, contractAddress string) ([]*models.ParserConfig, int64, error)
 	UpdateParserConfig(ctx context.Context, config *models.ParserConfig) error
 	DeleteParserConfig(ctx context.Context, id uint) error
@@ -63,6 +64,19 @@ func (r *parserConfigRepository) GetParserConfigBySignature(ctx context.Context,
 	var config models.ParserConfig
 	err := r.db.WithContext(ctx).
 		Where("contract_address = ? AND function_signature = ? AND is_active = true", contractAddress, signature).
+		Order("priority DESC").
+		First(&config).Error
+	if err != nil {
+		return nil, err
+	}
+	return &config, nil
+}
+
+// GetByFunctionName 根据函数名称获取解析配置
+func (r *parserConfigRepository) GetByFunctionName(ctx context.Context, functionName string) (*models.ParserConfig, error) {
+	var config models.ParserConfig
+	err := r.db.WithContext(ctx).
+		Where("function_name = ? AND is_active = true", functionName).
 		Order("priority DESC").
 		First(&config).Error
 	if err != nil {

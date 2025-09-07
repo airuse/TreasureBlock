@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"log"
+	"net"
 	"net/http"
 	"sync"
 	"time"
@@ -120,6 +121,11 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 		conn.SetReadDeadline(time.Now().Add(60 * time.Second)) // 重置读取超时
 		return nil
 	})
+	conn.SetCloseHandler(func(code int, text string) error {
+		// 规范化关闭处理：收到客户端Close后尽快回复并让读循环退出
+		_ = conn.WriteControl(websocket.CloseMessage, websocket.FormatCloseMessage(code, ""), time.Now().Add(5*time.Second))
+		return nil
+	})
 
 	// 创建客户端
 	client := &Client{
@@ -140,9 +146,8 @@ func (h *WebSocketHandler) HandleWebSocket(c *gin.Context) {
 // handleMessages 处理WebSocket消息
 func (h *WebSocketHandler) handleMessages(client *Client) {
 	defer func() {
-		log.Printf("WebSocket client disconnected from %s", client.conn.RemoteAddr().String())
+		log.Printf("[WS debug] client disconnected from %s", client.conn.RemoteAddr().String())
 		h.unregister <- client
-		client.conn.Close()
 		close(client.send)
 	}()
 
@@ -152,7 +157,10 @@ func (h *WebSocketHandler) handleMessages(client *Client) {
 	for {
 		_, message, err := client.conn.ReadMessage()
 		if err != nil {
-			if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
+			if isNormalWSCloseError(err) {
+				// 降级：正常关闭/已关闭管道等，仅debug日志
+				log.Printf("[WS debug] read on closed connection: %v", err)
+			} else if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Printf("WebSocket unexpected close error: %v", err)
 			} else {
 				log.Printf("WebSocket read error: %v", err)
@@ -206,13 +214,17 @@ func (h *WebSocketHandler) writePump(client *Client) {
 		case message, ok := <-client.send:
 			if !ok {
 				// 通道已关闭，发送关闭消息
-				client.conn.WriteMessage(websocket.CloseMessage, []byte{})
+				_ = client.conn.WriteMessage(websocket.CloseMessage, []byte{})
 				return
 			}
 
 			// 单独发送每条消息，避免合并多条消息
 			if err := client.conn.WriteMessage(websocket.TextMessage, message); err != nil {
-				log.Printf("Failed to send message: %v", err)
+				if isNormalWSCloseError(err) {
+					log.Printf("[WS debug] write on closed connection: %v", err)
+				} else {
+					log.Printf("Failed to send message: %v", err)
+				}
 				return
 			}
 
@@ -231,11 +243,50 @@ func (h *WebSocketHandler) writePump(client *Client) {
 			}
 
 			if err := client.conn.WriteMessage(websocket.TextMessage, pingData); err != nil {
-				log.Printf("Failed to send ping message: %v", err)
+				if isNormalWSCloseError(err) {
+					log.Printf("[WS debug] ping on closed connection: %v", err)
+				} else {
+					log.Printf("Failed to send ping message: %v", err)
+				}
 				return
 			}
 		}
 	}
+}
+
+// isNormalWSCloseError 判断是否为常见的正常关闭/已关闭管道错误
+func isNormalWSCloseError(err error) bool {
+	if err == nil {
+		return false
+	}
+	// gorilla/websocket 标准关闭码
+	if websocket.IsCloseError(err, websocket.CloseNormalClosure, websocket.CloseGoingAway, websocket.CloseNoStatusReceived) {
+		return true
+	}
+	// 网络连接已关闭
+	if ne, ok := err.(net.Error); ok && !ne.Timeout() {
+		// 非超时的网络错误通常是连接被关闭
+		return true
+	}
+	// 常见错误消息匹配
+	msg := err.Error()
+	return msg == "EOF" ||
+		contains(msg, "use of closed network connection") ||
+		contains(msg, "read/write on closed pipe") ||
+		contains(msg, "broken pipe")
+}
+
+func contains(s, substr string) bool {
+	return len(s) >= len(substr) && (s == substr || (len(substr) > 0 && (indexOf(s, substr) >= 0)))
+}
+
+func indexOf(s, substr string) int {
+	for i := 0; i+len(substr) <= len(s); i++ {
+		if s[i:i+len(substr)] == substr {
+			return i
+		}
+	}
+	return -1
 }
 
 // handleMessage 处理具体消息

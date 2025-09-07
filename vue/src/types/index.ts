@@ -14,4 +14,6 @@ export * from './home'
 export * from './earnings'
 export * from './no-auth'
 export * from './user-transaction'
+export * from './gas'
+export * from './personal-address'
  

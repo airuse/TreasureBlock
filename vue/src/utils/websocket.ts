@@ -98,18 +98,27 @@ class WebSocketManager {
   public connect(): Promise<void> {
     return new Promise((resolve: PromiseResolve<void>, reject: PromiseReject) => {
       if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+        console.log('WebSocket已连接，无需重复连接')
         resolve()
         return
       }
 
       this.isManualClose = false
       this.status.value = WebSocketStatus.CONNECTING
+      console.log(`正在连接WebSocket: ${this.options.url}`)
 
       try {
         this.ws = new WebSocket(this.options.url)
         this.setupEventHandlers(resolve, reject)
       } catch (error) {
+        console.error('WebSocket连接失败:', error)
         this.status.value = WebSocketStatus.ERROR
+        
+        // 如果是初始连接失败，也尝试重连
+        if (!this.isManualClose && this.options.autoReconnect) {
+          this.scheduleReconnect()
+        }
+        
         reject(error)
       }
     })
@@ -120,6 +129,7 @@ class WebSocketManager {
     if (!this.ws) return
 
     this.ws.onopen = () => {
+      console.log('WebSocket连接成功')
       this.status.value = WebSocketStatus.CONNECTED
       this.reconnectAttempts = 0
       this.startHeartbeat()
@@ -159,17 +169,27 @@ class WebSocketManager {
     }
 
     this.ws.onclose = (event) => {
-      console.log('WebSocket closed:', event.code, event.reason)
+      console.log(`WebSocket连接关闭: 代码=${event.code}, 原因=${event.reason || '未知'}`)
       this.status.value = WebSocketStatus.DISCONNECTED
       this.stopHeartbeat()
       
       if (!this.isManualClose && this.options.autoReconnect) {
+        console.log('WebSocket连接意外断开，将尝试重连...')
         this.scheduleReconnect()
+      } else if (this.isManualClose) {
+        console.log('WebSocket手动断开，不进行重连')
       }
     }
 
     this.ws.onerror = (error) => {
+      console.error('WebSocket error:', error)
       this.status.value = WebSocketStatus.ERROR
+      
+      // 连接失败时也触发重连机制
+      if (!this.isManualClose && this.options.autoReconnect) {
+        this.scheduleReconnect()
+      }
+      
       reject(error)
     }
   }
@@ -342,14 +362,20 @@ class WebSocketManager {
   // 安排重连
   private scheduleReconnect() {
     if (this.reconnectAttempts >= this.options.maxReconnectAttempts!) {
+      console.warn(`WebSocket重连失败，已达到最大重连次数 ${this.options.maxReconnectAttempts}`)
+      this.status.value = WebSocketStatus.ERROR
       return
     }
 
     this.reconnectAttempts++
     this.status.value = WebSocketStatus.RECONNECTING
+    
+    console.log(`WebSocket重连中... (第${this.reconnectAttempts}次尝试，${this.options.reconnectInterval}ms后重试)`)
 
     this.reconnectTimer = setTimeout(() => {
       this.connect().catch(error => {
+        console.error(`WebSocket重连失败 (第${this.reconnectAttempts}次):`, error)
+        // 继续尝试重连
         this.scheduleReconnect()
       })
     }, this.options.reconnectInterval)

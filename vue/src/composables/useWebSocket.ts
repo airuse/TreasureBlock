@@ -53,14 +53,23 @@ export function useWebSocket(options?: Partial<WebSocketOptions>) {
         isConnecting.value = wsManager.isConnecting.value
         isReconnecting.value = wsManager.isReconnecting.value
         reconnectAttempts.value = wsManager.getReconnectAttempts()
+        
+        // 添加状态变化的调试信息
+        console.log(`WebSocket状态变化: ${newStatus}`)
       }, { immediate: true })
 
       // 只有在没有连接时才连接
       if (!wsManager.isConnected.value) {
+        console.log('WebSocket未连接，正在尝试连接...')
         await wsManager.connect()
+      } else {
+        console.log('WebSocket已连接')
       }
     } catch (error) {
       console.error('Failed to initialize WebSocket:', error)
+      // 即使初始化失败，也设置状态，让用户知道连接有问题
+      status.value = WebSocketStatus.ERROR
+      isConnected.value = false
     }
   }
 
