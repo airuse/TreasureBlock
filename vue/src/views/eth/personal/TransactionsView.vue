@@ -92,9 +92,41 @@
           
           <!-- 右侧：趋势图 -->
           <div class="flex-1 min-w-0">
-            <!-- 折线图容器 - 调整高度与左侧内容对齐 -->
-            <div class="h-72">
-              <canvas ref="feeChartCanvas" class="w-full h-full"></canvas>
+            <!-- 两个独立的折线图 -->
+            <div class="space-y-4">
+              <!-- Base Fee 图表 -->
+              <div class="relative">
+                <div class="text-sm font-medium text-gray-700 mb-2">Base Fee 趋势</div>
+                <div class="h-32">
+                  <canvas ref="baseFeeChartCanvas" class="w-full h-full cursor-crosshair"></canvas>
+                </div>
+                <!-- Base Fee 工具提示 -->
+                <div 
+                  ref="baseFeeTooltip" 
+                  class="absolute bg-gray-800 text-white text-xs px-2 py-1 rounded shadow-lg pointer-events-none opacity-0 transition-opacity duration-200 z-10"
+                  style="transform: translate(-50%, -100%); margin-top: -8px;"
+                >
+                  <div class="font-medium">Base Fee</div>
+                  <div class="text-gray-300">Value: <span class="text-white font-mono" id="tooltip-base-fee-value">0</span> Gwei</div>
+                </div>
+              </div>
+              
+              <!-- Max Priority Fee 图表 -->
+              <div class="relative">
+                <div class="text-sm font-medium text-gray-700 mb-2">Max Priority Fee 趋势</div>
+                <div class="h-32">
+                  <canvas ref="priorityFeeChartCanvas" class="w-full h-full cursor-crosshair"></canvas>
+                </div>
+                <!-- Priority Fee 工具提示 -->
+                <div 
+                  ref="priorityFeeTooltip" 
+                  class="absolute bg-gray-800 text-white text-xs px-2 py-1 rounded shadow-lg pointer-events-none opacity-0 transition-opacity duration-200 z-10"
+                  style="transform: translate(-50%, -100%); margin-top: -8px;"
+                >
+                  <div class="font-medium">Max Priority Fee</div>
+                  <div class="text-gray-300">Value: <span class="text-white font-mono" id="tooltip-priority-fee-value">0</span> Gwei</div>
+                </div>
+              </div>
             </div>
           </div>
         </div>
@@ -690,7 +722,10 @@ const feeHistory = ref<Array<{
 }>>([])
 
 // 图表相关
-const feeChartCanvas = ref<HTMLCanvasElement | null>(null)
+const baseFeeChartCanvas = ref<HTMLCanvasElement | null>(null)
+const priorityFeeChartCanvas = ref<HTMLCanvasElement | null>(null)
+const baseFeeTooltip = ref<HTMLDivElement | null>(null)
+const priorityFeeTooltip = ref<HTMLDivElement | null>(null)
 let chartInstance: any = null
 
 // 计算属性
@@ -1536,11 +1571,94 @@ const addFeeHistory = (feeData: FeeLevels) => {
   updateChart()
 }
 
-// 更新折线图
-const updateChart = () => {
-  if (!feeChartCanvas.value || feeHistory.value.length === 0) return
+// Base Fee 鼠标移动事件处理
+const handleBaseFeeMouseMove = (event: MouseEvent) => {
+  if (!baseFeeChartCanvas.value || !baseFeeTooltip.value || feeHistory.value.length === 0) return
   
-  const canvas = feeChartCanvas.value
+  const canvas = baseFeeChartCanvas.value
+  const rect = canvas.getBoundingClientRect()
+  const x = event.clientX - rect.left
+  const y = event.clientY - rect.top
+  
+  // 计算数据点索引
+  const padding = { top: 10, right: 10, bottom: 20, left: 40 }
+  const chartWidth = rect.width - padding.left - padding.right
+  const dataIndex = Math.round(((x - padding.left) / chartWidth) * (feeHistory.value.length - 1))
+  
+  // 确保索引在有效范围内
+  if (dataIndex >= 0 && dataIndex < feeHistory.value.length) {
+    const data = feeHistory.value[dataIndex]
+    
+    // 更新工具提示内容
+    const baseFeeElement = document.getElementById('tooltip-base-fee-value')
+    if (baseFeeElement) baseFeeElement.textContent = data.baseFee.toFixed(9)
+    
+    // 计算相对于父容器的位置
+    const parentRect = baseFeeTooltip.value.parentElement?.getBoundingClientRect()
+    
+    if (parentRect) {
+      const relativeX = event.clientX - parentRect.left
+      const relativeY = event.clientY - parentRect.top
+      
+      baseFeeTooltip.value.style.left = relativeX + 'px'
+      baseFeeTooltip.value.style.top = (relativeY - 10) + 'px'
+      baseFeeTooltip.value.style.opacity = '1'
+    }
+  }
+}
+
+// Priority Fee 鼠标移动事件处理
+const handlePriorityFeeMouseMove = (event: MouseEvent) => {
+  if (!priorityFeeChartCanvas.value || !priorityFeeTooltip.value || feeHistory.value.length === 0) return
+  
+  const canvas = priorityFeeChartCanvas.value
+  const rect = canvas.getBoundingClientRect()
+  const x = event.clientX - rect.left
+  const y = event.clientY - rect.top
+  
+  // 计算数据点索引
+  const padding = { top: 10, right: 10, bottom: 20, left: 40 }
+  const chartWidth = rect.width - padding.left - padding.right
+  const dataIndex = Math.round(((x - padding.left) / chartWidth) * (feeHistory.value.length - 1))
+  
+  // 确保索引在有效范围内
+  if (dataIndex >= 0 && dataIndex < feeHistory.value.length) {
+    const data = feeHistory.value[dataIndex]
+    
+    // 更新工具提示内容
+    const priorityFeeElement = document.getElementById('tooltip-priority-fee-value')
+    if (priorityFeeElement) priorityFeeElement.textContent = data.maxPriorityFee.toFixed(9)
+    
+    // 计算相对于父容器的位置
+    const parentRect = priorityFeeTooltip.value.parentElement?.getBoundingClientRect()
+    
+    if (parentRect) {
+      const relativeX = event.clientX - parentRect.left
+      const relativeY = event.clientY - parentRect.top
+      
+      priorityFeeTooltip.value.style.left = relativeX + 'px'
+      priorityFeeTooltip.value.style.top = (relativeY - 10) + 'px'
+      priorityFeeTooltip.value.style.opacity = '1'
+    }
+  }
+}
+
+// Base Fee 鼠标离开事件处理
+const handleBaseFeeMouseLeave = () => {
+  if (baseFeeTooltip.value) {
+    baseFeeTooltip.value.style.opacity = '0'
+  }
+}
+
+// Priority Fee 鼠标离开事件处理
+const handlePriorityFeeMouseLeave = () => {
+  if (priorityFeeTooltip.value) {
+    priorityFeeTooltip.value.style.opacity = '0'
+  }
+}
+
+// 绘制单个图表的通用函数
+const drawSingleChart = (canvas: HTMLCanvasElement, data: number[], color: string, title: string, mouseMoveHandler: (event: MouseEvent) => void, mouseLeaveHandler: () => void) => {
   const ctx = canvas.getContext('2d')
   if (!ctx) return
   
@@ -1553,24 +1671,31 @@ const updateChart = () => {
   // 清空画布
   ctx.clearRect(0, 0, rect.width, rect.height)
   
-  if (feeHistory.value.length < 2) return
+  if (data.length === 0) return
+  
+  // 移除之前的鼠标事件监听器
+  canvas.removeEventListener('mousemove', mouseMoveHandler)
+  canvas.removeEventListener('mouseleave', mouseLeaveHandler)
+  
+  // 添加新的鼠标事件监听器
+  canvas.addEventListener('mousemove', mouseMoveHandler)
+  canvas.addEventListener('mouseleave', mouseLeaveHandler)
   
   // 计算数据范围
-  const allValues = feeHistory.value.flatMap(item => [item.baseFee, item.maxPriorityFee, item.maxFee])
-  const minValue = Math.min(...allValues)
-  const maxValue = Math.max(...allValues)
+  const minValue = Math.min(...data)
+  const maxValue = Math.max(...data)
   const valueRange = maxValue - minValue || 1
   
-  // 设置边距 - 增加左侧边距以容纳Y轴标签
-  const padding = { top: 20, right: 20, bottom: 40, left: 60 }
+  // 设置边距
+  const padding = { top: 10, right: 10, bottom: 20, left: 40 }
   const chartWidth = rect.width - padding.left - padding.right
   const chartHeight = rect.height - padding.top - padding.bottom
   
-  // 绘制背景网格 - 更细腻的网格线
+  // 绘制背景网格
   ctx.strokeStyle = '#f3f4f6'
   ctx.lineWidth = 1
-  for (let i = 0; i <= 8; i++) {
-    const y = padding.top + (chartHeight / 8) * i
+  for (let i = 0; i <= 4; i++) {
+    const y = padding.top + (chartHeight / 4) * i
     ctx.beginPath()
     ctx.moveTo(padding.left, y)
     ctx.lineTo(padding.left + chartWidth, y)
@@ -1578,76 +1703,78 @@ const updateChart = () => {
   }
   
   // 绘制折线
-  const drawLine = (data: number[], color: string, label: string) => {
-    ctx.strokeStyle = color
-    ctx.lineWidth = 2
-    ctx.beginPath()
-    
-    data.forEach((value, index) => {
-      const x = padding.left + (chartWidth / (data.length - 1)) * index
-      const y = padding.top + chartHeight - ((value - minValue) / valueRange) * chartHeight
-      
-      if (index === 0) {
-        ctx.moveTo(x, y)
-      } else {
-        ctx.lineTo(x, y)
-      }
-    })
-    
-    ctx.stroke()
-    
-    // 绘制数据点
-    ctx.fillStyle = color
-    data.forEach((value, index) => {
-      const x = padding.left + (chartWidth / (data.length - 1)) * index
-      const y = padding.top + chartHeight - ((value - minValue) / valueRange) * chartHeight
-      
-      ctx.beginPath()
-      ctx.arc(x, y, 3, 0, 2 * Math.PI)
-      ctx.fill()
-    })
-  }
+  ctx.strokeStyle = color
+  ctx.lineWidth = 2
+  ctx.beginPath()
   
-  // 绘制三条线
-  const baseFeeData = feeHistory.value.map(item => item.baseFee)
-  const maxPriorityFeeData = feeHistory.value.map(item => item.maxPriorityFee)
-  const maxFeeData = feeHistory.value.map(item => item.maxFee)
-  
-  drawLine(baseFeeData, '#6b7280', 'Base Fee') // 灰色
-  drawLine(maxPriorityFeeData, '#3b82f6', 'Max Priority Fee') // 蓝色
-  drawLine(maxFeeData, '#10b981', 'Max Fee') // 绿色
-  
-  // 绘制Y轴标签 - 更细腻的刻度
-  ctx.fillStyle = '#6b7280'
-  ctx.font = '11px sans-serif'
-  ctx.textAlign = 'right'
-  for (let i = 0; i <= 8; i++) {
-    const value = minValue + (valueRange / 8) * (8 - i)
-    const y = padding.top + (chartHeight / 8) * i
-    ctx.fillText(value.toFixed(4), padding.left - 8, y + 3)
-  }
-  
-  // 绘制图例
-  const legendItems = [
-    { color: '#6b7280', label: 'Base Fee' },
-    { color: '#3b82f6', label: 'Max Priority Fee' },
-    { color: '#10b981', label: 'Max Fee' }
-  ]
-  
-  ctx.textAlign = 'left'
-  legendItems.forEach((item, index) => {
-    const x = padding.left + index * 100
-    const y = padding.top + chartHeight + 20
+  data.forEach((value, index) => {
+    const x = data.length === 1 
+      ? padding.left + chartWidth / 2
+      : padding.left + (chartWidth / (data.length - 1)) * index
+    const y = padding.top + chartHeight - ((value - minValue) / valueRange) * chartHeight
     
-    // 绘制颜色块
-    ctx.fillStyle = item.color
-    ctx.fillRect(x, y - 8, 10, 10)
-    
-    // 绘制标签
-    ctx.fillStyle = '#374151'
-    ctx.font = '10px sans-serif'
-    ctx.fillText(item.label, x + 14, y - 1)
+    if (index === 0) {
+      ctx.moveTo(x, y)
+    } else {
+      ctx.lineTo(x, y)
+    }
   })
+  
+  ctx.stroke()
+  
+  // 绘制数据点
+  ctx.fillStyle = color
+  data.forEach((value, index) => {
+    const x = data.length === 1 
+      ? padding.left + chartWidth / 2
+      : padding.left + (chartWidth / (data.length - 1)) * index
+    const y = padding.top + chartHeight - ((value - minValue) / valueRange) * chartHeight
+    
+    ctx.beginPath()
+    ctx.arc(x, y, 2, 0, 2 * Math.PI)
+    ctx.fill()
+  })
+  
+  // 绘制Y轴标签
+  ctx.fillStyle = '#6b7280'
+  ctx.font = '10px sans-serif'
+  ctx.textAlign = 'right'
+  for (let i = 0; i <= 4; i++) {
+    const value = minValue + (valueRange / 4) * (4 - i)
+    const y = padding.top + (chartHeight / 4) * i
+    ctx.fillText(value.toFixed(6), padding.left - 5, y + 3)
+  }
+}
+
+// 更新折线图
+const updateChart = () => {
+  if (feeHistory.value.length === 0) return
+  
+  // 绘制 Base Fee 图表
+  if (baseFeeChartCanvas.value) {
+    const baseFeeData = feeHistory.value.map(item => item.baseFee)
+    drawSingleChart(
+      baseFeeChartCanvas.value, 
+      baseFeeData, 
+      '#6b7280', 
+      'Base Fee',
+      handleBaseFeeMouseMove,
+      handleBaseFeeMouseLeave
+    )
+  }
+  
+  // 绘制 Max Priority Fee 图表
+  if (priorityFeeChartCanvas.value) {
+    const priorityFeeData = feeHistory.value.map(item => item.maxPriorityFee)
+    drawSingleChart(
+      priorityFeeChartCanvas.value, 
+      priorityFeeData, 
+      '#3b82f6', 
+      'Max Priority Fee',
+      handlePriorityFeeMouseMove,
+      handlePriorityFeeMouseLeave
+    )
+  }
 }
 
 // 加载Gas费率数据
@@ -1667,6 +1794,9 @@ const loadGasRates = async () => {
       if (response.data?.normal?.network_congestion) {
         networkCongestion.value = response.data.normal.network_congestion
       }
+      
+      // 立即更新图表显示
+      updateChart()
     } else {
       console.warn('⚠️ Gas费率数据加载失败:', response.message)
     }
@@ -1749,6 +1879,11 @@ onMounted(async () => {
   
   // 监听窗口大小变化，重新绘制图表
   window.addEventListener('resize', updateChart)
+  
+  // 确保DOM完全渲染后再次更新图表
+  setTimeout(() => {
+    updateChart()
+  }, 100)
 })
 
 onUnmounted(() => {
@@ -1761,3 +1896,4 @@ onUnmounted(() => {
   window.removeEventListener('resize', updateChart)
 })
 </script>
+
