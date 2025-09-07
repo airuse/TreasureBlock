@@ -35,7 +35,6 @@ export function getTransactions(data: GetTransactionsRequest): Promise<Paginated
     return handleMockGetTransactions(data)
   }
   
-  console.log('🌐 使用真实API - getTransactions (认证接口)')
   return request({
     url: '/api/v1/transactions',
     method: 'GET',
@@ -52,7 +51,6 @@ export function getTransactionsPublic(data: GetTransactionsRequest): Promise<Pag
     return handleMockGetTransactions(data)
   }
   
-  console.log('🌐 使用真实API - getTransactionsPublic (公开接口)')
   return request({
     url: '/api/no-auth/transactions',
     method: 'GET',
@@ -69,7 +67,6 @@ export function getTransaction(data: GetTransactionRequest): Promise<ApiResponse
     return handleMockGetTransaction(data)
   }
   
-  console.log('🌐 使用真实API - getTransaction')
   return request({
     url: `/api/v1/transactions/${data.hash}`,
     method: 'GET'
@@ -85,7 +82,6 @@ export function searchTransactions(data: SearchTransactionsRequest): Promise<Pag
     return handleMockSearchTransactions(data) as Promise<PaginatedResponse<Transaction>>
   }
   
-  console.log('🌐 使用真实API - searchTransactions')
   return request({
     url: '/api/v1/transactions/search',
     method: 'GET',
@@ -114,7 +110,6 @@ export function getTransactionReceipt(hash: string): Promise<ApiResponse<any>> {
     })
   }
   
-  console.log('🌐 使用真实API - getTransactionReceipt')
   return request({
     url: `/api/v1/transactions/receipt/${hash}`,
     method: 'GET'
@@ -130,7 +125,6 @@ export function getParsedTransaction(hash: string): Promise<ApiResponse<ParsedCo
     return handleMockGetParsedTransaction(hash)
   }
   
-  console.log('🌐 使用真实API - getParsedTransaction')
   return request({
     url: `/api/v1/transactions/parsed/${hash}`,
     method: 'GET'

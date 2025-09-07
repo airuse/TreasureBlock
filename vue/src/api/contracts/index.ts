@@ -52,7 +52,6 @@ export function getContracts(data: GetContractsRequest): Promise<PaginatedRespon
     return handleMockGetContracts(data)
   }
   
-  console.log('🌐 使用真实API - getContracts')
   return request({
     url: '/api/no-auth/contracts',
     method: 'GET',
@@ -69,7 +68,6 @@ export function getContractByAddress(address: string): Promise<ApiResponse<Contr
     return handleMockGetContractByAddress({ address })
   }
   
-  console.log('🌐 使用真实API - getContractByAddress')
   return request({
     url: `/api/v1/contracts/address/${address}`,
     method: 'GET'
@@ -85,7 +83,6 @@ export function getContractsByChain(chainName: string, data: GetContractsByChain
     return handleMockGetContractsByChain({ chainName, ...data })
   }
   
-  console.log('🌐 使用真实API - getContractsByChain')
   return request({
     url: `/api/v1/contracts/chain/${chainName}`,
     method: 'GET',
@@ -102,7 +99,6 @@ export function getContractsByType(type: string, data: GetContractsByTypeRequest
     return handleMockGetContractsByType({ type, ...data })
   }
   
-  console.log('🌐 使用真实API - getContractsByType')
   return request({
     url: `/api/v1/contracts/type/${type}`,
     method: 'GET',
@@ -119,7 +115,6 @@ export function getERC20Tokens(data: GetERC20TokensRequest): Promise<PaginatedRe
     return handleMockGetERC20Tokens(data)
   }
   
-  console.log('🌐 使用真实API - getERC20Tokens')
   return request({
     url: '/api/v1/contracts/erc20',
     method: 'GET',
@@ -136,7 +131,6 @@ export function createOrUpdateContract(data: Partial<Contract>): Promise<ApiResp
     return handleMockCreateOrUpdateContract(data)
   }
   
-  console.log('🌐 使用真实API - createOrUpdateContract')
   return request({
     url: '/api/v1/contracts',
     method: 'POST',
@@ -153,7 +147,6 @@ export function updateContractStatus(address: string, status: string): Promise<A
     return handleMockUpdateContractStatus({ address, status })
   }
   
-  console.log('🌐 使用真实API - updateContractStatus')
   return request({
     url: `/api/v1/contracts/${address}/status/${status}`,
     method: 'PUT'
@@ -169,7 +162,6 @@ export function verifyContract(address: string): Promise<ApiResponse<Contract>> 
     return handleMockVerifyContract({ address })
   }
   
-  console.log('🌐 使用真实API - verifyContract')
   return request({
     url: `/api/v1/contracts/${address}/verify`,
     method: 'PUT'
@@ -185,7 +177,6 @@ export function deleteContract(address: string): Promise<ApiResponse<void>> {
     return handleMockDeleteContract({ address })
   }
   
-  console.log('🌐 使用真实API - deleteContract')
   return request({
     url: `/api/v1/contracts/${address}`,
     method: 'DELETE'

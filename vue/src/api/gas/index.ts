@@ -29,7 +29,6 @@ export function getGasRates(data: GetGasRatesRequest): Promise<ApiResponse<FeeLe
     return handleMockGetGasRates(data)
   }
   
-  console.log('🌐 使用真实API - getGasRates')
   return request({
     url: '/api/user/gas',
     method: 'GET',
@@ -46,7 +45,6 @@ export function getAllGasRates(): Promise<ApiResponse<GetAllGasRatesResponse>> {
     return handleMockGetAllGasRates({})
   }
   
-  console.log('🌐 使用真实API - getAllGasRates')
   return request({
     url: '/api/user/gas/all',
     method: 'GET'

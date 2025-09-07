@@ -40,7 +40,6 @@ export function getCoinConfigMaintenance(contractAddress: string): Promise<ApiRe
     }))
   }
   
-  console.log('🌐 使用真实API - getCoinConfigMaintenance')
   // 添加时间戳参数避免浏览器缓存，确保每次都是新请求
   const timestamp = Date.now()
   return request({
@@ -61,7 +60,6 @@ export function createCoinConfig(data: CreateCoinConfigRequest): Promise<ApiResp
     return handleMockCreateCoinConfig(data)
   }
   
-  console.log('🌐 使用真实API - createCoinConfig')
   return request({
     url: '/api/v1/coin-configs',
     method: 'POST',
@@ -87,7 +85,6 @@ export function listCoinConfigs(params: ListCoinConfigsRequest): Promise<Paginat
     })
   }
   
-  console.log('🌐 使用真实API - listCoinConfigs')
   return request({
     url: '/api/v1/coin-configs',
     method: 'GET',
@@ -107,7 +104,6 @@ export function getCoinConfigByContractAddress(contractAddress: string): Promise
     })
   }
   
-  console.log('🌐 使用真实API - getCoinConfigByContractAddress')
   return request({
     url: `/api/v1/coin-configs/contract/${contractAddress}`,
     method: 'GET'

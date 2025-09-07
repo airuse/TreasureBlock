@@ -101,7 +101,7 @@ func (s *transactionService) GetTransactionsByBlockHeight(ctx context.Context, b
 	tokenMap, err := s.getTokenAddresses(ctx, chain)
 	if err != nil {
 		// 如果获取代币地址失败，记录错误但不影响交易列表返回
-		fmt.Printf("Warning: Failed to get token addresses for chain %s: %v\n", chain, err)
+		// fmt.Printf("Warning: Failed to get token addresses for chain %s: %v\n", chain, err)
 	}
 
 	// 为每个交易添加代币标识
@@ -131,7 +131,7 @@ func (s *transactionService) ListTransactions(ctx context.Context, page, pageSiz
 	tokenMap, err := s.getTokenAddresses(ctx, chain)
 	if err != nil {
 		// 如果获取代币地址失败，记录错误但不影响交易列表返回
-		fmt.Printf("Warning: Failed to get token addresses for chain %s: %v\n", chain, err)
+		// fmt.Printf("Warning: Failed to get token addresses for chain %s: %v\n", chain, err)
 	}
 
 	// 为每个交易添加代币标识

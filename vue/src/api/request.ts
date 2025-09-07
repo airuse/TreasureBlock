@@ -30,7 +30,7 @@ request.interceptors.request.use(
       }
     }
     
-    console.log(`🌐 API请求: ${config.method?.toUpperCase()} ${config.url}`)
+    // console.log(`🌐 API请求: ${config.method?.toUpperCase()} ${config.url}`)
     return config
   },
   (error: any) => {
@@ -42,7 +42,7 @@ request.interceptors.request.use(
 // 响应拦截器
 request.interceptors.response.use(
   (response: AxiosResponse) => {
-    console.log(`✅ API响应: ${response.status} ${response.config.url}`)
+    // console.log(`✅ API响应: ${response.status} ${response.config.url}`)
     return response.data
   },
   (error: any) => {
@@ -55,10 +55,12 @@ request.interceptors.response.use(
       showRateLimitError()
     } else if (error.response?.status === 401) {
       console.warn('⚠️ 认证失败，请重新登录')
-      // 可以在这里处理token过期逻辑
-      // 比如清除localStorage中的token，跳转到登录页
+      // 清除本地存储的token
       localStorage.removeItem('loginToken')
       localStorage.removeItem('access_token')
+      
+      // 触发登录模态框显示
+      showLoginModal()
     }
     
     return Promise.reject(error)
@@ -74,6 +76,12 @@ function showRateLimitError() {
     // 如果导入失败，使用console.warn作为备选方案
     console.warn('⚠️ 请求过于频繁，请稍后再试')
   })
+}
+
+// 显示登录模态框的函数
+function showLoginModal() {
+  // 通过自定义事件触发登录模态框显示
+  window.dispatchEvent(new CustomEvent('show-login-modal'))
 }
 
 export default request

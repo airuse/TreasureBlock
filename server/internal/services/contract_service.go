@@ -87,7 +87,7 @@ func (s *contractService) createNewContract(ctx context.Context, contractInfo *m
 	if contract.IsERC20 {
 		if err := s.createCoinConfigForERC20(ctx, contract); err != nil {
 			// 记录错误但不影响合约创建
-			fmt.Printf("Warning: Failed to create coin config for ERC-20 contract %s: %v\n", contract.Address, err)
+			// fmt.Printf("Warning: Failed to create coin config for ERC-20 contract %s: %v\n", contract.Address, err)
 		}
 	}
 

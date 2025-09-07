@@ -235,7 +235,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted } from 'vue'
 import { useRouter } from 'vue-router'
 import { useWebSocket } from '@/composables/useWebSocket'
 import { useAuthStore } from '@/stores/auth'
@@ -249,9 +249,22 @@ const router = useRouter()
 // 认证
 const authStore = useAuthStore()
 
+// 处理401错误显示登录模态框的函数
+const handleShowLoginModal = () => {
+  showLoginModal.value = true
+}
+
 // 初始化认证状态
 onMounted(() => {
   authStore.initialize()
+  
+  // 监听401错误触发的登录模态框显示事件
+  window.addEventListener('show-login-modal', handleShowLoginModal)
+})
+
+// 清理事件监听器
+onUnmounted(() => {
+  window.removeEventListener('show-login-modal', handleShowLoginModal)
 })
 
 const showLoginModal = ref(false)

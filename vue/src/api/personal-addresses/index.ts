@@ -38,7 +38,6 @@ export function createPersonalAddress(data: CreatePersonalAddressRequest): Promi
     return handleMockCreatePersonalAddress(data)
   }
   
-  console.log('🌐 使用真实API - createPersonalAddress')
   return request({
     url: '/api/user/addresses',
     method: 'POST',
@@ -55,7 +54,6 @@ export function getPersonalAddresses(): Promise<ApiResponse<PersonalAddressItem[
     return handleMockGetPersonalAddresses()
   }
   
-  console.log('🌐 使用真实API - getPersonalAddresses')
   return request({
     url: '/api/user/addresses',
     method: 'GET'
@@ -71,7 +69,6 @@ export function getPersonalAddressById(id: number): Promise<ApiResponse<Personal
     return handleMockGetPersonalAddressById(id)
   }
   
-  console.log('🌐 使用真实API - getPersonalAddressById')
   return request({
     url: `/api/user/addresses/${id}`,
     method: 'GET'
@@ -87,7 +84,6 @@ export function updatePersonalAddress(id: number, data: UpdatePersonalAddressReq
     return handleMockUpdatePersonalAddress(data)
   }
   
-  console.log('🌐 使用真实API - updatePersonalAddress')
   return request({
     url: `/api/user/addresses/${id}`,
     method: 'PUT',
@@ -104,7 +100,6 @@ export function deletePersonalAddress(id: number): Promise<ApiResponse<null>> {
     return handleMockDeletePersonalAddress()
   }
   
-  console.log('🌐 使用真实API - deletePersonalAddress')
   return request({
     url: `/api/user/addresses/${id}`,
     method: 'DELETE'
@@ -125,7 +120,6 @@ export function getAddressTransactions(
     return handleMockGetAddressTransactions()
   }
   
-  console.log('🌐 使用真实API - getAddressTransactions')
   const params = new URLSearchParams({
     address,
     page: page.toString(),
@@ -151,7 +145,6 @@ export function getAuthorizedAddresses(data: GetAuthorizedAddressesRequest): Pro
     return handleMockGetAuthorizedAddresses(data)
   }
   
-  console.log('🌐 使用真实API - getAuthorizedAddresses')
   return request({
     url: '/api/user/addresses/authorized',
     method: 'GET',

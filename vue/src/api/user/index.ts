@@ -27,7 +27,6 @@ export function createAPIKey(data: CreateAPIKeyRequest & { token: string }): Pro
     return handleMockCreateAPIKey(data)
   }
   
-  console.log('🌐 使用真实API - createAPIKey')
   const { token, ...keyData } = data
   return request({
     url: '/api/user/api-keys',
@@ -50,7 +49,6 @@ export function getAPIKeys(data: { token: string }): Promise<ApiResponse<APIKey[
     return handleMockGetAPIKeys(data)
   }
   
-  console.log('🌐 使用真实API - getAPIKeys')
   return request({
     url: '/api/user/api-keys',
     method: 'GET',
@@ -75,7 +73,6 @@ export function updateAPIKey(data: {
     return handleMockUpdateAPIKey(data)
   }
   
-  console.log('🌐 使用真实API - updateAPIKey')
   const { token, keyId, updateData } = data
   return request({
     url: `/api/user/api-keys/${keyId}`,
@@ -101,7 +98,6 @@ export function deleteAPIKey(data: {
     return handleMockDeleteAPIKey(data)
   }
   
-  console.log('🌐 使用真实API - deleteAPIKey')
   const { token, keyId } = data
   return request({
     url: `/api/user/api-keys/${keyId}`,
@@ -129,7 +125,6 @@ export function createUserAddress(data: {
     return handleMockCreateUserAddress(data)
   }
   
-  console.log('🌐 使用真实API - createUserAddress')
   const { token, ...addressData } = data
   return request({
     url: '/api/user/addresses',
@@ -152,7 +147,6 @@ export function getUserAddresses(data: { token: string }): Promise<ApiResponse<U
     return handleMockGetUserAddresses(data)
   }
   
-  console.log('🌐 使用真实API - getUserAddresses')
   return request({
     url: '/api/user/addresses',
     method: 'GET',
@@ -177,7 +171,6 @@ export function updateUserAddress(data: {
     return handleMockUpdateUserAddress(data)
   }
   
-  console.log('🌐 使用真实API - updateUserAddress')
   const { token, addressId, updateData } = data
   return request({
     url: `/api/user/addresses/${addressId}`,
@@ -203,7 +196,6 @@ export function deleteUserAddress(data: {
     return handleMockDeleteUserAddress(data)
   }
   
-  console.log('🌐 使用真实API - deleteUserAddress')
   const { token, addressId } = data
   return request({
     url: `/api/user/addresses/${addressId}`,

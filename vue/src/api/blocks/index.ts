@@ -35,7 +35,6 @@ export function getBlocks(data: GetBlocksRequest): Promise<PaginatedResponse<Blo
     return handleMockGetBlocks(data)
   }
   
-  console.log('🌐 使用真实API - getBlocks (认证接口)')
   return request({
     url: '/api/v1/blocks',
     method: 'GET',
@@ -52,7 +51,6 @@ export function getBlocksPublic(data: GetBlocksRequest): Promise<PaginatedRespon
     return handleMockGetBlocks(data)
   }
   
-  console.log('🌐 使用真实API - getBlocksPublic (公开接口)')
   return request({
     url: '/api/no-auth/blocks',
     method: 'GET',
@@ -69,7 +67,6 @@ export function getBlock(data: GetBlockRequest): Promise<ApiResponse<Block>> {
     return handleMockGetBlock(data)
   }
   
-  console.log('🌐 使用真实API - getBlock')
   if (data.hash) {
     return request({
       url: `/api/v1/blocks/hash/${data.hash}`,
@@ -96,7 +93,6 @@ export function getBlockPublic(data: GetBlockRequest): Promise<ApiResponse<Block
     return handleMockGetBlock(data)
   }
   
-  console.log('🌐 使用真实API - getBlockPublic (公开接口)')
   if (data.hash) {
     return request({
       url: `/api/no-auth/blocks/hash/${data.hash}`,
@@ -123,7 +119,6 @@ export function getBlockTransactions(data: { height: number; chain: string; page
     return handleMockGetBlock(data)
   }
   
-  console.log('🌐 使用真实API - getBlockTransactions')
   return request({
     url: `/api/v1/transactions/block-height/${data.height}`,
     method: 'GET',
@@ -144,7 +139,6 @@ export function getBlockTransactionsPublic(data: { height: number; chain: string
     return handleMockGetBlock(data)
   }
   
-  console.log('🌐 使用真实API - getBlockTransactionsPublic (公开接口)')
   return request({
     url: `/api/no-auth/transactions/block-height/${data.height}`,
     method: 'GET',
@@ -165,7 +159,6 @@ export function searchBlocks(data: SearchBlocksRequest): Promise<PaginatedRespon
     return handleMockGetBlocks(data) as Promise<PaginatedResponse<Block>>
   }
   
-  console.log('🌐 使用真实API - searchBlocks')
   return request({
     url: '/api/v1/blocks/search',
     method: 'GET',
@@ -182,7 +175,6 @@ export function searchBlocksPublic(data: SearchBlocksRequest): Promise<Paginated
     return handleMockGetBlocks(data) as Promise<PaginatedResponse<Block>>
   }
   
-  console.log('🌐 使用真实API - searchBlocksPublic (公开接口)')
   return request({
     url: '/api/no-auth/blocks/search',
     method: 'GET',

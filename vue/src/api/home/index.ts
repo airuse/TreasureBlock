@@ -23,7 +23,6 @@ export function getHomeStats(data: GetHomeStatsRequest): Promise<HomeApiResponse
     return handleMockGetHomeStats(data.chain)
   }
   
-  console.log('🌐 使用真实API - getHomeStats (公开接口)')
   return request({
     url: '/api/no-auth/home/stats',
     method: 'GET',

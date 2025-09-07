@@ -46,7 +46,6 @@ export function getUserBalance(): Promise<ApiResponse<UserBalance>> {
     return handleMockGetUserBalance()
   }
   
-  console.log('🌐 使用真实API - getUserBalance')
   return request({
     url: '/api/v1/earnings/balance',
     method: 'GET'
@@ -62,7 +61,6 @@ export function getUserEarningsRecords(data: GetEarningsRecordsRequest): Promise
     return handleMockGetUserEarningsRecords(data)
   }
   
-  console.log('🌐 使用真实API - getUserEarningsRecords')
   return request({
     url: '/api/v1/earnings/records',
     method: 'GET',
@@ -79,7 +77,6 @@ export function getEarningsRecordDetail(id: number): Promise<ApiResponse<Earning
     return handleMockGetEarningsRecordDetail(id)
   }
   
-  console.log('🌐 使用真实API - getEarningsRecordDetail')
   return request({
     url: `/api/v1/earnings/records/${id}`,
     method: 'GET'
@@ -95,7 +92,6 @@ export function getUserEarningsStats(): Promise<ApiResponse<EarningsStats>> {
     return handleMockGetUserEarningsStats()
   }
   
-  console.log('🌐 使用真实API - getUserEarningsStats')
   return request({
     url: '/api/v1/earnings/stats',
     method: 'GET'
@@ -111,7 +107,6 @@ export function getEarningsTrend(hours: number = 2): Promise<ApiResponse<Earning
     return handleMockGetEarningsTrend(hours)
   }
   
-  console.log('🌐 使用真实API - getEarningsTrend')
   return request({
     url: '/api/v1/earnings/trend',
     method: 'GET',
@@ -128,7 +123,6 @@ export function transferTCoins(data: TransferTCoinsRequest): Promise<ApiResponse
     return handleMockTransferTCoins(data)
   }
   
-  console.log('🌐 使用真实API - transferTCoins')
   return request({
     url: '/api/v1/earnings/transfer',
     method: 'POST',

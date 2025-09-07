@@ -99,7 +99,7 @@ export function [接口名](data: [接口名]Request): Promise<ApiResponse<[数�
     return handleMock[接口名](data)
   }
   
-  console.log('🌐 使用真实API - [接口名]')
+  
   return request({
     url: '/[模块名]/[接口名]',
     method: '[http方法]',

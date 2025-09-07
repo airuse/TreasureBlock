@@ -42,7 +42,6 @@ export function createUserTransaction(data: CreateUserTransactionRequest): Promi
     return handleMockCreateUserTransaction(data)
   }
   
-  console.log('🌐 使用真实API - createUserTransaction')
   return request({
     url: '/api/user/transactions',
     method: 'POST',
@@ -59,7 +58,6 @@ export function getUserTransactions(params: GetUserTransactionsRequest): Promise
     return handleMockGetUserTransactions(params)
   }
   
-  console.log('🌐 使用真实API - getUserTransactions')
   return request({
     url: '/api/user/transactions',
     method: 'GET',
@@ -76,7 +74,6 @@ export function getUserTransactionStats(): Promise<ApiResponse<UserTransactionSt
     return handleMockGetUserTransactionStats()
   }
   
-  console.log('🌐 使用真实API - getUserTransactionStats')
   return request({
     url: '/api/user/transactions/stats',
     method: 'GET'
@@ -92,7 +89,6 @@ export function getUserTransactionById(id: number): Promise<ApiResponse<UserTran
     return handleMockGetUserTransactionById(id)
   }
   
-  console.log('🌐 使用真实API - getUserTransactionById')
   return request({
     url: `/api/user/transactions/${id}`,
     method: 'GET'
@@ -108,7 +104,6 @@ export function updateUserTransaction(id: number, data: UpdateUserTransactionReq
     return handleMockUpdateUserTransaction(id, data)
   }
   
-  console.log('🌐 使用真实API - updateUserTransaction')
   return request({
     url: `/api/user/transactions/${id}`,
     method: 'PUT',
@@ -125,7 +120,6 @@ export function deleteUserTransaction(id: number): Promise<ApiResponse<null>> {
     return handleMockDeleteUserTransaction(id)
   }
   
-  console.log('🌐 使用真实API - deleteUserTransaction')
   return request({
     url: `/api/user/transactions/${id}`,
     method: 'DELETE'
@@ -141,7 +135,6 @@ export function exportTransaction(id: number, feeData?: any): Promise<ApiRespons
     return handleMockExportTransaction(id)
   }
   
-  console.log('🌐 使用真实API - exportTransaction')
   return request({
     url: `/api/user/transactions/${id}/export`,
     method: 'POST',
@@ -158,7 +151,6 @@ export function importSignature(id: number, data: ImportSignatureRequest): Promi
     return handleMockImportSignature(id, data)
   }
   
-  console.log('🌐 使用真实API - importSignature')
   return request({
     url: `/api/user/transactions/${id}/import-signature`,
     method: 'POST',
@@ -175,7 +167,6 @@ export function sendTransaction(id: number): Promise<ApiResponse<UserTransaction
     return handleMockSendTransaction(id)
   }
   
-  console.log('🌐 使用真实API - sendTransaction')
   return request({
     url: `/api/user/transactions/${id}/send`,
     method: 'POST'

@@ -1653,11 +1653,11 @@ const updateChart = () => {
 // 加载Gas费率数据
 const loadGasRates = async () => {
   try {
-    console.log('🔄 加载Gas费率数据...')
+    // console.log('🔄 加载Gas费率数据...')
     const response = await getGasRates({ chain: 'eth' })
     
     if (response.success) {
-      console.log('✅ Gas费率数据加载成功:', response.data)
+      // console.log('✅ Gas费率数据加载成功:', response.data)
       feeLevels.value = response.data
       
       // 添加历史数据

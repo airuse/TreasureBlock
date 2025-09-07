@@ -36,7 +36,6 @@ export function getNetworkStats(data: GetNetworkStatsRequest): Promise<ApiRespon
     return handleMockGetNetworkStats(data)
   }
   
-  console.log('🌐 使用真实API - getNetworkStats')
   return request({
     url: '/stats/network',
     method: 'GET',
@@ -55,7 +54,6 @@ export function getLatestBlocks(data: GetLatestBlocksRequest): Promise<ApiRespon
     return handleMockGetLatestBlocks(data)
   }
   
-  console.log('🌐 使用真实API - getLatestBlocks')
   return request({
     url: '/stats/latest-blocks',
     method: 'GET',
@@ -74,7 +72,6 @@ export function getLatestTransactions(data: GetLatestTransactionsRequest): Promi
     return handleMockGetLatestTransactions(data)
   }
   
-  console.log('🌐 使用真实API - getLatestTransactions')
   return request({
     url: '/stats/latest-transactions',
     method: 'GET',

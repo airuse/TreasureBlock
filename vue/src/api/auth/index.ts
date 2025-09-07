@@ -37,7 +37,6 @@ export function getPermissionTypes(): Promise<ApiResponse<any[]>> {
     })
   }
   
-  console.log('🌐 使用真实API - getPermissionTypes')
   return request({
     url: '/api/permissions',
     method: 'GET'
@@ -55,7 +54,6 @@ export function login(data: LoginRequest): Promise<ApiResponse<GetAccessTokenRes
     return handleMockLogin(data)
   }
   
-  console.log('🌐 使用真实API - login')
   return request({
     url: '/api/auth/login',
     method: 'POST',
@@ -74,7 +72,6 @@ export function register(data: RegisterRequest): Promise<ApiResponse<UserProfile
     return handleMockRegister(data)
   }
   
-  console.log('🌐 使用真实API - register')
   return request({
     url: '/api/auth/register',
     method: 'POST',
@@ -93,7 +90,6 @@ export function getUserProfile(data: { token: string }): Promise<ApiResponse<Use
     return handleMockGetUserProfile(data)
   }
   
-  console.log('🌐 使用真实API - getUserProfile')
   return request({
     url: '/api/auth/profile',
     method: 'GET',
@@ -118,7 +114,6 @@ export function changePassword(data: {
     return handleMockChangePassword(data)
   }
   
-  console.log('🌐 使用真实API - changePassword')
   const { token, ...passwordData } = data
   return request({
     url: '/api/auth/change-password',
@@ -141,7 +136,6 @@ export function refreshToken(data: { loginToken: string }): Promise<ApiResponse<
     return handleMockRefreshToken(data)
   }
   
-  console.log('🌐 使用真实API - refreshToken')
   return request({
     url: '/api/auth/refresh',
     method: 'POST',

@@ -58,7 +58,7 @@ func (s *userAddressService) CreateAddress(userID uint, req *dto.CreateUserAddre
 	createdHeight, balance, err := s.getCurrentBlockHeightAndBalance(req.Address)
 	if err != nil {
 		// 如果获取失败，记录错误日志，使用默认值，但不影响地址创建
-		fmt.Printf("警告：获取区块高度和余额失败: %v，使用默认值\n", err)
+		// fmt.Printf("警告：获取区块高度和余额失败: %v，使用默认值\n", err)
 		createdHeight = 0
 		balance = "0"
 	}

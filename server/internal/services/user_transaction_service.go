@@ -107,7 +107,7 @@ func (s *userTransactionService) GetUserTransactions(ctx context.Context, userID
 	tokenConfigs, err := s.getTokenConfigs(ctx)
 	if err != nil {
 		// 如果获取代币配置失败，记录错误但不影响交易列表返回
-		fmt.Printf("Warning: Failed to get token configs: %v\n", err)
+		// fmt.Printf("Warning: Failed to get token configs: %v\n", err)
 	}
 
 	// 转换为响应DTO
@@ -209,7 +209,7 @@ func (s *userTransactionService) ExportTransaction(ctx context.Context, id uint,
 			userTx.Status = "packed"
 			userTx.UpdatedAt = time.Now()
 			if err := s.userTxRepo.Update(ctx, userTx); err != nil {
-				fmt.Printf("更新交易状态失败: %v\n", err)
+				// fmt.Printf("更新交易状态失败: %v\n", err)
 			}
 			return nil, errors.New("此交易已经被打包上线，不能替换！")
 		}
@@ -222,7 +222,7 @@ func (s *userTransactionService) ExportTransaction(ctx context.Context, id uint,
 		nonce, err := s.getAddressNonce(ctx, userTx.FromAddress)
 		if err != nil {
 			// 如果获取nonce失败，使用默认值0
-			fmt.Printf("获取地址nonce失败: %v，使用默认值0\n", err)
+			// fmt.Printf("获取地址nonce失败: %v，使用默认值0\n", err)
 			defaultNonce := uint64(0)
 			currentNonce = &defaultNonce
 		} else {
@@ -255,28 +255,28 @@ func (s *userTransactionService) ExportTransaction(ctx context.Context, id uint,
 	accessList := s.generateAccessList(userTx)
 
 	// 处理费率设置
-	fmt.Printf("🔍 费率设置调试信息:\n")
-	fmt.Printf("  req.MaxPriorityFeePerGas: %v\n", req.MaxPriorityFeePerGas)
-	fmt.Printf("  req.MaxFeePerGas: %v\n", req.MaxFeePerGas)
-	fmt.Printf("  userTx.MaxPriorityFeePerGas (before): %v\n", userTx.MaxPriorityFeePerGas)
-	fmt.Printf("  userTx.MaxFeePerGas (before): %v\n", userTx.MaxFeePerGas)
+	// fmt.Printf("🔍 费率设置调试信息:\n")
+	// fmt.Printf("  req.MaxPriorityFeePerGas: %v\n", req.MaxPriorityFeePerGas)
+	// fmt.Printf("  req.MaxFeePerGas: %v\n", req.MaxFeePerGas)
+	// fmt.Printf("  userTx.MaxPriorityFeePerGas (before): %v\n", userTx.MaxPriorityFeePerGas)
+	// fmt.Printf("  userTx.MaxFeePerGas (before): %v\n", userTx.MaxFeePerGas)
 
 	if req.MaxPriorityFeePerGas != nil {
 		// 前端传递的已经是Wei单位，直接使用
 		userTx.MaxPriorityFeePerGas = req.MaxPriorityFeePerGas
-		fmt.Printf("  ✅ 使用请求中的 MaxPriorityFeePerGas: %s wei\n", *req.MaxPriorityFeePerGas)
+		// fmt.Printf("  ✅ 使用请求中的 MaxPriorityFeePerGas: %s wei\n", *req.MaxPriorityFeePerGas)
 	} else if userTx.MaxPriorityFeePerGas == nil {
 		// 如果没有设置费率，使用默认值 2 Gwei = 2,000,000,000 wei
 		defaultTip := "2000000000" // 2 Gwei in wei
 		userTx.MaxPriorityFeePerGas = &defaultTip
-		fmt.Printf("  ⚠️ 使用默认 MaxPriorityFeePerGas: 2 Gwei -> %s wei\n", defaultTip)
+		// fmt.Printf("  ⚠️ 使用默认 MaxPriorityFeePerGas: 2 Gwei -> %s wei\n", defaultTip)
 	} else {
 		// 数据库中已存在的值，检查是否需要从Gwei转换为Wei
 		if s.isGweiValue(*userTx.MaxPriorityFeePerGas) {
 			priorityFeeWei, err := s.convertGweiToWei(*userTx.MaxPriorityFeePerGas)
 			if err == nil {
 				userTx.MaxPriorityFeePerGas = &priorityFeeWei
-				fmt.Printf("  🔄 转换数据库中的 MaxPriorityFeePerGas: %s Gwei -> %s wei\n", *userTx.MaxPriorityFeePerGas, priorityFeeWei)
+				// fmt.Printf("  🔄 转换数据库中的 MaxPriorityFeePerGas: %s Gwei -> %s wei\n", *userTx.MaxPriorityFeePerGas, priorityFeeWei)
 			}
 		}
 	}
@@ -284,30 +284,30 @@ func (s *userTransactionService) ExportTransaction(ctx context.Context, id uint,
 	if req.MaxFeePerGas != nil {
 		// 前端传递的已经是Wei单位，直接使用
 		userTx.MaxFeePerGas = req.MaxFeePerGas
-		fmt.Printf("  ✅ 使用请求中的 MaxFeePerGas: %s wei\n", *req.MaxFeePerGas)
+		// fmt.Printf("  ✅ 使用请求中的 MaxFeePerGas: %s wei\n", *req.MaxFeePerGas)
 	} else if userTx.MaxFeePerGas == nil {
 		// 如果没有设置费率，使用默认值 30 Gwei = 30,000,000,000 wei
 		defaultFee := "30000000000" // 30 Gwei in wei
 		userTx.MaxFeePerGas = &defaultFee
-		fmt.Printf("  ⚠️ 使用默认 MaxFeePerGas: 30 Gwei -> %s wei\n", defaultFee)
+		// fmt.Printf("  ⚠️ 使用默认 MaxFeePerGas: 30 Gwei -> %s wei\n", defaultFee)
 	} else {
 		// 数据库中已存在的值，检查是否需要从Gwei转换为Wei
 		if s.isGweiValue(*userTx.MaxFeePerGas) {
 			maxFeeWei, err := s.convertGweiToWei(*userTx.MaxFeePerGas)
 			if err == nil {
 				userTx.MaxFeePerGas = &maxFeeWei
-				fmt.Printf("  🔄 转换数据库中的 MaxFeePerGas: %s Gwei -> %s wei\n", *userTx.MaxFeePerGas, maxFeeWei)
+				// fmt.Printf("  🔄 转换数据库中的 MaxFeePerGas: %s Gwei -> %s wei\n", *userTx.MaxFeePerGas, maxFeeWei)
 			}
 		}
 	}
 
-	fmt.Printf("  userTx.MaxPriorityFeePerGas (after): %v\n", userTx.MaxPriorityFeePerGas)
-	fmt.Printf("  userTx.MaxFeePerGas (after): %v\n", userTx.MaxFeePerGas)
-	fmt.Printf("开始进行估算GasLimit")
-	fmt.Printf("参数 查验 userTx.Chain = %s,userTx.GasLimit = %v \n", userTx.Chain, userTx.GasLimit)
+	// fmt.Printf("  userTx.MaxPriorityFeePerGas (after): %v\n", userTx.MaxPriorityFeePerGas)
+	// fmt.Printf("  userTx.MaxFeePerGas (after): %v\n", userTx.MaxFeePerGas)
+	// fmt.Printf("开始进行估算GasLimit")
+	// fmt.Printf("参数 查验 userTx.Chain = %s,userTx.GasLimit = %v \n", userTx.Chain, userTx.GasLimit)
 	// 估算GasLimit（未设置时；ETH链；合约调用或代币交易）
 	if strings.ToLower(userTx.Chain) == "eth" {
-		fmt.Printf("参数 查验 userTx.TransactionType %s\n", userTx.TransactionType)
+		// fmt.Printf("参数 查验 userTx.TransactionType %s\n", userTx.TransactionType)
 		// ETH + token/合约调用 -> 估算；ETH 原生 -> 固定21000
 		if userTx.TransactionType == "token" {
 			rpcManager := utils.NewRPCClientManager()
@@ -327,20 +327,20 @@ func (s *userTransactionService) ExportTransaction(ctx context.Context, id uint,
 				toForGas = userTx.TokenContractAddress
 			}
 
-			fmt.Printf("🔍 估算Gas  txData: %+v\n", txData)
+			// fmt.Printf("🔍 估算Gas  txData: %+v\n", txData)
 
 			if gas, err := rpcManager.EstimateEthGas(ctx, userTx.FromAddress, toForGas, value, dataBytes); err == nil {
 				gasWithBuffer := gas + gas/5
 				gasU := uint(gasWithBuffer)
 				userTx.GasLimit = &gasU
-				fmt.Printf("Gas估算成功: %d\n", gasU)
+				// fmt.Printf("Gas估算成功: %d\n", gasU)
 			} else {
 				s.logger.Warnf("Gas估算失败，保持原值: %v", err)
 			}
 		} else {
 			g := uint(21000)
 			userTx.GasLimit = &g
-			fmt.Printf("Gas估算失败，保持原值: %d type=%s txData=%s\n", g, userTx.TransactionType, txData)
+			// fmt.Printf("Gas估算失败，保持原值: %d type=%s txData=%s\n", g, userTx.TransactionType, txData)
 		}
 	}
 
@@ -400,7 +400,7 @@ func (s *userTransactionService) ImportSignature(ctx context.Context, id uint, u
 			userTx.Status = "packed"
 			userTx.UpdatedAt = time.Now()
 			if err := s.userTxRepo.Update(ctx, userTx); err != nil {
-				fmt.Printf("更新交易状态失败: %v\n", err)
+				// fmt.Printf("更新交易状态失败: %v\n", err)
 			}
 			return nil, errors.New("此交易已经被打包上线，不能替换！")
 		}

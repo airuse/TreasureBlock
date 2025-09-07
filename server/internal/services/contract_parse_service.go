@@ -69,43 +69,43 @@ func (s *contractParseService) ParseAndStore(ctx context.Context, receipt *model
 func (s *contractParseService) ParseAndStoreBatchAsync(ctx context.Context, receipts []*models.TransactionReceipt, txs map[string]*models.Transaction, parserConfigs map[string][]*models.ParserConfig) {
 	go func() {
 		bgCtx := context.Background()
-		totalReceipts := len(receipts)
-		totalTxs := len(txs)
+		// totalReceipts := len(receipts)
+		// totalTxs := len(txs)
 		pcKeys := 0
 		totalPC := 0
 		for _, v := range parserConfigs {
 			pcKeys++
 			totalPC += len(v)
 		}
-		fmt.Printf("[ParseAndStoreBatchAsync] start: receipts=%d txs=%d parserConfigKeys=%d totalParserConfigs=%d\n", totalReceipts, totalTxs, pcKeys, totalPC)
+		// fmt.Printf("[ParseAndStoreBatchAsync] start: receipts=%d txs=%d parserConfigKeys=%d totalParserConfigs=%d\n", totalReceipts, totalTxs, pcKeys, totalPC)
 
 		for i := 0; i < len(receipts); i++ {
 			rc := receipts[i]
 			if rc == nil || rc.TxHash == "" {
-				fmt.Printf("[ParseAndStoreBatchAsync] #%d skip: nil receipt or empty txHash\n", i)
+				// fmt.Printf("[ParseAndStoreBatchAsync] #%d skip: nil receipt or empty txHash\n", i)
 				continue
 			}
 			pcs := parserConfigs[rc.TxHash]
 			t := txs[rc.TxHash]
-			logsLen := len(rc.LogsData)
-			fmt.Printf("[ParseAndStoreBatchAsync] #%d txHash=%s logsLen=%d pcs=%d txPresent=%v\n", i, rc.TxHash, logsLen, len(pcs), t != nil)
+			// logsLen := len(rc.LogsData)
+			// fmt.Printf("[ParseAndStoreBatchAsync] #%d txHash=%s logsLen=%d pcs=%d txPresent=%v\n", i, rc.TxHash, logsLen, len(pcs), t != nil)
 
 			coinConfigs, err := s.coinConfigRepo.GetAll(bgCtx)
 			if err != nil {
-				fmt.Printf("[ParseAndStoreBatchAsync] GetAll coinConfig error: %v\n", err)
+				// fmt.Printf("[ParseAndStoreBatchAsync] GetAll coinConfig error: %v\n", err)
 				continue
 			}
 			results := s.parseReceipt(rc, t, pcs, coinConfigs)
-			fmt.Printf("[ParseAndStoreBatchAsync] parsed results=%d for txHash=%s\n", len(results), rc.TxHash)
+			// fmt.Printf("[ParseAndStoreBatchAsync] parsed results=%d for txHash=%s\n", len(results), rc.TxHash)
 			if len(results) > 0 {
 				if err := s.repo.CreateBatch(bgCtx, results); err != nil {
-					fmt.Printf("[ParseAndStoreBatchAsync] CreateBatch error for txHash=%s: %v\n", rc.TxHash, err)
+					// fmt.Printf("[ParseAndStoreBatchAsync] CreateBatch error for txHash=%s: %v\n", rc.TxHash, err)
 				}
 			} else {
-				fmt.Printf("[ParseAndStoreBatchAsync] no results to store for txHash=%s\n", rc.TxHash)
+				// fmt.Printf("[ParseAndStoreBatchAsync] no results to store for txHash=%s\n", rc.TxHash)
 			}
 		}
-		fmt.Printf("[ParseAndStoreBatchAsync] done\n")
+		// fmt.Printf("[ParseAndStoreBatchAsync] done\n")
 	}()
 }
 
@@ -117,7 +117,7 @@ func (s *contractParseService) ParseAndStoreBatchByTxHashesAsync(ctx context.Con
 			return
 		}
 
-		fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] start: total=%d transactions\n", len(txHashesWithIndex))
+		// fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] start: total=%d transactions\n", len(txHashesWithIndex))
 
 		// Sort by index to ensure strict ordering regardless of input order
 		sortedTxs := make([]TxHashWithIndex, len(txHashesWithIndex))
@@ -132,12 +132,12 @@ func (s *contractParseService) ParseAndStoreBatchByTxHashesAsync(ctx context.Con
 			}
 		}
 
-		fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] sorted transactions by index\n")
+		// fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] sorted transactions by index\n")
 
 		// Preload all parser configs and group by contract address
 		allConfigs, err := s.parserConfigRepo.GetAllParserConfigs(bgCtx)
 		if err != nil {
-			fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] failed to load parser configs: %v\n", err)
+			// fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] failed to load parser configs: %v\n", err)
 			return
 		}
 		grouped := make(map[string][]*models.ParserConfig)
@@ -148,20 +148,20 @@ func (s *contractParseService) ParseAndStoreBatchByTxHashesAsync(ctx context.Con
 		// Process transactions in strict index order
 		for _, txItem := range sortedTxs {
 			if txItem.Hash == "" {
-				fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] skip empty hash at index %d\n", txItem.Index)
+				// fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] skip empty hash at index %d\n", txItem.Index)
 				continue
 			}
 
-			fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] processing index=%d hash=%s\n", txItem.Index, txItem.Hash)
+			// fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] processing index=%d hash=%s\n", txItem.Index, txItem.Hash)
 
 			rc, err := s.receiptRepo.GetByTxHash(bgCtx, txItem.Hash)
 			if err != nil || rc == nil {
-				fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] receipt not found for index=%d hash=%s\n", txItem.Index, txItem.Hash)
+				// fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] receipt not found for index=%d hash=%s\n", txItem.Index, txItem.Hash)
 				continue
 			}
 			tx, err := s.txRepo.GetByHash(bgCtx, txItem.Hash)
 			if err != nil || tx == nil {
-				fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] transaction not found for index=%d hash=%s\n", txItem.Index, txItem.Hash)
+				// fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] transaction not found for index=%d hash=%s\n", txItem.Index, txItem.Hash)
 				continue
 			}
 
@@ -171,7 +171,7 @@ func (s *contractParseService) ParseAndStoreBatchByTxHashesAsync(ctx context.Con
 				// If no parser config for the specific address, try to use the default config (key "*")
 				defaultPcs := grouped["*"]
 				if len(defaultPcs) == 0 {
-					fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] no parser config for index=%d hash=%s addressTo=%s\n", txItem.Index, txItem.Hash, tx.AddressTo)
+					// fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] no parser config for index=%d hash=%s addressTo=%s\n", txItem.Index, txItem.Hash, tx.AddressTo)
 					continue
 				}
 				pcs = defaultPcs
@@ -179,22 +179,22 @@ func (s *contractParseService) ParseAndStoreBatchByTxHashesAsync(ctx context.Con
 
 			coinConfigs, err := s.coinConfigRepo.GetAll(bgCtx)
 			if err != nil {
-				fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] failed to load coin configs for index=%d: %v\n", txItem.Index, err)
+				// fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] failed to load coin configs for index=%d: %v\n", txItem.Index, err)
 				continue
 			}
 
 			results := s.parseReceipt(rc, tx, pcs, coinConfigs)
 			if len(results) > 0 {
 				if err := s.repo.CreateBatch(bgCtx, results); err != nil {
-					fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] CreateBatch error for index=%d hash=%s: %v\n", txItem.Index, txItem.Hash, err)
+					// fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] CreateBatch error for index=%d hash=%s: %v\n", txItem.Index, txItem.Hash, err)
 				} else {
-					fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] successfully processed index=%d hash=%s results=%d\n", txItem.Index, txItem.Hash, len(results))
+					// fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] successfully processed index=%d hash=%s results=%d\n", txItem.Index, txItem.Hash, len(results))
 				}
 			} else {
-				fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] no results for index=%d hash=%s\n", txItem.Index, txItem.Hash)
+				// fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] no results for index=%d hash=%s\n", txItem.Index, txItem.Hash)
 			}
 		}
-		fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] completed processing %d transactions\n", len(sortedTxs))
+		// fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] completed processing %d transactions\n", len(sortedTxs))
 	}()
 }
 
@@ -222,7 +222,7 @@ func (s *contractParseService) shouldProcessEvent(height uint64, txIdx uint64, t
 	// Check if this specific event was already processed (idempotency)
 	existing, err := s.repo.GetByTxHashAndLogIndex(context.Background(), txHash, logIdx)
 	if err == nil && existing != nil {
-		fmt.Printf("[shouldProcessEvent] event already processed: txHash=%s logIdx=%d\n", txHash, logIdx)
+		// fmt.Printf("[shouldProcessEvent] event already processed: txHash=%s logIdx=%d\n", txHash, logIdx)
 		return false
 	}
 
@@ -238,7 +238,7 @@ func (s *contractParseService) shouldProcessEvent(height uint64, txIdx uint64, t
 		return true
 	}
 	if height < prevHeight {
-		fmt.Printf("[shouldProcessEvent] reject: height %d < stored height %d\n", height, prevHeight)
+		// fmt.Printf("[shouldProcessEvent] reject: height %d < stored height %d\n", height, prevHeight)
 		return false
 	}
 
@@ -251,7 +251,7 @@ func (s *contractParseService) shouldProcessEvent(height uint64, txIdx uint64, t
 		return true
 	}
 
-	fmt.Printf("[shouldProcessEvent] reject: same height %d, txIdx %d <= stored txIdx %d\n", height, txIdx, prevTxIdx)
+	// fmt.Printf("[shouldProcessEvent] reject: same height %d, txIdx %d <= stored txIdx %d\n", height, txIdx, prevTxIdx)
 	return false
 }
 
@@ -272,7 +272,7 @@ func (s *contractParseService) applyBalanceUpdate(update *EventUpdate, txHash st
 		// Absolute balance update - overwrites any previous balance
 		val := update.AbsoluteWei
 		a.ContractBalance = &val
-		fmt.Printf("[applyBalanceUpdate] absolute balance: addr=%s balance=%s\n", a.Address, val)
+		// fmt.Printf("[applyBalanceUpdate] absolute balance: addr=%s balance=%s\n", a.Address, val)
 	} else if update.DeltaWei != nil {
 		// Delta balance update
 		cur := new(big.Int)
@@ -284,17 +284,17 @@ func (s *contractParseService) applyBalanceUpdate(update *EventUpdate, txHash st
 		// Prevent negative balances
 		if cur.Sign() < 0 {
 			cur.SetInt64(0)
-			fmt.Printf("[applyBalanceUpdate] prevented negative balance for addr=%s\n", a.Address)
+			// fmt.Printf("[applyBalanceUpdate] prevented negative balance for addr=%s\n", a.Address)
 		}
 
 		val := cur.String()
 		a.ContractBalance = &val
-		fmt.Printf("[applyBalanceUpdate] delta balance: addr=%s delta=%s new=%s\n", a.Address, update.DeltaWei.String(), val)
+		// fmt.Printf("[applyBalanceUpdate] delta balance: addr=%s delta=%s new=%s\n", a.Address, update.DeltaWei.String(), val)
 	} else if update.EventType == "approve" && update.SpenderAddr != "" {
 		// Authorize spender
 		if a.AuthorizedAddresses != nil && !slices.Contains(a.AuthorizedAddresses, update.SpenderAddr) {
 			a.AuthorizedAddresses = append(a.AuthorizedAddresses, update.SpenderAddr)
-			fmt.Printf("[applyBalanceUpdate] added authorized addr: owner=%s spender=%s\n", a.Address, update.SpenderAddr)
+			// fmt.Printf("[applyBalanceUpdate] added authorized addr: owner=%s spender=%s\n", a.Address, update.SpenderAddr)
 		}
 	}
 
@@ -312,10 +312,10 @@ func (s *contractParseService) parseReceipt(receipt *models.TransactionReceipt, 
 	}
 	var logs []map[string]interface{}
 	if err := json.Unmarshal([]byte(receipt.LogsData), &logs); err != nil {
-		fmt.Printf("[parseReceipt] unmarshal logs failed txHash=%s error=%v\n", emptyIfNil(receipt.TxHash), err)
+		// fmt.Printf("[parseReceipt] unmarshal logs failed txHash=%s error=%v\n", emptyIfNil(receipt.TxHash), err)
 		return nil
 	}
-	fmt.Printf("[parseReceipt] begin txHash=%s logs=%d parserConfigs=%d\n", emptyIfNil(receipt.TxHash), len(logs), len(parserConfigs))
+	// fmt.Printf("[parseReceipt] begin txHash=%s logs=%d parserConfigs=%d\n", emptyIfNil(receipt.TxHash), len(logs), len(parserConfigs))
 
 	// 预计算原始日志hash（用于幂等）
 	rawHash := sha256.Sum256([]byte(receipt.LogsData))
@@ -333,7 +333,7 @@ func (s *contractParseService) parseReceipt(receipt *models.TransactionReceipt, 
 			sigToRule[sig] = c
 		}
 	}
-	fmt.Printf("[parseReceipt] built sigToRule size=%d\n", len(sigToRule))
+	// fmt.Printf("[parseReceipt] built sigToRule size=%d\n", len(sigToRule))
 
 	var out []*models.ContractParseResult
 
@@ -341,14 +341,14 @@ func (s *contractParseService) parseReceipt(receipt *models.TransactionReceipt, 
 		topics, _ := log["topics"].([]interface{})
 		data, _ := log["data"].(string)
 		if len(topics) == 0 {
-			fmt.Printf("[parseReceipt] #%d skip: no topics\n", idx)
+			// fmt.Printf("[parseReceipt] #%d skip: no topics\n", idx)
 			continue
 		}
 		topic0, _ := topics[0].(string)
 		sig := strings.ToLower(topic0)
 		rule := sigToRule[sig]
 		if rule == nil {
-			fmt.Printf("[parseReceipt] #%d no rule match for sig=%s\n", idx, sig)
+			// fmt.Printf("[parseReceipt] #%d no rule match for sig=%s\n", idx, sig)
 			continue
 		}
 
@@ -358,11 +358,11 @@ func (s *contractParseService) parseReceipt(receipt *models.TransactionReceipt, 
 		ownerAddr := extractAddressByRule(rule.LogsParserRules.ExtractOwnerAddress, topics, data)
 		spenderAddr := extractAddressByRule(rule.LogsParserRules.ExtractSpenderAddress, topics, data)
 
-		fmt.Printf("[parseReceipt] #%d matched sig=%s from=%s to=%s amountWei=%s owner=%s spender=%s\n", idx, sig, fromAddr, toAddr, amountWei, ownerAddr, spenderAddr)
+		// fmt.Printf("[parseReceipt] #%d matched sig=%s from=%s to=%s amountWei=%s owner=%s spender=%s\n", idx, sig, fromAddr, toAddr, amountWei, ownerAddr, spenderAddr)
 
 		coinConfig, err := GetCoinConfigByContractAddress(coinConfigs, contractAddr)
 		if err != nil {
-			fmt.Printf("[parseReceipt] #%d get coinConfig error: %v\n", idx, err)
+			// fmt.Printf("[parseReceipt] #%d get coinConfig error: %v\n", idx, err)
 			continue
 		}
 
@@ -489,9 +489,9 @@ func (s *contractParseService) parseReceipt(receipt *models.TransactionReceipt, 
 		res.RawLogsHash = rawHashHex
 		res.ParsedJSON = string(bj)
 		out = append(out, res)
-		fmt.Printf("[parseReceipt] #%d produce result txHash=%s logIndex=%d symbol=%s decimals=%d\n", idx, res.TxHash, res.LogIndex, res.TokenSymbol, res.TokenDecimals)
+		// fmt.Printf("[parseReceipt] #%d produce result txHash=%s logIndex=%d symbol=%s decimals=%d\n", idx, res.TxHash, res.LogIndex, res.TokenSymbol, res.TokenDecimals)
 	}
-	fmt.Printf("[parseReceipt] end txHash=%s produced=%d\n", emptyIfNil(receipt.TxHash), len(out))
+	// fmt.Printf("[parseReceipt] end txHash=%s produced=%d\n", emptyIfNil(receipt.TxHash), len(out))
 	return out
 }
 

@@ -391,7 +391,7 @@ func (h *TransactionHandler) CreateTransactionsBatch(c *gin.Context) {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": "transactions数组不能为空"})
 		return
 	}
-	fmt.Printf("批量数据一共为: %d\n", len(transactionsData))
+	// fmt.Printf("批量数据一共为: %d\n", len(transactionsData))
 
 	// 限制批量数量，防止请求过大
 	const maxBatchSize = 2000
@@ -600,14 +600,14 @@ func (h *TransactionHandler) CreateTransactionsBatch(c *gin.Context) {
 			}
 		}
 
-		fmt.Printf("准备解析交易：总数=%d\n", len(txHashesWithIndex))
-		for _, item := range txHashesWithIndex {
-			fmt.Printf("  索引=%d, Hash=%s\n", item.Index, item.Hash)
-		}
+		// fmt.Printf("准备解析交易：总数=%d\n", len(txHashesWithIndex))
+		// for _, item := range txHashesWithIndex {
+		// fmt.Printf("  索引=%d, Hash=%s\n", item.Index, item.Hash)
+		// }
 
 		h.contractParseService.ParseAndStoreBatchByTxHashesAsync(c.Request.Context(), txHashesWithIndex)
 	} else {
-		fmt.Println("警告：没有找到需要解析的交易")
+		// fmt.Println("警告：没有找到需要解析的交易")
 	}
 }
 
@@ -834,7 +834,7 @@ func (h *TransactionHandler) GetTransactionReceiptByHash(c *gin.Context) {
 		tx, err = h.txService.GetTransactionByHash(c.Request.Context(), Hash)
 		if err != nil {
 			// 如果获取交易失败，记录警告但不影响凭证返回
-			fmt.Printf("Warning: Failed to get transaction for hash %s: %v\n", Hash, err)
+			// fmt.Printf("Warning: Failed to get transaction for hash %s: %v\n", Hash, err)
 		}
 
 		// 如果获取到交易信息，尝试获取解析配置
@@ -843,14 +843,14 @@ func (h *TransactionHandler) GetTransactionReceiptByHash(c *gin.Context) {
 			configs, err := h.parserConfigRepo.GetParserConfigsByContract(c.Request.Context(), tx.AddressTo)
 			if err != nil {
 				// 如果获取解析配置失败，记录警告但不影响返回
-				fmt.Printf("Warning: Failed to get parser configs for contract %s: %v\n", tx.ContractAddr, err)
+				// fmt.Printf("Warning: Failed to get parser configs for contract %s: %v\n", tx.ContractAddr, err)
 			} else {
 				if len(configs) > 0 {
 					parserConfigs = configs
 				} else {
 					configs, err = h.parserConfigRepo.GetParserConfigsByContract(c.Request.Context(), "*")
 					if err != nil {
-						fmt.Printf("Warning: Failed to get parser configs for contract %s: %v\n", tx.AddressFrom, err)
+						// fmt.Printf("Warning: Failed to get parser configs for contract %s: %v\n", tx.AddressFrom, err)
 					} else {
 						parserConfigs = configs
 					}

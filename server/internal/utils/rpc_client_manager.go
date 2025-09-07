@@ -666,8 +666,8 @@ func (m *RPCClientManager) EstimateEthGas(ctx context.Context, from, to string, 
 		Value: value,
 		Data:  data,
 	}
-	fmt.Printf("🔍 估算Gas: %+v\n", msg)
-	fmt.Printf("🔍 估算Gas: %+v\n", data)
+	// fmt.Printf("🔍 估算Gas: %+v\n", msg)
+	// fmt.Printf("🔍 估算Gas: %+v\n", data)
 	return fo.EstimateGas(ctx, msg)
 }
 

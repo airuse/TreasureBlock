@@ -204,7 +204,7 @@ class WebSocketManager {
     
     // 处理订阅响应
     if (message.type === 'subscribed' || message.type === 'unsubscribed') {
-      console.log('Subscription response:', message)
+      // console.log('Subscription response:', message)
       return
     }
     

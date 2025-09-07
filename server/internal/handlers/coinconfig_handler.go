@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"fmt"
 	"net/http"
 	"strconv"
 
@@ -431,11 +430,11 @@ func (h *CoinConfigHandler) GetCoinConfigsForScanner(c *gin.Context) {
 // GetCoinConfigForMaintenance 获取币种配置信息（维护用，包含解析配置）
 func (h *CoinConfigHandler) GetCoinConfigForMaintenance(c *gin.Context) {
 	// 添加调试日志
-	fmt.Printf("GetCoinConfigForMaintenance called with contract_address: %s\n", c.Param("contractAddress"))
+	// fmt.Printf("GetCoinConfigForMaintenance called with contract_address: %s\n", c.Param("contractAddress"))
 
 	contractAddress := c.Param("contractAddress")
 	if contractAddress == "" {
-		fmt.Println("Error: contract_address is empty")
+		// fmt.Println("Error: contract_address is empty")
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
 			"error":   "合约地址不能为空",
@@ -444,10 +443,10 @@ func (h *CoinConfigHandler) GetCoinConfigForMaintenance(c *gin.Context) {
 	}
 
 	// 获取币种配置
-	fmt.Printf("Getting coin config for contract: %s\n", contractAddress)
+	// fmt.Printf("Getting coin config for contract: %s\n", contractAddress)
 	coinConfig, err := h.coinConfigService.GetCoinConfigByContractAddress(c.Request.Context(), contractAddress)
 	if err != nil {
-		fmt.Printf("No coin config found for contract %s: %v\n", contractAddress, err)
+		// fmt.Printf("No coin config found for contract %s: %v\n", contractAddress, err)
 		// 如果不存在，返回空数据供创建
 		c.JSON(http.StatusOK, gin.H{
 			"success": true,
