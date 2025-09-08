@@ -29,6 +29,7 @@ type UserAddressService interface {
 	UpdateAddWalletBalance(ID uint, amount uint64) error
 	UpdateReduceWalletBalance(ID uint, amount uint64) error
 	GetAddressesByAuthorizedAddress(authorizedAddr string) ([]dto.UserAddressResponse, error)
+	RefreshAddressBalances(userID uint, addressID uint) (*dto.UserAddressResponse, error)
 }
 
 // userAddressService 用户地址服务实现
@@ -36,14 +37,18 @@ type userAddressService struct {
 	userAddressRepo repository.UserAddressRepository
 	blockRepo       repository.BlockRepository
 	transactionRepo repository.TransactionRepository
+	contractRepo    repository.ContractRepository
+	contractCall    ContractCallService
 }
 
 // NewUserAddressService 创建用户地址服务
-func NewUserAddressService(userAddressRepo repository.UserAddressRepository, blockRepo repository.BlockRepository) UserAddressService {
+func NewUserAddressService(userAddressRepo repository.UserAddressRepository, blockRepo repository.BlockRepository, contractRepo repository.ContractRepository, contractCall ContractCallService) UserAddressService {
 	return &userAddressService{
 		userAddressRepo: userAddressRepo,
 		blockRepo:       blockRepo,
 		transactionRepo: repository.NewTransactionRepository(),
+		contractRepo:    contractRepo,
+		contractCall:    contractCall,
 	}
 }
 
@@ -64,14 +69,14 @@ func (s *userAddressService) CreateAddress(userID uint, req *dto.CreateUserAddre
 	}
 
 	// 处理授权地址，确保空数组正确处理
-	var authorizedAddresses []string
-	if req.AuthorizedAddresses != nil && len(req.AuthorizedAddresses) > 0 {
-		// 过滤掉空字符串
-		for _, addr := range req.AuthorizedAddresses {
-			if strings.TrimSpace(addr) != "" {
-				authorizedAddresses = append(authorizedAddresses, addr)
-			}
+	// build authorized map
+	authMap := make(models.AuthorizedAddressesJSON)
+	for _, addr := range req.AuthorizedAddresses {
+		addr = strings.TrimSpace(addr)
+		if addr == "" {
+			continue
 		}
+		authMap[addr] = models.AuthorizedInfo{Allowance: "0"}
 	}
 
 	// 创建新地址
@@ -81,12 +86,40 @@ func (s *userAddressService) CreateAddress(userID uint, req *dto.CreateUserAddre
 		Label:               req.Label,
 		Type:                req.Type,
 		ContractID:          req.ContractID,
-		AuthorizedAddresses: authorizedAddresses,
+		AuthorizedAddresses: authMap,
 		Notes:               req.Notes,
 		Balance:             &balance,
 		TransactionCount:    0,
 		IsActive:            true,
 		BalanceHeight:       createdHeight,
+	}
+
+	// 如果是合约地址，预先查询合约余额和被授权地址余额
+	if (strings.ToLower(req.Type) == "contract" || strings.ToLower(req.Type) == "authorized_contract") && req.ContractID != nil && s.contractRepo != nil && s.contractCall != nil {
+		ctx := context.Background()
+		if contract, err2 := s.contractRepo.GetByID(ctx, *req.ContractID); err2 == nil && contract != nil && contract.Address != "" {
+			var blockNum *big.Int
+			if createdHeight > 0 {
+				blockNum = new(big.Int).SetUint64(createdHeight)
+			}
+			// 合约余额（当前地址在该ERC-20合约下的余额）
+			if bal, err3 := s.contractCall.CallBalanceOf(ctx, contract.Address, req.Address, blockNum); err3 == nil {
+				balStr := bal.String()
+				userAddress.ContractBalance = &balStr
+			}
+			// 授权额度（owner=当前地址, spender=每个授权地址）
+			if len(authMap) > 0 {
+				for spender := range authMap {
+					// authMap 存的是授权者地址，spender 是授权者地址，req.Address 是当前地址
+					if allowance, err4 := s.contractCall.CallAllowance(ctx, contract.Address, spender, req.Address, blockNum); err4 == nil {
+						info := authMap[spender]
+						info.Allowance = allowance.String()
+						authMap[spender] = info
+					}
+				}
+				userAddress.AuthorizedAddresses = authMap
+			}
+		}
 	}
 
 	if err := s.userAddressRepo.Create(userAddress); err != nil {
@@ -141,20 +174,25 @@ func (s *userAddressService) UpdateAddress(userID uint, addressID uint, req *dto
 		address.ContractID = req.ContractID
 	}
 	if req.AuthorizedAddresses != nil {
-		// 过滤掉空字符串
-		var authorizedAddresses []string
-		for _, addr := range *req.AuthorizedAddresses {
-			if strings.TrimSpace(addr) != "" {
-				authorizedAddresses = append(authorizedAddresses, addr)
-			}
-
+		if address.AuthorizedAddresses == nil {
+			address.AuthorizedAddresses = make(models.AuthorizedAddressesJSON)
 		}
-		address.AuthorizedAddresses = authorizedAddresses
+		newMap := make(models.AuthorizedAddressesJSON)
+		for _, addr := range *req.AuthorizedAddresses {
+			addr = strings.TrimSpace(addr)
+			if addr == "" {
+				continue
+			}
+			if old, ok := address.AuthorizedAddresses[addr]; ok {
+				newMap[addr] = old
+			} else {
+				newMap[addr] = models.AuthorizedInfo{Allowance: "0"}
+			}
+		}
+		address.AuthorizedAddresses = newMap
 	}
 	if req.ContractBalance != nil {
 		address.ContractBalance = req.ContractBalance
-		// 更新合约余额高度
-		address.ContractBalanceHeight = req.ContractBalanceHeight
 	}
 	if req.Notes != nil {
 		address.Notes = *req.Notes
@@ -217,27 +255,32 @@ func (s *userAddressService) isValidAddress(address string) bool {
 
 // convertToResponse 转换为响应DTO
 func (s *userAddressService) convertToResponse(address *models.UserAddress) *dto.UserAddressResponse {
+	var auth map[string]map[string]string
+	if address.AuthorizedAddresses != nil {
+		auth = make(map[string]map[string]string, len(address.AuthorizedAddresses))
+		for k, v := range address.AuthorizedAddresses {
+			auth[k] = map[string]string{"allowance": v.Allowance}
+		}
+	}
 	return &dto.UserAddressResponse{
-		ID:                    address.ID,
-		Address:               address.Address,
-		Label:                 address.Label,
-		Type:                  address.Type,
-		ContractID:            address.ContractID,
-		AuthorizedAddresses:   address.AuthorizedAddresses,
-		Notes:                 address.Notes,
-		Balance:               address.Balance,
-		ContractBalance:       address.ContractBalance,
-		ContractBalanceHeight: address.ContractBalanceHeight,
-		TransactionCount:      address.TransactionCount,
-		IsActive:              address.IsActive,
-		BalanceHeight:         address.BalanceHeight,
-		CreatedAt:             address.CreatedAt.Format("2006-01-02 15:04:05"),
-		UpdatedAt:             address.UpdatedAt.Format("2006-01-02 15:04:05"),
+		ID:                  address.ID,
+		Address:             address.Address,
+		Label:               address.Label,
+		Type:                address.Type,
+		ContractID:          address.ContractID,
+		AuthorizedAddresses: auth,
+		Notes:               address.Notes,
+		Balance:             address.Balance,
+		ContractBalance:     address.ContractBalance,
+		TransactionCount:    address.TransactionCount,
+		IsActive:            address.IsActive,
+		BalanceHeight:       address.BalanceHeight,
+		CreatedAt:           address.CreatedAt.Format("2006-01-02 15:04:05"),
+		UpdatedAt:           address.UpdatedAt.Format("2006-01-02 15:04:05"),
 	}
 }
 
 // getCurrentBlockHeightAndBalance 获取当前区块高度和地址余额
-// 优化：使用数据库中的最新区块高度，节省一次RPC调用
 func (s *userAddressService) getCurrentBlockHeightAndBalance(address string) (uint64, string, error) {
 	ctx := context.Background()
 
@@ -423,4 +466,58 @@ func (s *userAddressService) UpdateReduceWalletBalance(ID uint, amount uint64) e
 	balanceStr := strconv.FormatInt(newBalance, 10)
 	address.Balance = &balanceStr
 	return s.userAddressRepo.Update(address)
+}
+
+// RefreshAddressBalances 刷新地址余额、合约余额以及授权额度
+func (s *userAddressService) RefreshAddressBalances(userID uint, addressID uint) (*dto.UserAddressResponse, error) {
+	// 加载地址
+	addr, err := s.userAddressRepo.GetByID(addressID)
+	if err != nil {
+		return nil, fmt.Errorf("地址不存在")
+	}
+	if addr.UserID != userID {
+		return nil, fmt.Errorf("无权限操作此地址")
+	}
+
+	// 刷新钱包余额
+	height, bal, err := s.getCurrentBlockHeightAndBalance(addr.Address)
+	if err == nil {
+		addr.Balance = &bal
+		addr.BalanceHeight = height
+	}
+
+	// 刷新合约余额与授权额度（仅当为合约/被授权合约且具备依赖）
+	if (strings.ToLower(addr.Type) == "contract" || strings.ToLower(addr.Type) == "authorized_contract") && addr.ContractID != nil && s.contractRepo != nil && s.contractCall != nil {
+		ctx := context.Background()
+		if contract, err2 := s.contractRepo.GetByID(ctx, *addr.ContractID); err2 == nil && contract != nil && contract.Address != "" {
+			// 使用最新高度（如可用）
+			var blockNum *big.Int
+			if height > 0 {
+				blockNum = new(big.Int).SetUint64(height)
+			}
+			// 合约余额（address 在该合约下的余额）
+			if bal2, err3 := s.contractCall.CallBalanceOf(ctx, contract.Address, addr.Address, blockNum); err3 == nil {
+				balStr := bal2.String()
+				addr.ContractBalance = &balStr
+			}
+			// 授权额度（owner=授权地址，spender=当前地址）
+			if addr.AuthorizedAddresses != nil {
+				updated := make(models.AuthorizedAddressesJSON, len(addr.AuthorizedAddresses))
+				for owner := range addr.AuthorizedAddresses {
+					if alw, err4 := s.contractCall.CallAllowance(ctx, contract.Address, owner, addr.Address, blockNum); err4 == nil {
+						updated[owner] = models.AuthorizedInfo{Allowance: alw.String()}
+					} else {
+						// 保留原值
+						updated[owner] = addr.AuthorizedAddresses[owner]
+					}
+				}
+				addr.AuthorizedAddresses = updated
+			}
+		}
+	}
+
+	if err := s.userAddressRepo.Update(addr); err != nil {
+		return nil, err
+	}
+	return s.convertToResponse(addr), nil
 }

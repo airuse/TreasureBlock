@@ -214,3 +214,18 @@ func (m *EthFailoverManager) BalanceAt(ctx context.Context, account common.Addre
 	}
 	return nil, lastErr
 }
+
+// CallContract 故障转移调用合约方法（eth_call）
+func (m *EthFailoverManager) CallContract(ctx context.Context, msg ethereum.CallMsg, blockNumber *big.Int) ([]byte, error) {
+	var lastErr error
+	deadline := time.Now().Add(m.timeout)
+	for time.Now().Before(deadline) {
+		cli := m.next()
+		result, err := cli.CallContract(ctx, msg, blockNumber)
+		if err == nil {
+			return result, nil
+		}
+		lastErr = err
+	}
+	return nil, lastErr
+}

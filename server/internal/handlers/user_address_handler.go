@@ -4,6 +4,7 @@ import (
 	"blockChainBrowser/server/internal/dto"
 	"blockChainBrowser/server/internal/services"
 	"blockChainBrowser/server/internal/utils"
+	"fmt"
 	"net/http"
 	"strconv"
 
@@ -262,4 +263,20 @@ func (h *UserAddressHandler) GetAuthorizedAddresses(c *gin.Context) {
 	}
 
 	utils.SuccessResponse(c, http.StatusOK, "查询授权关系成功", addresses)
+}
+
+// RefreshBalance 刷新地址及授权余额
+func (h *UserAddressHandler) RefreshBalance(c *gin.Context) {
+	userID := c.GetUint("user_id")
+	var id uint
+	if _, err := fmt.Sscanf(c.Param("id"), "%d", &id); err != nil {
+		c.JSON(400, gin.H{"success": false, "message": "无效的地址ID"})
+		return
+	}
+	resp, err := h.userAddressService.RefreshAddressBalances(userID, id)
+	if err != nil {
+		c.JSON(400, gin.H{"success": false, "message": err.Error()})
+		return
+	}
+	c.JSON(200, gin.H{"success": true, "data": resp})
 }

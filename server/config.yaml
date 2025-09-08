@@ -115,4 +115,17 @@ cache:
 security:
   jwt_secret: "blockchain-browser-secret-key"
   jwt_expiration: 24h
-  bcrypt_cost: 12 
+  bcrypt_cost: 12
+
+# 数据清理配置
+data_cleanup:
+  eth:
+    max_blocks: 50000        # ETH最大保留区块数
+    cleanup_threshold: 50000 # ETH清理阈值
+    batch_size: 1000         # ETH批量删除大小
+    interval: 60             # ETH清理间隔（分钟）
+  btc:
+    max_blocks: 5000         # BTC最大保留区块数
+    cleanup_threshold: 5000  # BTC清理阈值
+    batch_size: 500          # BTC批量删除大小
+    interval: 120            # BTC清理间隔（分钟） 

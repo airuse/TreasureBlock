@@ -13,6 +13,7 @@ import (
 	"blockChainBrowser/server/internal/repository"
 	"blockChainBrowser/server/internal/routes"
 	"blockChainBrowser/server/internal/services"
+	"blockChainBrowser/server/internal/utils"
 
 	"github.com/gin-gonic/gin"
 )
@@ -25,6 +26,7 @@ type Server struct {
 	tlsServer                  *http.Server
 	transactionStatusScheduler *services.TransactionStatusScheduler
 	feeScheduler               *services.FeeScheduler
+	dataCleanupScheduler       *services.DataCleanupScheduler
 }
 
 // New 创建服务器实例
@@ -51,6 +53,10 @@ func New() *Server {
 	earningsRepo := repository.NewEarningsRepository(database.GetDB())
 	userBalanceRepo := repository.NewUserBalanceRepository(database.GetDB())
 
+	// RPC 管理器与合约调用服务
+	rpcManager := utils.NewRPCClientManager()
+	contractCallService := services.NewContractCallService(rpcManager)
+
 	// 创建解析配置服务
 	parserConfigService := services.NewParserConfigService(parserConfigRepo)
 
@@ -74,7 +80,7 @@ func New() *Server {
 		config.AppConfig.Security.JWTSecret,
 		config.AppConfig.Security.JWTExpiration,
 	)
-	userAddressService := services.NewUserAddressService(userAddressRepo, blockRepo)
+	userAddressService := services.NewUserAddressService(userAddressRepo, blockRepo, contractRepo, contractCallService)
 	statsService := services.NewStatsService(statsRepo)
 
 	// 创建收益相关服务
@@ -124,6 +130,17 @@ func New() *Server {
 	feeScheduler := services.NewFeeScheduler()
 	feeScheduler.SetWebSocketHandler(wsHandler)
 	go feeScheduler.Start(context.Background())
+
+	// 创建并启动数据清理调度器
+	dataCleanupScheduler := services.NewDataCleanupScheduler(
+		database.GetDB(),
+		userAddressRepo,
+		blockRepo,
+		txRepo,
+		transactionReceiptRepo,
+		contractParseResultRepo,
+	)
+	go dataCleanupScheduler.Start(context.Background())
 
 	// 创建Gas费率处理器
 	gasHandler := handlers.NewGasHandler(feeScheduler)
@@ -181,6 +198,7 @@ func New() *Server {
 		tlsServer:                  tlsServer,
 		transactionStatusScheduler: transactionStatusScheduler,
 		feeScheduler:               feeScheduler,
+		dataCleanupScheduler:       dataCleanupScheduler,
 	}
 }
 
@@ -220,6 +238,11 @@ func (s *Server) Shutdown(timeout time.Duration) error {
 	// 停止交易状态调度器
 	if s.transactionStatusScheduler != nil {
 		s.transactionStatusScheduler.Stop()
+	}
+
+	// 停止数据清理调度器
+	if s.dataCleanupScheduler != nil {
+		s.dataCleanupScheduler.Stop()
 	}
 
 	// 关闭HTTP服务器

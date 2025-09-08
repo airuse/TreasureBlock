@@ -7,7 +7,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"math/big"
-	"slices"
 	"strings"
 
 	"blockChainBrowser/server/internal/models"
@@ -183,18 +182,8 @@ func (s *contractParseService) ParseAndStoreBatchByTxHashesAsync(ctx context.Con
 				continue
 			}
 
-			results := s.parseReceipt(rc, tx, pcs, coinConfigs)
-			if len(results) > 0 {
-				if err := s.repo.CreateBatch(bgCtx, results); err != nil {
-					// fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] CreateBatch error for index=%d hash=%s: %v\n", txItem.Index, txItem.Hash, err)
-				} else {
-					// fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] successfully processed index=%d hash=%s results=%d\n", txItem.Index, txItem.Hash, len(results))
-				}
-			} else {
-				// fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] no results for index=%d hash=%s\n", txItem.Index, txItem.Hash)
-			}
+			_ = s.parseReceipt(rc, tx, pcs, coinConfigs)
 		}
-		// fmt.Printf("[ParseAndStoreBatchByTxHashesAsync] completed processing %d transactions\n", len(sortedTxs))
 	}()
 }
 
@@ -213,95 +202,49 @@ type EventUpdate struct {
 	SpenderAddr string   // for approve events
 }
 
-// helper: check if event should be processed (strict ordering + idempotency)
+// helper: check if event should be processed (snapshot + idempotency)
 func (s *contractParseService) shouldProcessEvent(height uint64, txIdx uint64, txHash string, logIdx uint, a *models.UserAddress) bool {
 	if a == nil {
 		return false
 	}
-
-	// Check if this specific event was already processed (idempotency)
+	// Idempotency: skip if already parsed
 	existing, err := s.repo.GetByTxHashAndLogIndex(context.Background(), txHash, logIdx)
 	if err == nil && existing != nil {
-		// fmt.Printf("[shouldProcessEvent] event already processed: txHash=%s logIdx=%d\n", txHash, logIdx)
 		return false
 	}
-
-	// Allow processing if no previous snapshot
-	if a.ContractBalanceHeight == nil {
-		return true
-	}
-
-	prevHeight := *a.ContractBalanceHeight
-
-	// Strict ordering: only process if this event is AFTER the last processed event
-	if height > prevHeight {
-		return true
-	}
-	if height < prevHeight {
-		// fmt.Printf("[shouldProcessEvent] reject: height %d < stored height %d\n", height, prevHeight)
+	// Gate by BalanceHeight: if stored balance snapshot height is newer than this event, skip
+	if a.BalanceHeight > 0 && a.BalanceHeight > height {
 		return false
 	}
-
-	// Same height: check transaction index
-	if a.ContractBalanceReceiptIndex == nil {
-		return true
-	}
-	prevTxIdx := *a.ContractBalanceReceiptIndex
-	if txIdx > prevTxIdx {
-		return true
-	}
-
-	// fmt.Printf("[shouldProcessEvent] reject: same height %d, txIdx %d <= stored txIdx %d\n", height, txIdx, prevTxIdx)
-	return false
+	return true
 }
 
-// helper: apply balance update with strict ordering
+// helper: apply balance update (does not modify BalanceHeight)
 func (s *contractParseService) applyBalanceUpdate(update *EventUpdate, txHash string, logIdx uint) error {
 	if update == nil || update.UserAddress == nil {
 		return nil
 	}
-
 	if !s.shouldProcessEvent(update.Height, update.TxIndex, txHash, logIdx, update.UserAddress) {
 		return nil
 	}
-
 	a := update.UserAddress
-
-	// Apply the update
 	if update.EventType == "balanceOf" {
-		// Absolute balance update - overwrites any previous balance
 		val := update.AbsoluteWei
 		a.ContractBalance = &val
-		// fmt.Printf("[applyBalanceUpdate] absolute balance: addr=%s balance=%s\n", a.Address, val)
 	} else if update.DeltaWei != nil {
-		// Delta balance update
 		cur := new(big.Int)
 		if a.ContractBalance != nil {
 			_, _ = cur.SetString(*a.ContractBalance, 10)
 		}
 		cur.Add(cur, update.DeltaWei)
-
-		// Prevent negative balances
 		if cur.Sign() < 0 {
 			cur.SetInt64(0)
-			// fmt.Printf("[applyBalanceUpdate] prevented negative balance for addr=%s\n", a.Address)
 		}
-
 		val := cur.String()
 		a.ContractBalance = &val
-		// fmt.Printf("[applyBalanceUpdate] delta balance: addr=%s delta=%s new=%s\n", a.Address, update.DeltaWei.String(), val)
 	} else if update.EventType == "approve" && update.SpenderAddr != "" {
-		// Authorize spender
-		if a.AuthorizedAddresses != nil && !slices.Contains(a.AuthorizedAddresses, update.SpenderAddr) {
-			a.AuthorizedAddresses = append(a.AuthorizedAddresses, update.SpenderAddr)
-			// fmt.Printf("[applyBalanceUpdate] added authorized addr: owner=%s spender=%s\n", a.Address, update.SpenderAddr)
-		}
+		// 需要更新授权余额
 	}
-
-	// Update metadata
-	a.ContractBalanceHeight = &update.Height
-	a.ContractBalanceReceiptIndex = &update.TxIndex
-
 	return s.userAddressRepo.Update(a)
 }
 
@@ -312,11 +255,8 @@ func (s *contractParseService) parseReceipt(receipt *models.TransactionReceipt, 
 	}
 	var logs []map[string]interface{}
 	if err := json.Unmarshal([]byte(receipt.LogsData), &logs); err != nil {
-		// fmt.Printf("[parseReceipt] unmarshal logs failed txHash=%s error=%v\n", emptyIfNil(receipt.TxHash), err)
 		return nil
 	}
-	// fmt.Printf("[parseReceipt] begin txHash=%s logs=%d parserConfigs=%d\n", emptyIfNil(receipt.TxHash), len(logs), len(parserConfigs))
-
 	// 预计算原始日志hash（用于幂等）
 	rawHash := sha256.Sum256([]byte(receipt.LogsData))
 	rawHashHex := "0x" + hex.EncodeToString(rawHash[:])
@@ -333,22 +273,18 @@ func (s *contractParseService) parseReceipt(receipt *models.TransactionReceipt, 
 			sigToRule[sig] = c
 		}
 	}
-	// fmt.Printf("[parseReceipt] built sigToRule size=%d\n", len(sigToRule))
-
 	var out []*models.ContractParseResult
 
 	for idx, log := range logs {
 		topics, _ := log["topics"].([]interface{})
 		data, _ := log["data"].(string)
 		if len(topics) == 0 {
-			// fmt.Printf("[parseReceipt] #%d skip: no topics\n", idx)
 			continue
 		}
 		topic0, _ := topics[0].(string)
 		sig := strings.ToLower(topic0)
 		rule := sigToRule[sig]
 		if rule == nil {
-			// fmt.Printf("[parseReceipt] #%d no rule match for sig=%s\n", idx, sig)
 			continue
 		}
 

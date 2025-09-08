@@ -671,6 +671,39 @@ func (m *RPCClientManager) EstimateEthGas(ctx context.Context, from, to string, 
 	return fo.EstimateGas(ctx, msg)
 }
 
+// CallContract 调用合约方法（eth_call）
+func (m *RPCClientManager) CallContract(ctx context.Context, from, to string, value *big.Int, data []byte, blockNumber *big.Int) ([]byte, error) {
+	// 获取ETH故障转移管理器
+	fo, exists := m.ethFailovers["eth"]
+	if !exists {
+		for key, f := range m.ethFailovers {
+			if strings.Contains(strings.ToLower(key), "eth") {
+				fo = f
+				exists = true
+				break
+			}
+		}
+	}
+	if !exists {
+		return nil, fmt.Errorf("ETH RPC故障转移未初始化")
+	}
+
+	var toAddr *common.Address
+	if to != "" {
+		addr := common.HexToAddress(to)
+		toAddr = &addr
+	}
+
+	msg := ethereum.CallMsg{
+		From:  common.HexToAddress(from),
+		To:    toAddr,
+		Value: value,
+		Data:  data,
+	}
+
+	return fo.CallContract(ctx, msg, blockNumber)
+}
+
 // Close 关闭所有连接
 func (m *RPCClientManager) Close() {
 	for _, client := range m.ethFailovers {

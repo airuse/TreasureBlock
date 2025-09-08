@@ -51,11 +51,8 @@
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">类型</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">合约</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">授权地址</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">备注</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">余额 (Wei)</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">合约余额 (Wei)</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">交易数</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
               </tr>
             </thead>
@@ -78,7 +75,14 @@
                   </div>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {{ address.label || '-' }}
+                  <div class="group relative inline-block">
+                    <span class="text-gray-900">{{ address.label || '-' }}</span>
+                    <div v-if="address.notes && address.notes.trim() !== ''" 
+                         class="absolute left-0 mt-1 px-3 py-2 bg-gray-800 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10 min-w-[12rem] max-w-[28rem] break-words">
+                      {{ address.notes }}
+                      <div class="absolute -top-1 left-4 w-0 h-0 border-l-4 border-r-4 border-b-4 border-transparent border-b-gray-800"></div>
+                    </div>
+                  </div>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                   <span :class="getTypeClass(address.type)" class="inline-flex px-2 py-1 text-xs font-semibold rounded-full">
@@ -86,7 +90,7 @@
                   </span>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  <div v-if="address.type === 'contract' && address.contract_id">
+                  <div v-if="(address.type === 'contract' || address.type === 'authorized_contract') && address.contract_id">
                     <div class="flex items-center space-x-2">
                       <span class="text-xs bg-purple-100 text-purple-800 px-2 py-1 rounded">
                         {{ getContractName(address.contract_id) }}
@@ -96,12 +100,17 @@
                   <span v-else class="text-gray-400 text-xs">-</span>
                 </td>
                 <td class="px-6 py-4 text-sm text-gray-900">
-                  <div v-if="address.type === 'contract' && address.authorized_addresses && address.authorized_addresses.length > 0" class="max-w-xs">
+                  <div v-if="address.type === 'authorized_contract' && address.authorized_addresses && Object.keys(address.authorized_addresses).length > 0" class="max-w-xs">
                     <div class="space-y-1">
-                      <div v-for="(authAddr, index) in address.authorized_addresses.slice(0, 2)" :key="index" class="flex items-center space-x-2">
-                        <code class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
-                          {{ formatAddress(authAddr) }}
-                        </code>
+                      <div v-for="([authAddr, info], index) in Object.entries(address.authorized_addresses).slice(0, 2)" :key="authAddr" class="flex items-center space-x-2">
+                        <div class="group relative">
+                          <code class="text-xs bg-blue-100 text-blue-800 px-2 py-1 rounded">
+                            {{ formatAddress(authAddr) }}
+                          </code>
+                          <div class="absolute bottom-full left-0 mb-1 px-2 py-1 bg-gray-800 text-white text-xs rounded opacity-0 group-hover:opacity-100 min-w-[10rem] max-w-[24rem] break-words pointer-events-none">
+                            额度: {{ formatTokenAmount(info?.allowance || '0', address.contract_id) }}
+                          </div>
+                        </div>
                         <button
                           @click="copyToClipboard(authAddr)"
                           class="text-blue-400 hover:text-blue-600"
@@ -112,36 +121,21 @@
                           </svg>
                         </button>
                       </div>
-                      <div v-if="address.authorized_addresses.length > 2" class="text-xs text-gray-500">
-                        还有 {{ address.authorized_addresses.length - 2 }} 个授权地址
+                      <div v-if="Object.keys(address.authorized_addresses).length > 2" class="text-xs text-gray-500">
+                        还有 {{ Object.keys(address.authorized_addresses).length - 2 }} 个授权地址
                       </div>
                     </div>
                   </div>
                   <span v-else class="text-gray-400 text-xs">-</span>
                 </td>
-                <td class="px-6 py-4 text-sm text-gray-900">
-                  <div v-if="address.notes && address.notes.trim() !== ''" class="max-w-xs">
-                    <div class="group relative">
-                      <span class="text-gray-700 cursor-help">
-                        {{ address.notes.length > 50 ? address.notes.substring(0, 50) + '...' : address.notes }}
-                      </span>
-                      <!-- 完整备注的悬浮提示 -->
-                      <div v-if="address.notes.length > 50" 
-                           class="absolute bottom-full left-0 mb-2 px-3 py-2 bg-gray-800 text-white text-xs rounded-lg opacity-0 group-hover:opacity-100 transition-opacity duration-200 z-10 max-w-xs break-words">
-                        {{ address.notes }}
-                        <div class="absolute top-full left-4 w-0 h-0 border-l-4 border-r-4 border-t-4 border-transparent border-t-gray-800"></div>
-                      </div>
-                    </div>
-                  </div>
-                  <span v-else class="text-gray-400 text-xs">-</span>
-                </td>
+                
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
                   {{ address.balance ? formatWeiBalance(address.balance) : '0.0000' }}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                   <div v-if="address.contract_balance">
                     <div class="space-y-1">
-                      <div class="text-gray-700">{{ formatWeiBalance(address.contract_balance) }}</div>
+                      <div class="text-gray-700">{{ formatTokenAmount(address.contract_balance, address.contract_id) }}</div>
                       <div v-if="address.contract_balance_height" class="text-xs text-gray-500">
                         区块 #{{ address.contract_balance_height }}
                       </div>
@@ -149,20 +143,13 @@
                   </div>
                   <span v-else class="text-gray-400 text-xs">-</span>
                 </td>
-                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {{ address.transaction_count }}
-                </td>
-                <td class="px-6 py-4 whitespace-nowrap">
-                  <span :class="getStatusClass(address.is_active ? 'active' : 'inactive')" class="inline-flex px-2 py-1 text-xs font-semibold rounded-full">
-                    {{ getStatusText(address.is_active ? 'active' : 'inactive') }}
-                  </span>
-                </td>
+                
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium space-x-2">
                   <button
-                    @click="createTransaction(address)"
+                    @click="refreshBalance(address)"
                     class="text-blue-600 hover:text-blue-900"
                   >
-                    创建交易
+                    更新余额！
                   </button>
                   <button
                     @click="viewTransactions(address)"
@@ -226,13 +213,14 @@
                 >
                   <option value="wallet">钱包</option>
                   <option value="contract">合约</option>
+                  <option value="authorized_contract">被授权合约</option>
                   <option value="exchange">交易所</option>
                   <option value="other">其他</option>
                 </select>
               </div>
               
                           <!-- 合约选择器，仅当类型为合约时显示 -->
-              <div v-if="newAddress.type === 'contract'">
+              <div v-if="newAddress.type === 'contract' || newAddress.type === 'authorized_contract'">
                 <label class="block text-sm font-medium text-gray-700 mb-1">选择合约</label>
                 <select
                   v-model="newAddress.contract_id"
@@ -254,17 +242,20 @@
                 </div>
               </div>
               
-              <!-- 授权地址输入，仅当类型为合约时显示 -->
-              <div v-if="newAddress.type === 'contract'">
+              <!-- 授权地址输入，仅当类型为被授权合约时显示 -->
+              <div v-if="newAddress.type === 'authorized_contract'">
                 <label class="block text-sm font-medium text-gray-700 mb-1">授权地址</label>
                 <div class="space-y-2">
                   <div v-for="(addr, index) in (newAddress.authorized_addresses || [])" :key="index" class="flex items-center space-x-2">
-                    <input
+                    <select
                       v-model="(newAddress.authorized_addresses || [])[index]"
-                      type="text"
                       class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="0x..."
-                    />
+                    >
+                      <option value="">请选择授权地址</option>
+                      <option v-for="opt in contractAddressOptions" :key="opt.value" :value="opt.value">
+                        {{ opt.label }}
+                      </option>
+                    </select>
                     <button
                       @click="removeAuthorizedAddress(index)"
                       type="button"
@@ -360,13 +351,14 @@
                 >
                   <option value="wallet">钱包</option>
                   <option value="contract">合约</option>
+                  <option value="authorized_contract">被授权合约</option>
                   <option value="exchange">交易所</option>
                   <option value="other">其他</option>
                 </select>
               </div>
               
                           <!-- 合约选择器，仅当类型为合约时显示 -->
-              <div v-if="editingAddress.type === 'contract'">
+              <div v-if="editingAddress.type === 'contract' || editingAddress.type === 'authorized_contract'">
                 <label class="block text-sm font-medium text-gray-700 mb-1">选择合约</label>
                 <select
                   v-model="editingAddress.contract_id"
@@ -388,17 +380,20 @@
                 </div>
               </div>
               
-              <!-- 授权地址输入，仅当类型为合约时显示 -->
-              <div v-if="editingAddress.type === 'contract'">
+              <!-- 授权地址输入，仅当类型为被授权合约时显示 -->
+              <div v-if="editingAddress.type === 'authorized_contract'">
                 <label class="block text-sm font-medium text-gray-700 mb-1">授权地址</label>
                 <div class="space-y-2">
                   <div v-for="(addr, index) in (editingAddress.authorized_addresses || [])" :key="index" class="flex items-center space-x-2">
-                    <input
+                    <select
                       v-model="(editingAddress.authorized_addresses || [])[index]"
-                      type="text"
                       class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                      placeholder="0x..."
-                    />
+                    >
+                      <option value="">请选择授权地址</option>
+                      <option v-for="opt in contractAddressOptions" :key="opt.value" :value="opt.value">
+                        {{ opt.label }}
+                      </option>
+                    </select>
                     <button
                       @click="removeEditingAuthorizedAddress(index)"
                       type="button"
@@ -561,7 +556,8 @@ import {
   createPersonalAddress, 
   getPersonalAddresses, 
   updatePersonalAddress, 
-  deletePersonalAddress 
+  deletePersonalAddress, 
+  refreshPersonalAddressBalance 
 } from '@/api/personal-addresses'
 import { getContracts } from '@/api/contracts'
 import type { 
@@ -589,6 +585,13 @@ const availableEarnings = ref(8.2)
 // 合约相关
 const contracts = ref<Contract[]>([])
 const loadingContracts = ref(false)
+// 合约地址下拉选项（类型为合约的地址）
+const contractAddressOptions = computed(() => {
+  // 从已加载的地址列表中过滤 type === 'contract' 的地址
+  return addressesList.value
+    .filter(a => a.type === 'contract')
+    .map(a => ({ value: a.address, label: `${a.label || formatAddress(a.address)} (${formatAddress(a.address)})` }))
+})
 
 // 新地址表单
 const newAddress = ref<CreatePersonalAddressRequest>({
@@ -632,7 +635,7 @@ const addressesList = ref<PersonalAddressItem[]>([])
 // 计算属性
 const canAddAddress = computed(() => {
   const hasRequiredFields = newAddress.value.address && newAddress.value.label
-  if (newAddress.value.type === 'contract') {
+  if (newAddress.value.type === 'contract' || newAddress.value.type === 'authorized_contract') {
     return hasRequiredFields && newAddress.value.contract_id
   }
   return hasRequiredFields
@@ -672,6 +675,7 @@ const getTypeClass = (type: string) => {
   switch (type) {
     case 'wallet': return 'bg-blue-100 text-blue-800'
     case 'contract': return 'bg-purple-100 text-purple-800'
+    case 'authorized_contract': return 'bg-indigo-100 text-indigo-800'
     case 'exchange': return 'bg-orange-100 text-orange-800'
     case 'other': return 'bg-gray-100 text-gray-800'
     default: return 'bg-gray-100 text-gray-800'
@@ -683,6 +687,7 @@ const getTypeText = (type: string) => {
   switch (type) {
     case 'wallet': return '钱包'
     case 'contract': return '合约'
+    case 'authorized_contract': return '被授权合约'
     case 'exchange': return '交易所'
     case 'other': return '其他'
     default: return '未知'
@@ -747,6 +752,48 @@ const formatWeiBalance = (wei: string) => {
   return eth.toFixed(4)
 }
 
+// 获取合约精度
+const getContractDecimals = (contractId?: number) => {
+  if (!contractId) return 18
+  const c = contracts.value.find(c => c.id === contractId)
+  return (c && (c as any).decimals) ? Number((c as any).decimals) : 18
+}
+
+// 使用合约精度格式化代币数量（字符串安全处理，显示4位小数）
+const formatTokenAmount = (amount: string, contractId?: number) => {
+  try {
+    const decimals = getContractDecimals(contractId)
+    if (!amount) return '0.0000'
+    // 仅数字字符串
+    const raw = amount.replace(/^0+/, '') || '0'
+    if (raw === '0') return '0.0000'
+    if (decimals === 0) return raw
+    // 分割整数与小数部分（按精度补齐）
+    const pad = decimals - (raw.length % decimals)
+    const normalized = pad === decimals ? raw : '0'.repeat(pad) + raw
+    const intPart = normalized.slice(0, normalized.length - decimals).replace(/^0+/, '') || '0'
+    let fracPart = normalized.slice(normalized.length - decimals)
+    // 保留4位小数，四舍五入
+    if (fracPart.length > 4) {
+      const head = fracPart.slice(0, 4)
+      const tail = fracPart.slice(4)
+      const roundUp = /[5-9]/.test(tail[0] || '0')
+      let fracNum = Number(head)
+      if (roundUp) fracNum += 1
+      if (fracNum >= 10000) {
+        // 进位到整数
+        const intNum = BigInt(intPart || '0') + 1n
+        return `${intNum.toString()}.0000`
+      }
+      fracPart = fracNum.toString().padStart(4, '0')
+    } else {
+      fracPart = (fracPart + '0000').slice(0, 4)
+    }
+    return `${intPart}.${fracPart}`
+  } catch {
+    return '0.0000'
+  }
+}
 // 复制到剪贴板
 const copyToClipboard = (text: string) => {
   navigator.clipboard.writeText(text).then(() => {
@@ -828,6 +875,7 @@ const addAddress = async () => {
 
 // 编辑地址
 const editAddress = (address: PersonalAddressItem) => {
+  const authArray = address.authorized_addresses ? Object.keys(address.authorized_addresses) : []
   editingAddress.value = {
     id: address.id,
     address: address.address,
@@ -839,7 +887,7 @@ const editAddress = (address: PersonalAddressItem) => {
     updatedAt: address.updated_at,
     type: address.type,
     contract_id: address.contract_id,
-    authorized_addresses: address.authorized_addresses || [],
+    authorized_addresses: authArray,
     isActive: address.is_active,
     notes: address.notes || '',
     balanceHeight: address.balance_height
@@ -900,9 +948,15 @@ const removeAddress = async (address: PersonalAddressItem) => {
 }
 
 // 创建交易
-const createTransaction = (address: PersonalAddressItem) => {
-  newTransaction.value.fromAddress = address.address
-  showCreateTransactionModal.value = true
+const refreshBalance = async (address: PersonalAddressItem) => {
+  try {
+    const response = await refreshPersonalAddressBalance(address.id)
+    if (!response.success) throw new Error(response.message || 'error')
+    showSuccess('余额刷新成功')
+    await loadAddresses()
+  } catch (e) {
+    showError('余额刷新失败')
+  }
 }
 
 // 提交交易
@@ -927,13 +981,13 @@ const viewTransactions = (address: PersonalAddressItem) => {
 
 // 监听类型变化，自动清空合约ID
 watch(() => newAddress.value.type, (newType) => {
-  if (newType !== 'contract') {
+  if (newType !== 'contract' && newType !== 'authorized_contract') {
     newAddress.value.contract_id = undefined
   }
 })
 
 watch(() => editingAddress.value.type, (newType) => {
-  if (newType !== 'contract') {
+  if (newType !== 'contract' && newType !== 'authorized_contract') {
     editingAddress.value.contract_id = undefined
     editingAddress.value.authorized_addresses = []
   }

@@ -23,6 +23,7 @@ type ContractRepository interface {
 	GetVerifiedContracts(ctx context.Context) ([]*models.Contract, error)
 	GetContractsByStatus(ctx context.Context, status int8) ([]*models.Contract, error)
 	GetWithFilters(ctx context.Context, filters map[string]interface{}, page, pageSize int) ([]*models.Contract, int64, error)
+	GetByID(ctx context.Context, id uint) (*models.Contract, error)
 }
 
 // contractRepository 合约仓库实现
@@ -38,6 +39,15 @@ func NewContractRepository(db *gorm.DB) ContractRepository {
 // Create 创建合约
 func (r *contractRepository) Create(ctx context.Context, contract *models.Contract) error {
 	return r.db.WithContext(ctx).Create(contract).Error
+}
+
+// GetByID 根据ID获取合约
+func (r *contractRepository) GetByID(ctx context.Context, id uint) (*models.Contract, error) {
+	var contract models.Contract
+	if err := r.db.WithContext(ctx).First(&contract, id).Error; err != nil {
+		return nil, err
+	}
+	return &contract, nil
 }
 
 // GetByAddress 根据地址获取合约

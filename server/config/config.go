@@ -18,15 +18,16 @@ import (
 
 // Config 应用配置结构
 type Config struct {
-	Server     ServerConfig     `yaml:"server"`
-	Database   DatabaseConfig   `yaml:"database"`
-	Log        LogConfig        `yaml:"log"`
-	WebSocket  WebSocketConfig  `yaml:"websocket"`
-	CORS       CORSConfig       `yaml:"cors"`
-	API        APIConfig        `yaml:"api"`
-	Blockchain BlockchainConfig `yaml:"blockchain"`
-	Cache      CacheConfig      `yaml:"cache"`
-	Security   SecurityConfig   `yaml:"security"`
+	Server      ServerConfig      `yaml:"server"`
+	Database    DatabaseConfig    `yaml:"database"`
+	Log         LogConfig         `yaml:"log"`
+	WebSocket   WebSocketConfig   `yaml:"websocket"`
+	CORS        CORSConfig        `yaml:"cors"`
+	API         APIConfig         `yaml:"api"`
+	Blockchain  BlockchainConfig  `yaml:"blockchain"`
+	Cache       CacheConfig       `yaml:"cache"`
+	Security    SecurityConfig    `yaml:"security"`
+	DataCleanup DataCleanupConfig `yaml:"data_cleanup"`
 }
 
 // ServerConfig 服务器配置
@@ -153,6 +154,20 @@ type SecurityConfig struct {
 	JWTSecret     string        `yaml:"jwt_secret"`
 	JWTExpiration time.Duration `yaml:"jwt_expiration"`
 	BcryptCost    int           `yaml:"bcrypt_cost"`
+}
+
+// DataCleanupConfig 数据清理配置
+type DataCleanupConfig struct {
+	ETH *ChainCleanupConfig `yaml:"eth"`
+	BTC *ChainCleanupConfig `yaml:"btc"`
+}
+
+// ChainCleanupConfig 单链清理配置
+type ChainCleanupConfig struct {
+	MaxBlocks        int64 `yaml:"max_blocks"`        // 最大保留区块数
+	CleanupThreshold int64 `yaml:"cleanup_threshold"` // 清理阈值
+	BatchSize        int   `yaml:"batch_size"`        // 批量删除大小
+	Interval         int   `yaml:"interval"`          // 清理间隔（分钟）
 }
 
 var AppConfig *Config

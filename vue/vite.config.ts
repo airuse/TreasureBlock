@@ -36,9 +36,4 @@ export default defineConfig({
       }
     }
   },
-  // 关闭热更新日志
-  logger: {
-    level: 'warn',
-    clearScreen: false
-  },
 })

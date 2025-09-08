@@ -7,7 +7,7 @@ export interface PersonalAddressItem {
   label: string
   type: string
   contract_id?: number
-  authorized_addresses?: string[]
+  authorized_addresses?: { [address: string]: { allowance: string } }
   notes?: string
   balance?: string
   contract_balance?: string
@@ -26,7 +26,7 @@ export interface PersonalAddressListItem {
   label: string
   type: string
   contract_id?: number
-  authorized_addresses?: string[]
+  authorized_addresses?: { [address: string]: { allowance: string } }
   notes?: string
   balance?: string
   contract_balance?: string
@@ -79,7 +79,7 @@ export interface UpdatePersonalAddressRequest {
 }
 
 // 地址类型枚举
-export type PersonalAddressType = 'wallet' | 'contract' | 'exchange' | 'other'
+export type PersonalAddressType = 'wallet' | 'contract' | 'authorized_contract' | 'exchange' | 'other'
 
 // 地址状态枚举
 export type PersonalAddressStatus = 'active' | 'inactive'

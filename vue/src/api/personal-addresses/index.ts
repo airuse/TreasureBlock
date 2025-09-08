@@ -151,3 +151,13 @@ export function getAuthorizedAddresses(data: GetAuthorizedAddressesRequest): Pro
     params: data
   })
 }
+
+/**
+ * 刷新个人地址（钱包/合约/授权）余额
+ */
+export function refreshPersonalAddressBalance(id: number): Promise<ApiResponse<PersonalAddressDetail>> {
+  return request({
+    url: `/api/user/addresses/${id}/refresh-balance`,
+    method: 'POST'
+  })
+}

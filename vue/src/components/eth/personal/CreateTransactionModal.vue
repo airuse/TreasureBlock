@@ -88,16 +88,7 @@
                   />
                   <span class="text-sm text-gray-700">授权转账</span>
                 </label>
-                <label class="flex items-center">
-                  <input
-                    type="radio"
-                    v-model="contractOperationType"
-                    value="balanceOf"
-                    class="mr-2 text-blue-600"
-                    @change="handleContractOperationTypeChange"
-                  />
-                  <span class="text-sm text-gray-700">查询余额</span>
-                </label>
+                
               </div>
             </div>
 
@@ -176,8 +167,8 @@
               </div>
             </div>
 
-            <!-- 授权地址选择 - 仅在transferFrom时显示 -->
-            <div v-if="contractOperationType === 'transferFrom' && form.from_address">
+            <!-- 授权地址选择 - 仅在transferFrom时显示（不再依赖是否已选择发送地址） -->
+            <div v-if="contractOperationType === 'transferFrom'">
               <label class="block text-sm font-medium text-gray-700 mb-2">
                 代币持有者地址
               </label>
@@ -213,7 +204,7 @@
                 </div>
               </div>
               <p class="mt-1 text-sm text-gray-500">
-                选择被授权地址 {{ form.from_address }} 可以操作的代币持有者地址
+                选择被授权地址 {{ form.from_address || '（请先选择发送地址）' }} 可以操作的代币持有者地址
               </p>
             </div>
 
@@ -317,6 +308,14 @@ interface ERC20Token {
   status?: number
 }
 
+// 下拉展示的授权地址最小结构
+interface AuthorizedDropdownItem {
+  address: string
+  label: string
+  type: string
+  balance?: string
+}
+
 interface Props {
   show: boolean
   transaction?: any // 编辑模式下的交易数据
@@ -400,7 +399,8 @@ const initEditForm = () => {
         }
       }
       if (tx.contract_operation_type) {
-        contractOperationType.value = tx.contract_operation_type as any
+        const op = tx.contract_operation_type as string
+        contractOperationType.value = (op === 'transfer' || op === 'approve' || op === 'transferFrom') ? (op as any) : 'transfer'
       }
     }
   }
@@ -413,12 +413,12 @@ const isSubmitting = ref(false)
 const transactionType = ref<'eth' | 'erc20'>('eth')
 
 // 合约操作类型
-const contractOperationType = ref<'transfer' | 'approve' | 'transferFrom' | 'balanceOf'>('transfer')
+const contractOperationType = ref<'transfer' | 'approve' | 'transferFrom'>('transfer')
 
 // 地址相关
 const addresses = ref<PersonalAddressItem[]>([])
 const showFromAddressDropdown = ref(false)
-const authorizedAddresses = ref<PersonalAddressItem[]>([])
+const authorizedAddresses = ref<AuthorizedDropdownItem[]>([])
 const showAllowanceAddressDropdown = ref(false)
 const showToAddressDropdown = ref(false)
 
@@ -465,7 +465,6 @@ const getFromAddressLabel = () => {
     case 'transfer': return '发送地址'
     case 'approve': return '授权者地址'
     case 'transferFrom': return '发送地址'
-    case 'balanceOf': return '查询地址'
     default: return '发送地址'
   }
 }
@@ -477,7 +476,6 @@ const getFromAddressPlaceholder = () => {
     case 'transfer': return '选择或输入发送地址'
     case 'approve': return '选择或输入授权者地址'
     case 'transferFrom': return '选择或输入发送地址'
-    case 'balanceOf': return '选择或输入查询地址'
     default: return '选择或输入发送地址'
   }
 }
@@ -485,8 +483,7 @@ const getFromAddressPlaceholder = () => {
 // 是否显示接收地址字段
 const shouldShowToAddress = computed(() => {
   if (transactionType.value === 'eth') return true
-  // 查询余额时，只显示一个地址字段（查询地址）
-  return contractOperationType.value !== 'balanceOf'
+  return true
 })
 
 // 获取接收地址标签
@@ -496,7 +493,6 @@ const getToAddressLabel = () => {
     case 'transfer': return '接收地址'
     case 'approve': return '被授权者地址'
     case 'transferFrom': return '接收地址'
-    case 'balanceOf': return '查询地址'
     default: return '接收地址'
   }
 }
@@ -508,7 +504,6 @@ const getToAddressPlaceholder = () => {
     case 'transfer': return '选择或输入接收地址'
     case 'approve': return '选择或输入被授权者地址'
     case 'transferFrom': return '选择或输入接收地址'
-    case 'balanceOf': return '选择或输入查询地址'
     default: return '选择或输入接收地址'
   }
 }
@@ -516,7 +511,7 @@ const getToAddressPlaceholder = () => {
 // 是否显示金额字段
 const shouldShowAmount = computed(() => {
   if (transactionType.value === 'eth') return true
-  return contractOperationType.value !== 'balanceOf'
+  return true
 })
 
 // 获取金额标签
@@ -526,7 +521,6 @@ const getAmountLabel = () => {
     case 'transfer': return '转账金额'
     case 'approve': return '授权额度'
     case 'transferFrom': return '转账金额'
-    case 'balanceOf': return '查询金额'
     default: return '交易金额'
   }
 }
@@ -538,7 +532,6 @@ const getAmountPlaceholder = () => {
     case 'transfer': return '0.0'
     case 'approve': return '0.0'
     case 'transferFrom': return '0.0'
-    case 'balanceOf': return '0.0'
     default: return '0.0'
   }
 }
@@ -645,28 +638,34 @@ const selectFromAddress = (address: PersonalAddressItem) => {
   }
 }
 
-// 查询授权地址
-const loadAuthorizedAddresses = async (spenderAddress: string) => {
+// 派生授权地址：从已加载的地址列表中找到与 from_address 匹配的地址，读取其 authorized_addresses
+const loadAuthorizedAddresses = (spenderAddress: string) => {
   try {
-    const { getAuthorizedAddresses } = await import('@/api/personal-addresses')
-    const response = await getAuthorizedAddresses({ spender_address: spenderAddress })
-    
-    if (response.success) {
-      // 后端直接返回数组，不是包装在authorized_addresses字段中
-      const addresses = Array.isArray(response.data) ? response.data : []
-      authorizedAddresses.value = addresses
-    } else {
+    const owner = addresses.value.find(a => a.address.toLowerCase() === spenderAddress.toLowerCase())
+    if (!owner || !owner.authorized_addresses) {
       authorizedAddresses.value = []
+      return
     }
-  } catch (error) {
-    console.error('查询授权地址失败:', error)
+    const authMap = owner.authorized_addresses as Record<string, any>
+    const authAddrs = Object.keys(authMap)
+    // 将授权地址映射为下拉展示所需结构（若能在已加载地址中找到匹配项则带上label等，否则降级显示）
+    const mapped = authAddrs.map(addr => {
+      const found = addresses.value.find(a => a.address.toLowerCase() === addr.toLowerCase() && a.type === 'contract')
+      if (found) {
+        return { address: found.address, label: found.label || found.address, type: found.type, balance: found.balance }
+      }
+      return { address: addr, label: addr, type: 'wallet', balance: '0' }
+    })
+    authorizedAddresses.value = mapped
+  } catch (e) {
+    console.error('派生授权地址失败:', e)
     authorizedAddresses.value = []
   }
 }
 
 // 选择授权地址
-const selectAllowanceAddress = (address: PersonalAddressItem) => {
-  form.value.allowance_address = address.address
+const selectAllowanceAddress = (item: AuthorizedDropdownItem) => {
+  form.value.allowance_address = item.address
   showAllowanceAddressDropdown.value = false
 }
 
@@ -683,6 +682,15 @@ const handleFromAddressBlur = () => {
     showFromAddressDropdown.value = false
   }, 200)
 }
+
+// 监听发送地址变化，动态刷新授权地址下拉选项
+watch(() => form.value.from_address, (newVal) => {
+  if (contractOperationType.value === 'transferFrom' && newVal) {
+    loadAuthorizedAddresses(newVal)
+  } else {
+    authorizedAddresses.value = []
+  }
+})
 
 // 处理授权地址输入框失去焦点
 const handleAllowanceAddressBlur = () => {
@@ -738,11 +746,7 @@ const handleContractOperationTypeChange = () => {
         loadAuthorizedAddresses(form.value.from_address)
       }
       break
-    case 'balanceOf':
-      // 查询余额：只需要查询地址，清空接收地址和金额
-      form.value.to_address = ''
-      form.value.amount = ''
-      break
+    
   }
 }
 
@@ -818,18 +822,15 @@ const handleSubmit = async () => {
       return
     }
     
-    // 根据操作类型验证其他字段
-    if (contractOperationType.value !== 'balanceOf') {
-      // 非查询余额操作需要接收地址和金额
-      if (!form.value.to_address) {
-        alert('请选择接收地址')
-        return
-      }
-      
-      if (!form.value.amount) {
-        alert('请输入交易金额')
-        return
-      }
+    // 验证接收地址与金额
+    if (!form.value.to_address) {
+      alert('请选择接收地址')
+      return
+    }
+
+    if (!form.value.amount) {
+      alert('请输入交易金额')
+      return
     }
     
     // transferFrom操作需要授权地址

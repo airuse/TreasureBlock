@@ -95,7 +95,9 @@ func (r *userAddressRepository) GetByContractAddress(address string, contractID 
 
 func (r *userAddressRepository) GetByContractApproveAddress(authorizedAddr string, contractID uint) (*models.UserAddress, error) {
 	var userAddress models.UserAddress
-	err := r.db.Where("JSON_CONTAINS(authorized_addresses, ?) AND contract_id = ?", fmt.Sprintf(`"%s"`, authorizedAddr), contractID).First(&userAddress).Error
+	query := "JSON_EXTRACT(authorized_addresses, ?) IS NOT NULL AND contract_id = ?"
+	jsonPath := fmt.Sprintf("$.'%s'", authorizedAddr)
+	err := r.db.Where(query, jsonPath, contractID).First(&userAddress).Error
 	if err != nil {
 		return nil, err
 	}

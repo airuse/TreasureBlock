@@ -109,6 +109,7 @@ func SetupRoutes(
 			addresses.DELETE("/:id", userAddressHandler.DeleteAddress)                // 删除地址
 			addresses.GET("/transactions", userAddressHandler.GetAddressTransactions) // 获取地址交易列表
 			addresses.GET("/authorized", userAddressHandler.GetAuthorizedAddresses)   // 根据发送地址查询授权关系
+			addresses.POST("/:id/refresh-balance", userAddressHandler.RefreshBalance) // 刷新余额
 		}
 
 		// 用户交易管理
