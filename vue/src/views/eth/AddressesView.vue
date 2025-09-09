@@ -1331,10 +1331,11 @@
           <tbody class="bg-white divide-y divide-gray-200">
             <tr v-for="address in addresses" :key="address.hash" class="hover:bg-gray-50">
               <td class="px-6 py-4 whitespace-nowrap">
-                <div v-if="address.contractLogo" class="flex items-center justify-center">
-                  <div class="w-10 h-10 rounded-full overflow-hidden border-2 border-gray-200">
+                <div class="flex items-center justify-center">
+                  <div class="w-10 h-10 rounded-full overflow-hidden border-2 border-gray-200 bg-gray-50">
                     <img 
-                      :src="address.contractLogo" 
+                      v-if="logos[address.hash]"
+                      :src="logos[address.hash]" 
                       :alt="address.name || '合约图标'"
                       class="w-full h-full object-cover"
                       @error="handleImageError"
@@ -1616,6 +1617,7 @@ interface Address {
 }
 
 const addresses = ref<Address[]>([])
+const logos = ref<Record<string, string>>({})
 
 // 计算属性
 const totalPages = computed(() => Math.ceil(totalAddresses.value / pageSize.value))
@@ -2702,11 +2704,13 @@ const loadData = async () => {
     if (authStore.isAuthenticated) {
       // 已登录用户：调用 /v1/ 下的API
       const { contracts } = await import('@/api')
-      response = await contracts.getContracts(params) as unknown as ContractsResponse
+      const paramsWithNoLogo: any = { ...params, includeLogo: false }
+      response = await contracts.getContracts(paramsWithNoLogo) as unknown as ContractsResponse
     } else {
       // 未登录用户：调用 /no-auth/ 下的API
       const { noAuth } = await import('@/api')
-      response = await noAuth.getContracts(params) as unknown as ContractsResponse
+      const paramsWithNoLogo: any = { ...params, includeLogo: false }
+      response = await noAuth.getContracts(paramsWithNoLogo) as unknown as ContractsResponse
     }
     
     if (response.success) {
@@ -2722,7 +2726,7 @@ const loadData = async () => {
         description: contract.metadata ? (typeof contract.metadata === 'string' ? JSON.parse(contract.metadata).description : contract.metadata.description) : null, // 从 metadata 中提取描述
         decimals: contract.decimals, // 新增：精度
         totalSupply: contract.total_supply, // 新增：总供应量
-        contractLogo: contract.contract_logo, // 新增：合约Logo
+        contractLogo: undefined, // 列表阶段不带logo，后续异步加载
         // 新增：合约详细信息字段
         interfaces: contract.interfaces,
         methods: contract.methods,
@@ -2737,6 +2741,8 @@ const loadData = async () => {
       
       // 使用 count 字段，这是实际后端返回的格式
       totalAddresses.value = response.count || 0
+      // 异步加载logo并缓存
+      void lazyLoadLogos(addresses.value.map(c => c.hash))
     } else {
       console.error('获取合约数据失败:', response.message)
       showError(`获取合约数据失败: ${response.message || '未知错误'}`)
@@ -2816,4 +2822,45 @@ onMounted(async () => {
   await fetchUserProfile()
   await loadData()
 })
+
+// 异步加载logo并缓存到localStorage
+const lazyLoadLogos = async (hashes: string[]) => {
+  const now = Date.now()
+  const ttlMs = 7 * 24 * 60 * 60 * 1000 // 7天缓存
+
+  const needFetch: string[] = []
+  for (const h of hashes) {
+    const cacheKey = `contract_logo_${h}`
+    const cached = localStorage.getItem(cacheKey)
+    if (cached) {
+      try {
+        const obj = JSON.parse(cached)
+        if (obj.value && obj.expireAt && obj.expireAt > now) {
+          logos.value[h] = obj.value
+          continue
+        }
+      } catch {}
+    }
+    needFetch.push(h)
+  }
+
+  if (needFetch.length === 0) return
+
+  await Promise.allSettled(
+    needFetch.map(async (addr) => {
+      try {
+        const { contracts } = await import('@/api')
+        const json: any = await contracts.getNoAuthContractLogo(addr)
+        const logo = json?.data?.contract_logo || ''
+        if (logo) {
+          logos.value[addr] = logo
+          localStorage.setItem(
+            `contract_logo_${addr}`,
+            JSON.stringify({ value: logo, expireAt: now + ttlMs })
+          )
+        }
+      } catch {}
+    })
+  )
+}
 </script> 

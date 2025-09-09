@@ -137,7 +137,8 @@ func SetupRoutes(
 		}
 		contracts := noAuthAPI.Group("/contracts")
 		{
-			contracts.GET("", contractHandler.GetAllContracts) // 获取所有合约
+			contracts.GET("", contractHandler.GetAllContracts)               // 获取所有合约
+			contracts.GET("/:address/logo", contractHandler.GetContractLogo) // 按地址获取Logo
 		}
 
 		noAuthAPI.GET("/blocks", blockHandler.ListBlocksPublic)                                                // 限制最多20个区块

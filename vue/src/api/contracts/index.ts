@@ -21,6 +21,7 @@ interface GetContractsRequest extends PaginationRequest, SortRequest {
   contractType?: string
   status?: string
   search?: string
+  includeLogo?: boolean
 }
 
 // 根据链名称获取合约请求参数类型
@@ -56,6 +57,24 @@ export function getContracts(data: GetContractsRequest): Promise<PaginatedRespon
     url: '/api/no-auth/contracts',
     method: 'GET',
     params: data
+  })
+}
+
+/**
+ * 获取单个合约Logo（公开接口）
+ */
+export function getNoAuthContractLogo(address: string): Promise<ApiResponse<{ address: string; contract_logo: string }>> {
+  if (__USE_MOCK__) {
+    // 无专用mock，直接返回空logo
+    return Promise.resolve({
+      success: true as unknown as boolean,
+      data: { address, contract_logo: '' }
+    } as unknown as ApiResponse<{ address: string; contract_logo: string }>)
+  }
+
+  return request({
+    url: `/api/no-auth/contracts/${address}/logo`,
+    method: 'GET'
   })
 }
 

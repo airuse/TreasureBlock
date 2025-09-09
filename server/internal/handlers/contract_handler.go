@@ -264,6 +264,7 @@ func (h *ContractHandler) GetAllContracts(c *gin.Context) {
 	contractType := c.Query("contractType")
 	status := c.Query("status")
 	search := c.Query("search")
+	includeLogoStr := c.DefaultQuery("includeLogo", "false")
 
 	// 转换分页参数
 	page, err := strconv.Atoi(pageStr)
@@ -301,6 +302,9 @@ func (h *ContractHandler) GetAllContracts(c *gin.Context) {
 		return
 	}
 
+	// 是否返回logo
+	includeLogo := includeLogoStr == "1" || includeLogoStr == "true" || includeLogoStr == "True"
+
 	// 转换每个合约的数据格式
 	var responseContracts []gin.H
 	for _, contract := range contracts {
@@ -319,9 +323,12 @@ func (h *ContractHandler) GetAllContracts(c *gin.Context) {
 			"creator":        contract.Creator,
 			"creation_tx":    contract.CreationTx,
 			"creation_block": contract.CreationBlock,
-			"contract_logo":  contract.ContractLogo,
 			"ctime":          contract.CTime,
 			"mtime":          contract.MTime,
+		}
+
+		if includeLogo {
+			contractData["contract_logo"] = contract.ContractLogo
 		}
 
 		// 解析JSON字符串为数组/对象
@@ -464,5 +471,34 @@ func (h *ContractHandler) DeleteContract(c *gin.Context) {
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,
 		"message": "Contract deleted successfully",
+	})
+}
+
+// GetContractLogo 根据地址获取合约Logo
+func (h *ContractHandler) GetContractLogo(c *gin.Context) {
+	address := c.Param("address")
+	if address == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "Contract address is required",
+		})
+		return
+	}
+
+	contract, err := h.contractService.GetContractByAddress(c.Request.Context(), address)
+	if err != nil {
+		c.JSON(http.StatusNotFound, gin.H{
+			"success": false,
+			"error":   "Contract not found: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": gin.H{
+			"address":       contract.Address,
+			"contract_logo": contract.ContractLogo,
+		},
 	})
 }

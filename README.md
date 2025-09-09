@@ -1,6 +1,6 @@
 # Treasure Block - 区块链浏览器
 
-一个现代化的区块链浏览器项目，支持比特币和以太坊网络的实时数据查询和展示。
+一个现代化的区块链浏览器项目，支持比特币和以太坊网络的实时数据查询、统计展示与离线签名。
 
 ## 📖 项目简介
 
@@ -13,9 +13,13 @@ Treasure Block 是一个全栈区块链浏览器解决方案，包含：
 
 ```
 blockChainBrowser/
-├── client/scanner/     # 区块链数据扫描器
-├── server/            # API 服务端
-├── vue/              # Vue.js 前端应用
+├── client/
+│   ├── scanner/      # 区块链数据扫描器（Go）
+│   └── signer/       # 离线交易签名器（Go，支持 ETH/BTC）
+├── server/           # API 服务端（Go + Gin + GORM）
+├── vue/              # 前端应用（Vue 3 + TS + Vite + Tailwind）
+├── contract/         # 合约源码（Solidity）
+├── scripts/          # 证书脚本与辅助脚本
 └── docs/             # 详细文档
 ```
 
@@ -27,6 +31,7 @@ blockChainBrowser/
 - ✅ 实时区块数据收集
 - ✅ 交易信息解析
 - ✅ 地址余额追踪
+ - ✅ 批量上传交易数据（提升吞吐）
 
 ### 🚀 API 服务
 - ✅ RESTful API 接口
@@ -36,6 +41,7 @@ blockChainBrowser/
 - ✅ 地址信息查询
 - ✅ 资产统计分析
 - ✅ 用户认证和API密钥管理
+ - ✅ 多链支持（BTC、ETH）
 
 ### 💎 前端界面
 - ✅ 响应式设计
@@ -44,6 +50,11 @@ blockChainBrowser/
 - ✅ 交易查询
 - ✅ 地址搜索
 - ✅ 统计图表
+
+### ✍️ 离线签名器（可选）
+- ✅ 离线签名 ETH/BTC 交易
+- ✅ 私钥加密存储与密码保护
+- ✅ 支持 QR 码导入/导出
 
 ## 🛠️ 技术栈
 
@@ -66,20 +77,20 @@ blockChainBrowser/
 ## 🚀 快速开始
 
 ### 环境要求
-- Go 1.19+
+- Go 1.20+
 - Node.js 18+
 - MySQL 8.0+ 或 PostgreSQL 13+
 
 ### 1. 克隆项目
 ```bash
-git clone https://gitee.com/airuse/treasure-block.git
-cd treasure-block
+git clone <your_repo_url>
+cd blockChainBrowser
 ```
 
 ### 2. 启动数据库服务
 确保 MySQL 或 PostgreSQL 服务正在运行
 
-### 3. 配置扫描器
+### 3. 配置扫描器（client/scanner）
 ```bash
 cd client/scanner
 cp config.yaml.example config.yaml
@@ -95,7 +106,7 @@ go run cmd/main.go
 make build && ./main
 ```
 
-### 5. 配置 API 服务
+### 5. 配置 API 服务（server）
 ```bash
 cd server
 cp config.yaml.example config.yaml
@@ -109,7 +120,16 @@ cd server
 go run main.go
 ```
 
-### 7. 启动前端应用
+可选：启用 TLS 服务（推荐生产环境）
+```bash
+# 生成本地域名证书（自签）
+cd server/scripts
+bash generate-domain-cert.sh
+# 或生成通用 TLS 证书
+bash generate-tls-cert.sh
+```
+
+### 7. 启动前端应用（vue）
 ```bash
 cd vue
 npm install
@@ -118,7 +138,8 @@ npm run dev
 
 ### 8. 访问应用
 - 前端界面: http://localhost:5173
-- API 文档: http://localhost:8080/docs
+- 健康检查: http://localhost:8080/health
+- WebSocket: ws://localhost:8080/ws
 
 ## 📝 配置说明
 
@@ -157,6 +178,15 @@ database:
   dbname: blockchain_browser
 ```
 
+### 签名器（可选，client/signer）
+```bash
+cd client/signer
+go mod tidy
+go build -o signer cmd/main.go
+./signer
+```
+默认密码为 "hello"。支持 QR 码导入、ETH/BTC 交易离线签名与结果导出。
+
 ## 🔧 开发指南
 
 ### 代码规范
@@ -193,20 +223,20 @@ npm run build
 
 ## 📊 API 文档
 
-### 主要接口
+### 主要接口（示例，真实以 /api/v1 为前缀）
 
 #### 区块相关
-- `GET /api/blocks` - 获取区块列表
-- `GET /api/blocks/:hash` - 获取区块详情
-- `GET /api/blocks/latest` - 获取最新区块
+- `GET /api/v1/blocks` - 获取区块列表
+- `GET /api/v1/blocks/hash/:hash` - 获取区块详情
+- `GET /api/v1/blocks/latest` - 获取最新区块
 
 #### 交易相关
-- `GET /api/transactions` - 获取交易列表
-- `GET /api/transactions/:hash` - 获取交易详情
+- `GET /api/v1/transactions` - 获取交易列表
+- `GET /api/v1/transactions/hash/:hash` - 获取交易详情
 
 #### 地址相关
-- `GET /api/addresses/:address` - 获取地址信息
-- `GET /api/addresses/:address/transactions` - 获取地址交易记录
+- `GET /api/v1/addresses/:address` - 获取地址信息
+- `GET /api/v1/addresses/:address/transactions` - 获取地址交易记录
 
 #### WebSocket
 - `ws://localhost:8080/ws` - 实时数据推送
@@ -215,7 +245,9 @@ npm run build
 
 - **[📖 完整文档](./docs/INDEX.md)** - 详细的使用指南和API文档
 - **[🔐 安全配置](./docs/security-configuration.md)** - 生产环境安全设置
-- **[🛠️ 开发指南](./docs/development-guide.md)** - 代码规范和开发流程
+- **[🧰 脚本指南](./docs/scripts-guide.md)** - 证书与脚本使用
+- **[📈 统计服务实现](./server/docs/stats-service-implementation.md)**
+- **[⚙️ 性能优化记录](./server/docs/performance-optimization.md)**
 
 ## 🤝 贡献指南
 
@@ -241,7 +273,7 @@ npm run build
 
 如果你有任何问题或建议，请通过以下方式联系我们：
 - 提交 Issue
-- 发送邮件
+- 发送邮件 viruse123@outlook.com
 - 创建 Pull Request
 
 ---

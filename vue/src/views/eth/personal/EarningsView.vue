@@ -175,8 +175,8 @@ const createEarningsChart = async () => {
     // 调用专门的趋势接口获取数据
     const trendResponse = await getEarningsTrend(1) // 改为1小时
     
-    if (trendResponse.success && trendResponse.data) {
-      const trendData = trendResponse.data
+    if (trendResponse.success) {
+      const trendData = trendResponse.data || []
       
       // 数据累加处理：按时间戳分组并累加amount
       const aggregatedData = aggregateTrendData(trendData)
@@ -185,9 +185,9 @@ const createEarningsChart = async () => {
       const labels = aggregatedData.map(point => point.timestamp)
       const data = aggregatedData.map(point => point.amount)
       
-      console.log('📊 原始数据点数量:', trendData.length)
-      console.log('📊 累加后数据点数量:', aggregatedData.length)
-      console.log('📊 累加后的数据:', aggregatedData)
+      // console.log('📊 原始数据点数量:', trendData.length)
+      // console.log('📊 累加后数据点数量:', aggregatedData.length)
+      // console.log('📊 累加后的数据:', aggregatedData)
       
       // 创建简单的SVG图表
       if (earningsChart.value) {
@@ -195,7 +195,7 @@ const createEarningsChart = async () => {
         earningsChart.value.innerHTML = svg
       }
     } else {
-      console.error('获取收益趋势数据失败:', trendResponse.message)
+      console.error('获取收益趋势数据失败:', (trendResponse as any).error || trendResponse.message)
       // 显示空数据提示
       if (earningsChart.value) {
         earningsChart.value.innerHTML = createSVGChart([], [])
@@ -268,11 +268,11 @@ const startAutoRefresh = () => {
   
   // 设置新的定时器，每30秒刷新一次
   refreshTimer.value = setInterval(async () => {
-    console.log('🔄 自动刷新收益趋势图表...')
+    // console.log('🔄 自动刷新收益趋势图表...')
     await createEarningsChart()
   }, REFRESH_INTERVAL)
   
-  console.log('✅ 收益趋势图表自动刷新已启动，每30秒刷新一次')
+  // console.log('✅ 收益趋势图表自动刷新已启动，每30秒刷新一次')
 }
 
 // 停止定时刷新
@@ -280,7 +280,7 @@ const stopAutoRefresh = () => {
   if (refreshTimer.value) {
     clearInterval(refreshTimer.value)
     refreshTimer.value = null
-    console.log('⏹️ 收益趋势图表自动刷新已停止')
+    // console.log('⏹️ 收益趋势图表自动刷新已停止')
   }
 }
 
@@ -466,10 +466,10 @@ const loadEarnings = async () => {
     })
     
     if (recordsResponse.success) {
-      console.log('🔍 收益记录响应数据:', recordsResponse)
-      console.log('🔍 收益记录数据类型:', typeof recordsResponse.data)
-      console.log('🔍 收益记录列表:', recordsResponse.data)
-      console.log('🔍 收益记录是否为数组:', Array.isArray(recordsResponse.data))
+      // console.log('🔍 收益记录响应数据:', recordsResponse)
+      // console.log('🔍 收益记录数据类型:', typeof recordsResponse.data)
+      // console.log('🔍 收益记录列表:', recordsResponse.data)
+      // console.log('🔍 收益记录是否为数组:', Array.isArray(recordsResponse.data))
       
       // 安全检查：后端返回的是 {pagination: {...}, records: Array}
       if (!recordsResponse.data || !Array.isArray(recordsResponse.data.records)) {
@@ -485,7 +485,7 @@ const loadEarnings = async () => {
       totalItems.value = recordsResponse.data.pagination.total
       totalPages.value = Math.ceil(totalItems.value / pageSize.value)
       
-      console.log('🔍 转换后的收益记录:', earningsList.value)
+      // console.log('🔍 转换后的收益记录:', earningsList.value)
     } else {
       showError(`获取收益记录失败: ${recordsResponse.message || '未知错误'}`)
     }
@@ -512,7 +512,7 @@ const loadUserData = async () => {
     
     if (balanceResponse.success) {
       const balance = balanceResponse.data
-      console.log('🔍 用户余额数据:', balance)
+      // console.log('🔍 用户余额数据:', balance)
       
       // 设置当前余额
       currentBalance.value = balance.balance || 0
@@ -522,7 +522,7 @@ const loadUserData = async () => {
     
     if (statsResponse.success) {
       const stats = statsResponse.data
-      console.log('🔍 收益统计数据:', stats)
+      // console.log('🔍 收益统计数据:', stats)
       
       // 设置总扫块交易数
       totalTransactionCount.value = stats.transaction_count || 0
