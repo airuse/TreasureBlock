@@ -499,7 +499,9 @@ func (s *userAddressService) RefreshAddressBalances(userID uint, addressID uint)
 			if bal2, err3 := s.contractCall.CallBalanceOf(ctx, contract.Address, addr.Address, blockNum); err3 == nil {
 				balStr := bal2.String()
 				addr.ContractBalance = &balStr
+
 			}
+
 			// 授权额度（owner=授权地址，spender=当前地址）
 			if addr.AuthorizedAddresses != nil {
 				updated := make(models.AuthorizedAddressesJSON, len(addr.AuthorizedAddresses))

@@ -278,15 +278,15 @@ func (bs *BlockScanner) scanSingleBlock(chainName string, scanner Scanner, heigh
 			return
 		}
 	}
+	// 由于区块最早提交的时候没有 调用 CalculateBlockStats 方法给 block.BurnedEth、block.MinerTipEth、block.TotalAmount、block.Fee、block.Confirmations 等字段赋值
+	// 所以需要在这里调用 更新这些字段 到后端API
+	bs.updateBlockStatsToServer(block, transactions, blockID)
 
 	// 验证区块
 	if err := bs.verifyBlock(blockID); err != nil {
 		logrus.Errorf("[%s] Block verification failed for block %d: %v", chainName, height, err)
 		return
 	}
-	// 由于区块最早提交的时候没有 调用 CalculateBlockStats 方法给 block.BurnedEth、block.MinerTipEth、block.TotalAmount、block.Fee、block.Confirmations 等字段赋值
-	// 所以需要在这里调用 更新这些字段 到后端API
-	bs.updateBlockStatsToServer(block, transactions, blockID)
 
 	// 保存到文件（如果启用）
 	if chainConfig.Scan.SaveToFile {

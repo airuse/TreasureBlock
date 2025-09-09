@@ -15,6 +15,7 @@ type TransactionReceiptRepository interface {
 	GetByTxHash(ctx context.Context, txHash string) (*models.TransactionReceipt, error)
 	GetByBlockHash(ctx context.Context, blockHash string) ([]*models.TransactionReceipt, error)
 	GetByBlockNumber(ctx context.Context, blockNumber uint64, chain string) ([]*models.TransactionReceipt, error)
+	GetByBlockID(ctx context.Context, blockID uint64) ([]*models.TransactionReceipt, error)
 	Update(ctx context.Context, receipt *models.TransactionReceipt) error
 	Delete(ctx context.Context, id uint) error
 	Exists(ctx context.Context, txHash string) (bool, error)
@@ -71,6 +72,15 @@ func (r *transactionReceiptRepository) GetByBlockNumber(ctx context.Context, blo
 	}
 	if err := query.Find(&receipts).Error; err != nil {
 		return nil, fmt.Errorf("failed to get transaction receipts by block number: %w", err)
+	}
+	return receipts, nil
+}
+
+// GetByBlockID 根据区块ID获取所有凭证
+func (r *transactionReceiptRepository) GetByBlockID(ctx context.Context, blockID uint64) ([]*models.TransactionReceipt, error) {
+	var receipts []*models.TransactionReceipt
+	if err := r.db.WithContext(ctx).Where("block_id = ?", blockID).Find(&receipts).Error; err != nil {
+		return nil, fmt.Errorf("failed to get transaction receipts by block id: %w", err)
 	}
 	return receipts, nil
 }

@@ -14,15 +14,17 @@ import (
 
 // BlockVerificationHandler 区块验证处理器
 type BlockVerificationHandler struct {
-	verificationService services.BlockVerificationService
-	earningsService     services.EarningsService
+	verificationService  services.BlockVerificationService
+	earningsService      services.EarningsService
+	contractParseService services.ContractParseService
 }
 
 // NewBlockVerificationHandler 创建区块验证处理器
-func NewBlockVerificationHandler(verificationService services.BlockVerificationService, earningsService services.EarningsService) *BlockVerificationHandler {
+func NewBlockVerificationHandler(verificationService services.BlockVerificationService, earningsService services.EarningsService, contractParseService services.ContractParseService) *BlockVerificationHandler {
 	return &BlockVerificationHandler{
-		verificationService: verificationService,
-		earningsService:     earningsService,
+		verificationService:  verificationService,
+		earningsService:      earningsService,
+		contractParseService: contractParseService,
 	}
 }
 
@@ -66,6 +68,8 @@ func (h *BlockVerificationHandler) VerifyBlock(c *gin.Context) {
 		})
 		return
 	}
+
+	h.contractParseService.ParseBlockTransactions(c.Request.Context(), blockID)
 
 	// 验证通过需要吧数据库 block 表的 verification_status 更新为 1
 	h.verificationService.UpdateBlockVerificationStatus(c.Request.Context(), blockID, true, "验证通过")

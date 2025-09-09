@@ -342,24 +342,6 @@ func (h *TransactionHandler) CreateTransaction(c *gin.Context) {
 			return
 		}
 
-		// 同步解析：不阻塞太久，只做一次最佳努力
-		txForParse, _ := h.txService.GetTransactionByHash(c.Request.Context(), req.TxID)
-		var parserConfigs []*models.ParserConfig
-		if txForParse != nil && txForParse.AddressTo != "" {
-			if configs, err := h.parserConfigRepo.GetParserConfigsByContract(c.Request.Context(), txForParse.AddressTo); err == nil {
-				if len(configs) == 0 {
-					if fallback, err2 := h.parserConfigRepo.GetParserConfigsByContract(c.Request.Context(), "*"); err2 == nil {
-						parserConfigs = fallback
-					}
-				} else {
-					parserConfigs = configs
-				}
-			}
-		}
-		receiptSaved, _ := h.receiptService.GetTransactionReceiptByHash(c.Request.Context(), req.TxID)
-		if receiptSaved != nil {
-			_, _ = h.contractParseService.ParseAndStore(c.Request.Context(), receiptSaved, txForParse, parserConfigs)
-		}
 	}
 
 	tx := req.ToModel()
@@ -583,32 +565,6 @@ func (h *TransactionHandler) CreateTransactionsBatch(c *gin.Context) {
 
 	c.JSON(http.StatusCreated, response)
 
-	// 准备带索引的交易hash数组，确保严格顺序处理
-	if len(txs) > 0 {
-		// 构建TxHashWithIndex结构
-		txHashesWithIndex := make([]services.TxHashWithIndex, 0, len(txs))
-		for _, tx := range txs {
-			if len(tx) >= 2 {
-				// 将TxID转换为索引（假设TxID是数字字符串）
-				var index int
-				if n, err := fmt.Sscanf(tx[0], "%d", &index); err == nil && n == 1 {
-					txHashesWithIndex = append(txHashesWithIndex, services.TxHashWithIndex{
-						Hash:  tx[1], // TransactionHash
-						Index: index, // TxID as index
-					})
-				}
-			}
-		}
-
-		// fmt.Printf("准备解析交易：总数=%d\n", len(txHashesWithIndex))
-		// for _, item := range txHashesWithIndex {
-		// fmt.Printf("  索引=%d, Hash=%s\n", item.Index, item.Hash)
-		// }
-
-		h.contractParseService.ParseAndStoreBatchByTxHashesAsync(c.Request.Context(), txHashesWithIndex)
-	} else {
-		// fmt.Println("警告：没有找到需要解析的交易")
-	}
 }
 
 // checkBlockVerificationTimeout 检查区块验证是否超时

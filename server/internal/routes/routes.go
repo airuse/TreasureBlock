@@ -3,7 +3,6 @@ package routes
 import (
 	"time"
 
-	"blockChainBrowser/server/internal/database"
 	"blockChainBrowser/server/internal/handlers"
 	"blockChainBrowser/server/internal/middleware"
 	"blockChainBrowser/server/internal/repository"
@@ -36,6 +35,7 @@ func SetupRoutes(
 	earningsService services.EarningsService,
 	tlsEnabled bool, // 添加TLS配置参数
 	contractParseResultHandler *handlers.ContractParseResultHandler,
+	blockVerificationHandler *handlers.BlockVerificationHandler,
 ) *gin.Engine {
 	router := gin.Default()
 
@@ -53,14 +53,6 @@ func SetupRoutes(
 	jwtAuthMiddleware := middleware.JWTAuthMiddleware(authService)
 	rateLimitMiddleware := middleware.RateLimitMiddleware(apiKeyRepo, requestLogRepo)
 	requestLogMiddleware := middleware.RequestLogMiddleware(requestLogRepo)
-
-	// 创建区块验证服务
-	blockVerificationService := services.NewBlockVerificationService(
-		repository.NewBlockRepository(),
-		repository.NewTransactionRepository(),
-		repository.NewTransactionReceiptRepository(database.GetDB()),
-		repository.NewCoinConfigRepository(),
-	)
 
 	// 公开API路由（不需要认证）
 	api := router.Group("/api")
@@ -156,7 +148,6 @@ func SetupRoutes(
 	}
 
 	// 区块验证相关路由
-	blockVerificationHandler := handlers.NewBlockVerificationHandler(blockVerificationService, earningsService)
 
 	// 需要AccessToken认证的API路由（区块链数据API）
 	v1 := api.Group("/v1")

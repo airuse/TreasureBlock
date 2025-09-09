@@ -44,7 +44,7 @@ blockchain:
     #     enable_mempool: true
     #     mempool_interval: 5s
     eth:
-      chain_id: 11155111
+      chain_id: 1
       name: "Ethereum"
       symbol: "ETH"
       decimals: 18
@@ -90,8 +90,8 @@ blockchain:
         # - "https://yolo-smart-tree.quiknode.pro/52836b8f979fca7325258c42925d6c245ca45079"
         # - "https://thrilling-summer-frost.quiknode.pro/ca8e71700184f645a7935acf1487acd191e429a1"
         # - "https://warmhearted-bold-emerald.quiknode.pro/be4e6633f9443a4dd26046d40be1650a810db3a1"
-        - "https://empty-hardworking-spree.ethereum-sepolia.quiknode.pro/d1cb31945987ed11caa6f3e63c2b8b86b00d41ff"
-        - "https://solemn-purple-river.ethereum-sepolia.quiknode.pro/93a62baaa6ed6004344fca98ff7f05f8f0a12ae1"
+        - "https://empty-hardworking-spree.quiknode.pro/d1cb31945987ed11caa6f3e63c2b8b86b00d41ff"
+        - "https://solemn-purple-river.quiknode.pro/93a62baaa6ed6004344fca98ff7f05f8f0a12ae1"
 
       api_key: ""  # 如果需要的话
       username: ""
