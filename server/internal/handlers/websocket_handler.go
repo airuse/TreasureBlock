@@ -158,8 +158,8 @@ func (h *WebSocketHandler) handleMessages(client *Client) {
 		_, message, err := client.conn.ReadMessage()
 		if err != nil {
 			if isNormalWSCloseError(err) {
-				// 降级：正常关闭/已关闭管道等，仅debug日志
-				log.Printf("[WS debug] read on closed connection: %v", err)
+				// 正常关闭/已关闭管道等，静默处理，不记录日志
+				// 这些是正常的连接关闭现象，不需要记录
 			} else if websocket.IsUnexpectedCloseError(err, websocket.CloseGoingAway, websocket.CloseAbnormalClosure) {
 				log.Printf("WebSocket unexpected close error: %v", err)
 			} else {
@@ -221,7 +221,8 @@ func (h *WebSocketHandler) writePump(client *Client) {
 			// 单独发送每条消息，避免合并多条消息
 			if err := client.conn.WriteMessage(websocket.TextMessage, message); err != nil {
 				if isNormalWSCloseError(err) {
-					log.Printf("[WS debug] write on closed connection: %v", err)
+					// 正常关闭/已关闭管道等，静默处理，不记录日志
+					// 这些是正常的连接关闭现象，不需要记录
 				} else {
 					log.Printf("Failed to send message: %v", err)
 				}
@@ -244,7 +245,8 @@ func (h *WebSocketHandler) writePump(client *Client) {
 
 			if err := client.conn.WriteMessage(websocket.TextMessage, pingData); err != nil {
 				if isNormalWSCloseError(err) {
-					log.Printf("[WS debug] ping on closed connection: %v", err)
+					// 正常关闭/已关闭管道等，静默处理，不记录日志
+					// 这些是正常的连接关闭现象，不需要记录
 				} else {
 					log.Printf("Failed to send ping message: %v", err)
 				}

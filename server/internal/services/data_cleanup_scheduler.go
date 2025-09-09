@@ -7,6 +7,7 @@ import (
 	"time"
 
 	"blockChainBrowser/server/config"
+	"blockChainBrowser/server/internal/models"
 	"blockChainBrowser/server/internal/repository"
 
 	"github.com/sirupsen/logrus"
@@ -91,18 +92,18 @@ func (s *DataCleanupScheduler) setDefaultConfigs() {
 	// 从配置文件读取清理配置，如果没有配置则使用默认值
 	ethConfig := &DataCleanupConfig{
 		Chain:            "eth",
-		MaxBlocks:        50000,
+		MaxBlocks:        20000,
 		CleanupThreshold: 50000,
-		BatchSize:        1000,
-		Interval:         60, // 1小时
+		BatchSize:        10000,
+		Interval:         60,
 	}
 
 	btcConfig := &DataCleanupConfig{
 		Chain:            "btc",
-		MaxBlocks:        5000,
-		CleanupThreshold: 5000,
-		BatchSize:        500,
-		Interval:         120, // 2小时
+		MaxBlocks:        20000,
+		CleanupThreshold: 50000,
+		BatchSize:        10000,
+		Interval:         120,
 	}
 
 	// 如果配置文件中有清理配置，则使用配置文件的值
@@ -150,7 +151,8 @@ func (s *DataCleanupScheduler) runCleanupForChain(ctx context.Context, chain str
 
 // CleanupChainData 清理指定链的数据（公开方法）
 func (s *DataCleanupScheduler) CleanupChainData(ctx context.Context, chain string, config *DataCleanupConfig) error {
-	s.logger.Infof("开始清理 %s 链数据", chain)
+	startTime := time.Now()
+	// s.logger.Infof("开始清理 %s 链数据", chain)
 
 	// 1. 检查是否需要清理
 	shouldCleanup, err := s.shouldCleanup(ctx, chain, config)
@@ -159,7 +161,7 @@ func (s *DataCleanupScheduler) CleanupChainData(ctx context.Context, chain strin
 	}
 
 	if !shouldCleanup {
-		s.logger.Infof("%s 链数据量未达到清理阈值，跳过清理", chain)
+		// s.logger.Infof("%s 链数据量未达到清理阈值，跳过清理", chain)
 		return nil
 	}
 
@@ -169,7 +171,7 @@ func (s *DataCleanupScheduler) CleanupChainData(ctx context.Context, chain strin
 		return fmt.Errorf("获取清理基准高度失败: %w", err)
 	}
 
-	s.logger.Infof("%s 链清理基准高度: %d", chain, cleanupHeight)
+	// s.logger.Infof("%s 链清理基准高度: %d", chain, cleanupHeight)
 
 	// 3. 获取受保护的地址列表
 	protectedAddresses, err := s.getProtectedAddresses(ctx)
@@ -177,14 +179,15 @@ func (s *DataCleanupScheduler) CleanupChainData(ctx context.Context, chain strin
 		return fmt.Errorf("获取受保护地址失败: %w", err)
 	}
 
-	s.logger.Infof("受保护地址数量: %d", len(protectedAddresses))
+	// s.logger.Infof("受保护地址数量: %d", len(protectedAddresses))
 
 	// 4. 执行清理
 	if err := s.executeCleanup(ctx, chain, cleanupHeight, protectedAddresses, config); err != nil {
 		return fmt.Errorf("执行清理失败: %w", err)
 	}
 
-	s.logger.Infof("%s 链数据清理完成", chain)
+	s.logger.Infof(`%s 🧹 链数据清理完成，耗时: %s 链清理基准高度: %d 受保护地址数量: %d\n`,
+		chain, time.Since(startTime), cleanupHeight, len(protectedAddresses))
 	return nil
 }
 
@@ -193,7 +196,7 @@ func (s *DataCleanupScheduler) shouldCleanup(ctx context.Context, chain string, 
 	var count int64
 	err := s.db.WithContext(ctx).
 		Table("blocks").
-		Where("chain = ?", chain).
+		Where("chain = ? and deleted_at is null", chain).
 		Count(&count).Error
 
 	if err != nil {
@@ -213,7 +216,7 @@ func (s *DataCleanupScheduler) getCleanupHeight(ctx context.Context, chain strin
 	err := s.db.WithContext(ctx).
 		Table("blocks").
 		Select("height").
-		Where("chain = ?", chain).
+		Where("chain = ? and is_verified = ? and deleted_at is null", chain, 1).
 		Order("height DESC").
 		Limit(int(config.MaxBlocks)).
 		Offset(int(config.MaxBlocks) - 1).
@@ -241,6 +244,114 @@ func (s *DataCleanupScheduler) getProtectedAddresses(ctx context.Context) ([]str
 	return addresses, err
 }
 
+// getProtectedHeights 获取需要保护的高度列表（基于受保护地址）
+func (s *DataCleanupScheduler) getProtectedHeights(tx *gorm.DB, chain string, cleanupHeight uint64) ([]uint64, error) {
+	// 1. 获取受保护的地址
+	addresses, err := s.getProtectedAddresses(tx.Statement.Context)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. 基于受保护地址找到相关的高度
+	heights, err := s.getProtectedHeightsByAddresses(tx, chain, addresses, cleanupHeight)
+	if err != nil {
+		return nil, err
+	}
+
+	return heights, nil
+}
+
+// getProtectedHeightsByAddresses 基于受保护地址获取高度（优化版本）
+func (s *DataCleanupScheduler) getProtectedHeightsByAddresses(tx *gorm.DB, chain string, addresses []string, cleanupHeight uint64) ([]uint64, error) {
+	if len(addresses) == 0 {
+		return []uint64{}, nil
+	}
+
+	heightMap := make(map[uint64]bool)
+	batchSize := 1000 // 分批处理，避免 IN 查询过长
+
+	// 分批处理地址列表
+	for i := 0; i < len(addresses); i += batchSize {
+		end := i + batchSize
+		if end > len(addresses) {
+			end = len(addresses)
+		}
+		batchAddresses := addresses[i:end]
+
+		// 1. 从 transaction 表获取受保护地址相关的高度
+		if err := s.getHeightsFromTransactions(tx, chain, cleanupHeight, batchAddresses, heightMap); err != nil {
+			return nil, err
+		}
+
+		// 2. 从 contract_parse_result 表获取受保护地址相关的高度
+		if err := s.getHeightsFromContractParseResults(tx, chain, cleanupHeight, batchAddresses, heightMap); err != nil {
+			return nil, err
+		}
+	}
+
+	// 转换为切片并返回
+	var uniqueHeights []uint64
+	for h := range heightMap {
+		uniqueHeights = append(uniqueHeights, h)
+	}
+
+	return uniqueHeights, nil
+}
+
+// getHeightsFromTransactions 从 transaction 表获取高度
+func (s *DataCleanupScheduler) getHeightsFromTransactions(tx *gorm.DB, chain string, cleanupHeight uint64, addresses []string, heightMap map[uint64]bool) error {
+	var heights []uint64
+	err := tx.Table("transaction").
+		Select("DISTINCT height").
+		Where("chain = ? AND height < ? AND (address_from IN ? OR address_to IN ?)", chain, cleanupHeight, addresses, addresses).
+		Pluck("height", &heights).Error
+	if err != nil {
+		return err
+	}
+
+	for _, h := range heights {
+		heightMap[h] = true
+	}
+	return nil
+}
+
+// getHeightsFromContractParseResults 从 contract_parse_results 表获取高度
+func (s *DataCleanupScheduler) getHeightsFromContractParseResults(tx *gorm.DB, chain string, cleanupHeight uint64, addresses []string, heightMap map[uint64]bool) error {
+	var heights []uint64
+	err := tx.Table("contract_parse_result").
+		Select("DISTINCT block_number").
+		Where("chain = ? AND block_number < ? AND (from_address IN ? OR to_address IN ?)", chain, cleanupHeight, addresses, addresses).
+		Pluck("block_number", &heights).Error
+	if err != nil {
+		return err
+	}
+
+	for _, h := range heights {
+		heightMap[h] = true
+	}
+	return nil
+}
+
+// cleanupWithProtection 基于受保护的高度和地址进行关联清理
+func (s *DataCleanupScheduler) cleanupWithProtection(tx *gorm.DB, chain string, cleanupHeight uint64, protectedHeights []uint64, protectedAddresses []string, config *DataCleanupConfig) error {
+	// 1. 清理 transaction 表
+	if err := s.cleanupTransactionsWithProtection(tx, chain, cleanupHeight, protectedHeights, protectedAddresses, config); err != nil {
+		return fmt.Errorf("清理 transaction 失败: %w", err)
+	}
+
+	// 2. 清理 transaction_receipts 表
+	if err := s.cleanupTransactionReceiptsWithProtection(tx, chain, cleanupHeight, protectedHeights, protectedAddresses, config); err != nil {
+		return fmt.Errorf("清理 transaction_receipts 失败: %w", err)
+	}
+
+	// 3. 清理 contract_parse_results 表
+	if err := s.cleanupContractParseResultsWithProtection(tx, chain, cleanupHeight, protectedHeights, protectedAddresses, config); err != nil {
+		return fmt.Errorf("清理 contract_parse_result 失败: %w", err)
+	}
+
+	return nil
+}
+
 // executeCleanup 执行数据清理
 func (s *DataCleanupScheduler) executeCleanup(ctx context.Context, chain string, cleanupHeight uint64, protectedAddresses []string, config *DataCleanupConfig) error {
 	// 开始事务
@@ -251,103 +362,99 @@ func (s *DataCleanupScheduler) executeCleanup(ctx context.Context, chain string,
 		}
 	}()
 
-	// 1. 清理 transactions 表
-	if err := s.cleanupTransactions(tx, chain, cleanupHeight, protectedAddresses, config); err != nil {
+	// 1. 获取需要保护的高度列表（基于受保护地址）
+	protectedHeights, err := s.getProtectedHeights(tx, chain, cleanupHeight)
+	if err != nil {
 		tx.Rollback()
-		return fmt.Errorf("清理 transactions 失败: %w", err)
+		return fmt.Errorf("获取受保护高度失败: %w", err)
 	}
 
-	// 2. 清理 transaction_receipts 表
-	if err := s.cleanupTransactionReceipts(tx, chain, cleanupHeight, protectedAddresses, config); err != nil {
+	s.logger.Infof("发现 %d 个受保护的高度需要保留", len(protectedHeights))
+
+	// 2. 基于受保护的高度进行关联清理
+	if err := s.cleanupWithProtection(tx, chain, cleanupHeight, protectedHeights, protectedAddresses, config); err != nil {
 		tx.Rollback()
-		return fmt.Errorf("清理 transaction_receipts 失败: %w", err)
+		return fmt.Errorf("执行关联清理失败: %w", err)
 	}
 
-	// 3. 清理 contract_parse_results 表
-	if err := s.cleanupContractParseResults(tx, chain, cleanupHeight, protectedAddresses, config); err != nil {
+	// 3. 清理 blocks 表（最后清理，因为其他表可能依赖它）
+	result := tx.Where("chain = ? AND height < ?", chain, cleanupHeight).Delete(&models.Block{})
+	if result.Error != nil {
 		tx.Rollback()
-		return fmt.Errorf("清理 contract_parse_results 失败: %w", err)
-	}
-
-	// 4. 清理 blocks 表
-	if err := s.cleanupBlocks(tx, chain, cleanupHeight, config); err != nil {
-		tx.Rollback()
-		return fmt.Errorf("清理 blocks 失败: %w", err)
+		return fmt.Errorf("清理 blocks 失败: %w", result.Error)
 	}
 
 	// 提交事务
 	return tx.Commit().Error
 }
 
-// cleanupTransactions 清理 transactions 表
-func (s *DataCleanupScheduler) cleanupTransactions(tx *gorm.DB, chain string, cleanupHeight uint64, protectedAddresses []string, config *DataCleanupConfig) error {
-	if len(protectedAddresses) == 0 {
-		// 没有受保护地址，直接删除
-		return s.batchDelete(tx, "transactions", "chain = ? AND height < ?", []interface{}{chain, cleanupHeight}, config.BatchSize)
+// cleanupTransactionsWithProtection 基于受保护高度和地址清理 transaction 表
+func (s *DataCleanupScheduler) cleanupTransactionsWithProtection(tx *gorm.DB, chain string, cleanupHeight uint64, protectedHeights []uint64, protectedAddresses []string, config *DataCleanupConfig) error {
+	// 构建保护条件
+	conditions := []string{"chain = ?", "height < ?"}
+	args := []interface{}{chain, cleanupHeight}
+
+	// 如果有受保护的高度，排除这些高度
+	if len(protectedHeights) > 0 {
+		conditions = append(conditions, "height NOT IN ?")
+		args = append(args, protectedHeights)
 	}
 
-	// 有受保护地址，需要排除相关交易
-	query := `
-		DELETE FROM transactions 
-		WHERE chain = ? AND height < ? 
-		AND id NOT IN (
-			SELECT DISTINCT t.id FROM transactions t
-			WHERE t.chain = ? AND t.height < ?
-			AND (t.from_address IN ? OR t.to_address IN ?)
-		)
-	`
-
-	return s.batchDeleteWithQuery(tx, query, []interface{}{chain, cleanupHeight, chain, cleanupHeight, protectedAddresses, protectedAddresses}, config.BatchSize)
-}
-
-// cleanupTransactionReceipts 清理 transaction_receipts 表
-func (s *DataCleanupScheduler) cleanupTransactionReceipts(tx *gorm.DB, chain string, cleanupHeight uint64, protectedAddresses []string, config *DataCleanupConfig) error {
-	if len(protectedAddresses) == 0 {
-		// 没有受保护地址，直接删除
-		return s.batchDelete(tx, "transaction_receipts", "chain = ? AND block_number < ?", []interface{}{chain, cleanupHeight}, config.BatchSize)
+	whereClause := ""
+	for i, condition := range conditions {
+		if i > 0 {
+			whereClause += " AND "
+		}
+		whereClause += condition
 	}
 
-	// 有受保护地址，需要排除相关收据
-	query := `
-		DELETE FROM transaction_receipts 
-		WHERE chain = ? AND block_number < ?
-		AND tx_hash NOT IN (
-			SELECT DISTINCT tr.tx_hash FROM transaction_receipts tr
-			JOIN transactions t ON tr.tx_hash = t.tx_id
-			WHERE tr.chain = ? AND tr.block_number < ?
-			AND (t.from_address IN ? OR t.to_address IN ?)
-		)
-	`
-
-	return s.batchDeleteWithQuery(tx, query, []interface{}{chain, cleanupHeight, chain, cleanupHeight, protectedAddresses, protectedAddresses}, config.BatchSize)
+	return s.batchDelete(tx, "transaction", whereClause, args, config.BatchSize)
 }
 
-// cleanupContractParseResults 清理 contract_parse_results 表
-func (s *DataCleanupScheduler) cleanupContractParseResults(tx *gorm.DB, chain string, cleanupHeight uint64, protectedAddresses []string, config *DataCleanupConfig) error {
-	if len(protectedAddresses) == 0 {
-		// 没有受保护地址，直接删除
-		return s.batchDelete(tx, "contract_parse_results", "chain = ? AND block_number < ?", []interface{}{chain, cleanupHeight}, config.BatchSize)
+// cleanupTransactionReceiptsWithProtection 基于受保护高度和地址清理 transaction_receipts 表
+func (s *DataCleanupScheduler) cleanupTransactionReceiptsWithProtection(tx *gorm.DB, chain string, cleanupHeight uint64, protectedHeights []uint64, protectedAddresses []string, config *DataCleanupConfig) error {
+	// 构建保护条件
+	conditions := []string{"chain = ?", "block_number < ?"}
+	args := []interface{}{chain, cleanupHeight}
+
+	// 如果有受保护的高度，排除这些高度
+	if len(protectedHeights) > 0 {
+		conditions = append(conditions, "block_number NOT IN ?")
+		args = append(args, protectedHeights)
 	}
 
-	// 有受保护地址，需要排除相关解析结果
-	query := `
-		DELETE FROM contract_parse_results 
-		WHERE chain = ? AND block_number < ?
-		AND tx_hash NOT IN (
-			SELECT DISTINCT cpr.tx_hash FROM contract_parse_results cpr
-			JOIN transactions t ON cpr.tx_hash = t.tx_id
-			WHERE cpr.chain = ? AND cpr.block_number < ?
-			AND (t.from_address IN ? OR t.to_address IN ?)
-		)
-	`
+	whereClause := ""
+	for i, condition := range conditions {
+		if i > 0 {
+			whereClause += " AND "
+		}
+		whereClause += condition
+	}
 
-	return s.batchDeleteWithQuery(tx, query, []interface{}{chain, cleanupHeight, chain, cleanupHeight, protectedAddresses, protectedAddresses}, config.BatchSize)
+	return s.batchDelete(tx, "transaction_receipts", whereClause, args, config.BatchSize)
 }
 
-// cleanupBlocks 清理 blocks 表
-func (s *DataCleanupScheduler) cleanupBlocks(tx *gorm.DB, chain string, cleanupHeight uint64, config *DataCleanupConfig) error {
-	// blocks 表不需要考虑受保护地址，直接删除
-	return s.batchDelete(tx, "blocks", "chain = ? AND height < ?", []interface{}{chain, cleanupHeight}, config.BatchSize)
+// cleanupContractParseResultsWithProtection 基于受保护高度和地址清理 contract_parse_result 表
+func (s *DataCleanupScheduler) cleanupContractParseResultsWithProtection(tx *gorm.DB, chain string, cleanupHeight uint64, protectedHeights []uint64, protectedAddresses []string, config *DataCleanupConfig) error {
+	// 构建保护条件
+	conditions := []string{"chain = ?", "block_number < ?"}
+	args := []interface{}{chain, cleanupHeight}
+
+	// 如果有受保护的高度，排除这些高度
+	if len(protectedHeights) > 0 {
+		conditions = append(conditions, "block_number NOT IN ?")
+		args = append(args, protectedHeights)
+	}
+
+	whereClause := ""
+	for i, condition := range conditions {
+		if i > 0 {
+			whereClause += " AND "
+		}
+		whereClause += condition
+	}
+
+	return s.batchDelete(tx, "contract_parse_result", whereClause, args, config.BatchSize)
 }
 
 // batchDelete 批量删除数据
@@ -363,30 +470,6 @@ func (s *DataCleanupScheduler) batchDelete(tx *gorm.DB, table, whereClause strin
 		}
 
 		s.logger.Debugf("删除了 %d 条 %s 记录", result.RowsAffected, table)
-
-		// 短暂延迟，避免长时间锁表
-		time.Sleep(100 * time.Millisecond)
-	}
-
-	return nil
-}
-
-// batchDeleteWithQuery 使用自定义查询批量删除数据
-func (s *DataCleanupScheduler) batchDeleteWithQuery(tx *gorm.DB, query string, args []interface{}, batchSize int) error {
-	// 添加 LIMIT 子句
-	queryWithLimit := query + fmt.Sprintf(" LIMIT %d", batchSize)
-
-	for {
-		result := tx.Exec(queryWithLimit, args...)
-		if result.Error != nil {
-			return result.Error
-		}
-
-		if result.RowsAffected == 0 {
-			break
-		}
-
-		s.logger.Debugf("删除了 %d 条记录", result.RowsAffected)
 
 		// 短暂延迟，避免长时间锁表
 		time.Sleep(100 * time.Millisecond)
