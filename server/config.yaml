@@ -13,10 +13,10 @@ server:
 
 database:
   driver: "mysql"
-  host: "127.0.0.1"
+  host: "39.106.34.163"
   port: 3306
-  username: "root"
-  password: "123"
+  username: "blockchain"
+  password: "Viruse123!QAZ.."
   dbname: "blockchain_browser"
   max_open_conns: 100
   max_idle_conns: 10
@@ -120,10 +120,10 @@ security:
 # 数据清理配置
 data_cleanup:
   eth:
-    max_blocks: 20        # ETH最大保留区块数
-    cleanup_threshold: 50 # ETH清理阈值
-    batch_size: 1000         # ETH批量删除大小
-    interval: 1             # ETH清理间隔（分钟）
+    max_blocks: 20000        # ETH最大保留区块数
+    cleanup_threshold: 30000 # ETH清理阈值
+    batch_size: 100000         # ETH批量删除大小
+    interval: 30             # ETH清理间隔（分钟）
   btc:
     max_blocks: 5000         # BTC最大保留区块数
     cleanup_threshold: 5000  # BTC清理阈值

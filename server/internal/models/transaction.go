@@ -9,7 +9,7 @@ import (
 // Transaction 交易流水表 - 支持BTC和ETH的通用模型
 type Transaction struct {
 	ID           uint    `json:"id" gorm:"primaryKey;column:id;autoIncrement"`
-	TxID         string  `json:"tx_id" gorm:"type:varchar(120);not null;column:tx_id;comment:txid"`
+	TxID         string  `json:"tx_id" gorm:"type:varchar(120);not null;column:tx_id;index;comment:txid"`
 	TxType       uint8   `json:"tx_type" gorm:"type:tinyint(3) unsigned;not null;default:0;column:tx_type;comment:0:常规充值（100_1） 1:常规提现(0_100) 2:用户A提现到用户B充值地址(0_1) 3:打手续费（2_1） 4:归集(1_0) 5:系统地址充值、冷转热(100_0) 6:转冷(0_101) 7:外部向手续费充值 (100_2) 8:用户提现到手续费地址、特殊的手续费地址充值(0_2) 9: 系统地址充值手续费,提现token,无eth时触发(2_0)"`
 	Confirm      uint    `json:"confirm" gorm:"type:int(11) unsigned;not null;column:confirm;comment:确认数"`
 	Status       uint8   `json:"status" gorm:"type:tinyint(3) unsigned;not null;default:0;column:status;comment:0:未知，1:成功，2:失败,3：失败后已处理"`
@@ -67,7 +67,7 @@ type Transaction struct {
 	TokenIsVerified    bool   `json:"token_is_verified,omitempty" gorm:"-"`     // 是否已验证（非数据库字段）
 
 	// 时间字段
-	Ctime     time.Time      `json:"ctime" gorm:"type:timestamp;not null;default:CURRENT_TIMESTAMP;column:ctime;comment:入库时间"`
+	Ctime     time.Time      `json:"ctime" gorm:"type:timestamp;not null;default:CURRENT_TIMESTAMP;column:ctime;index;comment:入库时间"`
 	Mtime     time.Time      `json:"mtime" gorm:"type:timestamp;not null;default:CURRENT_TIMESTAMP;column:mtime;comment:更改时间"`
 	DeletedAt gorm.DeletedAt `json:"deleted_at,omitempty" gorm:"index"`
 }
