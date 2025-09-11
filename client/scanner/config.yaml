@@ -1,12 +1,12 @@
 server:
-  host: "39.106.34.163"  # 域名
-  port: 8080
-  protocol: "http"
-  environment: "production"  # 新增环境标识，当 production 时用的是线上环境 development 是本地环境
-  api_key: "ak_1603efa40b82e7f99992f0b8a2296715"
-  secret_key: "sk_6faaf988fac9f2b2d56dee020bf819738a00e1e6c40e408b8613cea805c84be9"
-  # api_key: "ak_54bf1b19a0d3b13078e1f09953403ced"
-  # secret_key: "sk_d9e23d5d3268378bae7d628c45960782aa8424fffbc2a10ca22e24ce6c3fffba"
+  host: "localhost"  # 域名
+  port: 8443
+  protocol: "https"
+  environment: "development"  # 新增环境标识，当 production 时用的是线上环境 development 是本地环境
+  # api_key: "ak_1603efa40b82e7f99992f0b8a2296715"
+  # secret_key: "sk_6faaf988fac9f2b2d56dee020bf819738a00e1e6c40e408b8613cea805c84be9"
+  api_key: "ak_54bf1b19a0d3b13078e1f09953403ced"
+  secret_key: "sk_d9e23d5d3268378bae7d628c45960782aa8424fffbc2a10ca22e24ce6c3fffba"
   # # HTTPS相关配置
   tls:
     enabled: true
@@ -15,34 +15,39 @@ server:
 
 blockchain:
   chains:
-    # btc:
-    #   name: "Bitcoin"
-    #   symbol: "BTC"
-    #   decimals: 8
-    #   enabled: true
-    #   rpc_url: "http://192.168.1.70:8332"
-    #   explorer_api_urls:
-    #     - "https://alpha-clean-yard.btc.quiknode.pro/7979488c04b1a36bdc4230b23e3eaac3e9c1c1af"
-    #   api_key: ""
-    #   username: "bitcoin"      # bitcoind RPC用户名
-    #   password: "bitcoin123"  # bitcoind RPC密码
-    #   # BTC链特定的扫描配置
-    #   scan:
-    #     enabled: true
-    #     interval: 10s
-    #     max_retries: 3
-    #     retry_delay: 5s
-    #     confirmations: 6
-    #     start_block_height: 0
-    #     auto_start: true
-    #     save_to_file: false
-    #     output_dir: "./output/btc"
-    #     priority: 1  # 高优先级
-    #     max_concurrent: 5
-    #     block_timeout: 30s
-    #     rescan_interval: 60s
-    #     enable_mempool: true
-    #     mempool_interval: 5s
+    btc:
+      chain_id: 1
+      name: "Bitcoin"
+      symbol: "BTC"
+      decimals: 8
+      enabled: true
+      # rpc_url: "http://192.168.1.70:8332"
+      explorer_api_urls:
+        - "https://bitcoin-testnet.core.chainstack.com/fc0977c5fde70ec8c26e2d500a1491dd"
+      api_key: ""
+      username: "bitcoin"      # bitcoind RPC用户名
+      password: "bitcoin123"  # bitcoind RPC密码
+      # BTC链特定的扫描配置
+      scan:
+        enabled: true
+        interval: 1s
+        max_retries: 3
+        retry_delay: 5s
+        confirmations: 6
+        start_block_height: 0
+        auto_start: true
+        save_to_file: false
+        output_dir: "./output/btc"
+        priority: 1  # 高优先级
+        max_concurrent: 5
+        block_timeout: 30s
+        rescan_interval: 60s
+        enable_mempool: true
+        mempool_interval: 5s
+        # 批量上传配置（推荐启用以提高性能）
+        batch_upload: true           # 是否启用批量上传交易（推荐启用）
+        batch_size: 2000             # 批量上传大小，默认1000条交易
+        batch_timeout: 30s           # 批量上传超时时间
     eth:
       chain_id: 1
       name: "Ethereum"
@@ -51,7 +56,6 @@ blockchain:
       enabled: true
       # rpc_url: "http://192.168.1.70:8545"
       explorer_api_urls:
-        - "https://ethereum-mainnet.core.chainstack.com/5611e99c47d7d01ba133c23ee3064020"
         - "https://ethereum-mainnet.core.chainstack.com/7ba518d6ccef2034775a9184a898fa3c"
         - "https://ethereum-mainnet.core.chainstack.com/f128085e44a144c3a63295011a716628"
         - "https://ethereum-mainnet.core.chainstack.com/7940b16771bdfe19340899e9a975604e"
@@ -62,7 +66,6 @@ blockchain:
         - "https://ethereum-mainnet.core.chainstack.com/f88c0e02c0f9f38c4880701a44fa0133"
         - "https://ethereum-mainnet.core.chainstack.com/92b0739e8f73e3d79e79f13f46f5f8ec"
         - "https://ethereum-mainnet.core.chainstack.com/fa00dae894f9dd1b7b4a530d83a83bd7"
-        - "https://ethereum-mainnet.core.chainstack.com/5611e99c47d7d01ba133c23ee3064020"
         - "https://ethereum-mainnet.core.chainstack.com/7ba518d6ccef2034775a9184a898fa3c"
         - "https://ethereum-mainnet.core.chainstack.com/f128085e44a144c3a63295011a716628"
         - "https://ethereum-mainnet.core.chainstack.com/7940b16771bdfe19340899e9a975604e"
@@ -75,11 +78,11 @@ blockchain:
         - "https://ethereum-mainnet.core.chainstack.com/fa00dae894f9dd1b7b4a530d83a83bd7"
         - "https://eth-mainnet.g.alchemy.com/v2/9N4BtDqjALaxGX12hcbvC"
         - "https://eth-mainnet.g.alchemy.com/v2/A8Rr89_Bm2O0RSIxhjJ8a"
+        - "https://lb.drpc.org/ethereum/AvPPIhOf-k4jldkwixy1QT3s8w99gisR8JP8IgaNGuYu"
         - "https://lb.drpc.org/ethereum/ApP8VmV0NEYMjrj0PYgtupww_Sq7gh4R8JPvIgaNGuYu"
         - "https://lb.drpc.org/ethereum/AhSgyzb6VUrWuIkUTrjgi3J2NuwCgh0R8JPuIgaNGuYu"
         - "https://lb.drpc.org/ethereum/Aqh3uZvhdU5oq84o63-TeYsfZaTxgbgR8JO5IgaNGuYu"
         - "https://lb.drpc.org/ethereum/AhCf0-Tte050nUVwFHF_1jOCF6QNgh8R8JPxIgaNGuYu"
-        - "https://lb.drpc.org/ethereum/AvPPIhOf-k4jldkwixy1QT3s8w99gisR8JP8IgaNGuYu"
         - "https://lb.drpc.org/ethereum/AmpXsFj_D07JqDZ-Hv-nsjkUBedLgiAR8JPzIgaNGuYu"
         - "https://lb.drpc.org/ethereum/AjrnZKmTu0IgpPhzqbPO3unPKlTcgiAR8JP2IgaNGuYu"
         - "https://lb.drpc.org/ethereum/AnmJBrEnm0lsmXo0LnCNva9dh3zRgiER8JP3IgaNGuYu"
@@ -102,7 +105,7 @@ blockchain:
         - "0xB0b86a33E6441b8c4C8C0C4b0c4b0c4b0c4b0c4b"  # 示例：USDC合约地址    
       # ETH链特定的扫描配置
       scan:
-        enabled: true                # 是否启用ETH链扫描
+        enabled: false                # 是否启用ETH链扫描
         interval: 1s                 # 扫描区块的时间间隔
         max_retries: 3               # 区块扫描失败时的最大重试次数
         retry_delay: 3s              # 重试间隔时间

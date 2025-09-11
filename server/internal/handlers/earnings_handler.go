@@ -35,7 +35,17 @@ func (h *EarningsHandler) GetUserBalance(c *gin.Context) {
 		return
 	}
 
-	balance, err := h.earningsService.GetUserBalance(c.Request.Context(), uint64(userID))
+	// 可选的链参数
+	chain := c.DefaultQuery("chain", "")
+	var (
+		balance interface{}
+		err     error
+	)
+	if chain != "" {
+		balance, err = h.earningsService.GetUserBalanceByChain(c.Request.Context(), uint64(userID), chain)
+	} else {
+		balance, err = h.earningsService.GetUserBalance(c.Request.Context(), uint64(userID))
+	}
 	if err != nil {
 		h.logger.Errorf("Failed to get user balance: %v", err)
 		utils.SimpleErrorResponse(c, http.StatusInternalServerError, "获取余额失败")
@@ -146,7 +156,7 @@ func (h *EarningsHandler) TransferTCoins(c *gin.Context) {
 		return
 	}
 
-	result, err := h.earningsService.TransferTCoins(c.Request.Context(), uint64(fromUserID), req.ToUserID, req.Amount, req.Description)
+	result, err := h.earningsService.TransferTCoins(c.Request.Context(), uint64(fromUserID), req.ToUserID, req.Amount, req.Description, req.SourceChain)
 	if err != nil {
 		h.logger.Errorf("Failed to transfer T-coins: %v", err)
 		if err.Error() == "insufficient balance" {

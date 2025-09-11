@@ -3,6 +3,7 @@ package pkg
 import (
 	"fmt"
 	"strconv"
+	"strings"
 
 	"github.com/sirupsen/logrus"
 )
@@ -261,6 +262,11 @@ func (api *ScannerAPI) GetLastVerifiedBlockHeight(chain string) (uint64, error) 
 
 	endpoint := fmt.Sprintf("/api/v1/blocks/verification/last-verified?chain=%s", chain)
 	if err := api.client.GET(endpoint, &data); err != nil {
+		// 将 404 视为“没有记录”，返回高度 0 且无错误，避免噪声
+		if strings.Contains(err.Error(), "HTTP 404") || strings.Contains(err.Error(), "record not found") {
+			api.logger.Infof("[%s] No last verified block yet (treating as height 0)", chain)
+			return 0, nil
+		}
 		return 0, fmt.Errorf("get last verified block height failed: %w", err)
 	}
 

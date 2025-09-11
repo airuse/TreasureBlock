@@ -21,14 +21,16 @@ type EarningsService interface {
 	GetUserEarningsRecords(ctx context.Context, userID uint64, req *dto.EarningsRecordListRequest) ([]*dto.EarningsRecordResponse, int64, error)
 	// 获取用户余额
 	GetUserBalance(ctx context.Context, userID uint64) (*dto.UserBalanceResponse, error)
+	// 获取指定链的用户余额
+	GetUserBalanceByChain(ctx context.Context, userID uint64, sourceChain string) (*dto.UserBalanceResponse, error)
 	// 获取用户收益统计
 	GetUserEarningsStats(ctx context.Context, userID uint64) (*dto.EarningsStatsResponse, error)
 	// 获取收益趋势数据
 	GetEarningsTrend(ctx context.Context, userID uint64, hours int) ([]*dto.EarningsTrendPoint, error)
 	// 转账T币
-	TransferTCoins(ctx context.Context, fromUserID, toUserID uint64, amount int64, description string) (*dto.TransferResponse, error)
+	TransferTCoins(ctx context.Context, fromUserID, toUserID uint64, amount int64, description string, sourceChain string) (*dto.TransferResponse, error)
 	// 消耗T币（业务消耗）
-	ConsumeCoins(ctx context.Context, userID uint64, amount int64, source, description string) error
+	ConsumeCoins(ctx context.Context, userID uint64, amount int64, source, description string, sourceChain string) error
 	// 计算区块收益金额
 	CalculateBlockEarnings(transactionCount int64) int64
 }
@@ -56,17 +58,17 @@ func (s *earningsService) GetEarningsTrend(ctx context.Context, userID uint64, h
 	if hours <= 0 {
 		hours = 2 // 默认2小时
 	}
-	
+
 	// 计算时间范围
 	endTime := time.Now()
 	startTime := endTime.Add(-time.Duration(hours) * time.Hour)
-	
+
 	// 获取指定时间范围内的收益记录
 	records, err := s.earningsRepo.GetEarningsRecordsByDateRange(ctx, userID, startTime, endTime)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get earnings records for trend: %w", err)
 	}
-	
+
 	// 过滤只包含收益增加的记录
 	var trendPoints []*dto.EarningsTrendPoint
 	for _, record := range records {
@@ -81,14 +83,14 @@ func (s *earningsService) GetEarningsTrend(ctx context.Context, userID uint64, h
 			trendPoints = append(trendPoints, trendPoint)
 		}
 	}
-	
+
 	// 按时间排序（从早到晚）
 	sort.Slice(trendPoints, func(i, j int) bool {
 		timeI, _ := time.Parse("15:04", trendPoints[i].Timestamp)
 		timeJ, _ := time.Parse("15:04", trendPoints[j].Timestamp)
 		return timeI.Before(timeJ)
 	})
-	
+
 	return trendPoints, nil
 }
 
@@ -111,14 +113,14 @@ func (s *earningsService) ProcessBlockVerificationEarnings(ctx context.Context, 
 	}
 
 	// 获取用户当前余额
-	currentBalance, err := s.userBalanceRepo.GetUserBalance(ctx, userID)
+	currentBalance, err := s.userBalanceRepo.GetUserBalanceByChain(ctx, userID, blockInfo.Chain)
 	if err != nil {
 		s.logger.Errorf("Failed to get user balance: %v", err)
 		return fmt.Errorf("failed to get user balance: %w", err)
 	}
 
 	// 增加用户余额
-	newBalance, err := s.userBalanceRepo.IncrementUserBalance(ctx, userID, earningsAmount, true)
+	newBalance, err := s.userBalanceRepo.IncrementUserBalanceByChain(ctx, userID, earningsAmount, true, blockInfo.Chain)
 	if err != nil {
 		s.logger.Errorf("Failed to increment user balance: %v", err)
 		return fmt.Errorf("failed to increment user balance: %w", err)
@@ -228,6 +230,26 @@ func (s *earningsService) GetUserBalance(ctx context.Context, userID uint64) (*d
 	}, nil
 }
 
+// GetUserBalanceByChain 获取指定链的用户余额
+func (s *earningsService) GetUserBalanceByChain(ctx context.Context, userID uint64, sourceChain string) (*dto.UserBalanceResponse, error) {
+	balance, err := s.userBalanceRepo.GetUserBalanceByChain(ctx, userID, sourceChain)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get user balance by chain: %w", err)
+	}
+
+	return &dto.UserBalanceResponse{
+		ID:              balance.ID,
+		UserID:          balance.UserID,
+		Balance:         balance.Balance,
+		TotalEarned:     balance.TotalEarned,
+		TotalSpent:      balance.TotalSpent,
+		LastEarningTime: balance.LastEarningTime,
+		LastSpendTime:   balance.LastSpendTime,
+		CreatedAt:       balance.CreatedAt,
+		UpdatedAt:       balance.UpdatedAt,
+	}, nil
+}
+
 // GetUserEarningsStats 获取用户收益统计
 func (s *earningsService) GetUserEarningsStats(ctx context.Context, userID uint64) (*dto.EarningsStatsResponse, error) {
 	stats, err := s.earningsRepo.GetEarningsStatsByUserID(ctx, userID)
@@ -246,7 +268,7 @@ func (s *earningsService) GetUserEarningsStats(ctx context.Context, userID uint6
 }
 
 // TransferTCoins 转账T币
-func (s *earningsService) TransferTCoins(ctx context.Context, fromUserID, toUserID uint64, amount int64, description string) (*dto.TransferResponse, error) {
+func (s *earningsService) TransferTCoins(ctx context.Context, fromUserID, toUserID uint64, amount int64, description string, sourceChain string) (*dto.TransferResponse, error) {
 	if amount <= 0 {
 		return nil, fmt.Errorf("invalid transfer amount: %d", amount)
 	}
@@ -256,7 +278,7 @@ func (s *earningsService) TransferTCoins(ctx context.Context, fromUserID, toUser
 	}
 
 	// 检查发送方余额是否足够
-	sufficient, err := s.userBalanceRepo.CheckSufficientBalance(ctx, fromUserID, amount)
+	sufficient, err := s.userBalanceRepo.CheckSufficientBalanceByChain(ctx, fromUserID, amount, sourceChain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check balance: %w", err)
 	}
@@ -265,25 +287,25 @@ func (s *earningsService) TransferTCoins(ctx context.Context, fromUserID, toUser
 	}
 
 	// 获取发送方和接收方的余额信息
-	fromBalance, err := s.userBalanceRepo.GetUserBalance(ctx, fromUserID)
+	fromBalance, err := s.userBalanceRepo.GetUserBalanceByChain(ctx, fromUserID, sourceChain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get sender balance: %w", err)
 	}
 
-	toBalance, err := s.userBalanceRepo.GetUserBalance(ctx, toUserID)
+	toBalance, err := s.userBalanceRepo.GetUserBalanceByChain(ctx, toUserID, sourceChain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get receiver balance: %w", err)
 	}
 
 	// 执行转账操作
 	// 扣除发送方余额
-	newFromBalance, err := s.userBalanceRepo.DecrementUserBalance(ctx, fromUserID, amount, false)
+	newFromBalance, err := s.userBalanceRepo.DecrementUserBalanceByChain(ctx, fromUserID, amount, false, sourceChain)
 	if err != nil {
 		return nil, fmt.Errorf("failed to deduct sender balance: %w", err)
 	}
 
 	// 增加接收方余额
-	newToBalance, err := s.userBalanceRepo.IncrementUserBalance(ctx, toUserID, amount, false)
+	newToBalance, err := s.userBalanceRepo.IncrementUserBalanceByChain(ctx, toUserID, amount, false, sourceChain)
 	if err != nil {
 		// 如果接收方操作失败，需要回滚发送方操作
 		// 这里简化处理，实际应该使用事务
@@ -342,7 +364,7 @@ func (s *earningsService) TransferTCoins(ctx context.Context, fromUserID, toUser
 }
 
 // ConsumeCoins 消耗T币（业务消耗）
-func (s *earningsService) ConsumeCoins(ctx context.Context, userID uint64, amount int64, source, description string) error {
+func (s *earningsService) ConsumeCoins(ctx context.Context, userID uint64, amount int64, source, description string, sourceChain string) error {
 	if amount <= 0 {
 		return fmt.Errorf("invalid consume amount: %d", amount)
 	}
@@ -357,7 +379,7 @@ func (s *earningsService) ConsumeCoins(ctx context.Context, userID uint64, amoun
 	}
 
 	// 获取当前余额
-	currentBalance, err := s.userBalanceRepo.GetUserBalance(ctx, userID)
+	currentBalance, err := s.userBalanceRepo.GetUserBalanceByChain(ctx, userID, sourceChain)
 	if err != nil {
 		return fmt.Errorf("failed to get user balance: %w", err)
 	}

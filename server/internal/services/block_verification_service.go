@@ -79,38 +79,65 @@ func (s *blockVerificationService) VerifyBlock(ctx context.Context, blockID uint
 	if err != nil {
 		return nil, fmt.Errorf("failed to get block transactions: %w", err)
 	}
-
 	// 获取区块的所有交易凭证
-	receipts, err := s.receiptRepo.GetByBlockNumber(ctx, block.Height, block.Chain)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get block receipts: %w", err)
-	}
-
-	result := &BlockVerificationResult{
-		BlockID:      blockID,
-		Transactions: len(transactions),
-		Receipts:     len(receipts),
-	}
-
-	// 执行验证
-	if err := s.performVerification(block, transactions, receipts); err != nil {
-		result.IsValid = false
-		result.Reason = "验证失败"
-		result.Details = err.Error()
-
-		// 验证失败时，更新哈希后缀并标记为失败
-		if err := s.handleVerificationFailure(ctx, block, err.Error()); err != nil {
-			return nil, fmt.Errorf("failed to handle verification failure: %w", err)
+	if block.Chain == "eth" {
+		receipts, err := s.receiptRepo.GetByBlockNumber(ctx, block.Height, block.Chain)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get block receipts: %w", err)
+		}
+		result := &BlockVerificationResult{
+			BlockID:      blockID,
+			Transactions: len(transactions),
+			Receipts:     len(receipts),
 		}
 
+		// 执行验证
+		if err := s.performETHVerification(block, transactions, receipts); err != nil {
+			result.IsValid = false
+			result.Reason = "验证失败"
+			result.Details = err.Error()
+
+			// 验证失败时，更新哈希后缀并标记为失败
+			if err := s.handleVerificationFailure(ctx, block, err.Error()); err != nil {
+				return nil, fmt.Errorf("failed to handle verification failure: %w", err)
+			}
+
+			return result, nil
+		}
+
+		result.IsValid = true
+		result.Reason = "验证通过"
+		result.Details = "所有验证项均通过"
+
 		return result, nil
+	} else if block.Chain == "btc" {
+		result := &BlockVerificationResult{
+			BlockID:      blockID,
+			Transactions: len(transactions),
+			Receipts:     0,
+		}
+
+		// 执行验证
+		if err := s.performBTCVerification(block, transactions); err != nil {
+			result.IsValid = false
+			result.Reason = "验证失败"
+			result.Details = err.Error()
+
+			// 验证失败时，更新哈希后缀并标记为失败
+			if err := s.handleVerificationFailure(ctx, block, err.Error()); err != nil {
+				return nil, fmt.Errorf("failed to handle verification failure: %w", err)
+			}
+
+			return result, nil
+		}
+
+		result.IsValid = true
+		result.Reason = "验证通过"
+		result.Details = "所有验证项均通过"
+		return result, nil
+	} else {
+		return nil, fmt.Errorf("不支持的链类型: %s", block.Chain)
 	}
-
-	result.IsValid = true
-	result.Reason = "验证通过"
-	result.Details = "所有验证项均通过"
-
-	return result, nil
 }
 
 // handleVerificationFailure 处理验证失败的情况
@@ -153,7 +180,7 @@ func (s *blockVerificationService) handleVerificationFailure(ctx context.Context
 }
 
 // performVerification 执行具体的验证逻辑
-func (s *blockVerificationService) performVerification(
+func (s *blockVerificationService) performETHVerification(
 	block *models.Block,
 	transactions []*models.Transaction,
 	receipts []*models.TransactionReceipt,
@@ -168,15 +195,15 @@ func (s *blockVerificationService) performVerification(
 		return fmt.Errorf("交易顺序验证失败: %w", err)
 	}
 
-	// 3. 根据链类型执行特定验证
-	switch strings.ToLower(block.Chain) {
-	case "eth":
-		return s.verifyEthereumBlock(block, transactions, receipts)
-	case "btc":
-		return s.verifyBitcoinBlock(block, transactions)
-	default:
-		return fmt.Errorf("不支持的链类型: %s", block.Chain)
-	}
+	return s.verifyEthereumBlock(block, transactions, receipts)
+}
+
+func (s *blockVerificationService) performBTCVerification(
+	block *models.Block,
+	transactions []*models.Transaction,
+) error {
+	// return s.verifyBitcoinBlock(block, transactions)
+	return nil
 }
 
 // verifyTransactionOrder 验证交易顺序

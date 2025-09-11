@@ -48,6 +48,7 @@ type TransferRequest struct {
 	ToUserID    uint64 `json:"to_user_id" binding:"required"`
 	Amount      int64  `json:"amount" binding:"required,gt=0"`
 	Description string `json:"description"`
+	SourceChain string `json:"source_chain" binding:"required"`
 }
 
 // TransferResponse 转账响应DTO
@@ -90,9 +91,9 @@ type EarningsTrendRequest struct {
 
 // EarningsTrendPoint 收益趋势数据点
 type EarningsTrendPoint struct {
-	Timestamp       string `json:"timestamp"`        // 时间戳 (HH:MM格式)
-	Amount          int64  `json:"amount"`           // 收益数量
-	BlockHeight     uint64 `json:"block_height"`     // 区块高度
-	TransactionCount int64 `json:"transaction_count"` // 交易数量
-	SourceChain     string `json:"source_chain"`     // 来源链
+	Timestamp        string `json:"timestamp"`         // 时间戳 (HH:MM格式)
+	Amount           int64  `json:"amount"`            // 收益数量
+	BlockHeight      uint64 `json:"block_height"`      // 区块高度
+	TransactionCount int64  `json:"transaction_count"` // 交易数量
+	SourceChain      string `json:"source_chain"`      // 来源链
 }

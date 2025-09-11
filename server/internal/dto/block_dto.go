@@ -7,9 +7,9 @@ import (
 
 // CreateBlockRequest 创建区块请求DTO
 type CreateBlockRequest struct {
-	Hash             string    `json:"hash" validate:"required,len=66"`
+	Hash             string    `json:"hash" validate:"required"`
 	Height           uint64    `json:"height" validate:"required,gt=0"`
-	PreviousHash     string    `json:"previous_hash" validate:"omitempty,len=66"`
+	PreviousHash     string    `json:"previous_hash" validate:"omitempty"`
 	Timestamp        time.Time `json:"timestamp" validate:"required"`
 	Size             uint64    `json:"size" validate:"gte=0"`
 	TransactionCount int       `json:"transaction_count" validate:"gte=0"`
@@ -21,7 +21,7 @@ type CreateBlockRequest struct {
 	ChainID          int       `json:"chain_id" validate:"required,gt=0"`
 
 	// BTC特有字段
-	MerkleRoot string `json:"merkle_root,omitempty" validate:"omitempty,len=66"`
+	MerkleRoot string `json:"merkle_root,omitempty" validate:"omitempty"`
 	Bits       string `json:"bits,omitempty" validate:"omitempty,max=20"`
 	Version    uint32 `json:"version,omitempty"`
 	Weight     uint64 `json:"weight,omitempty"`
@@ -30,7 +30,7 @@ type CreateBlockRequest struct {
 	GasLimit    uint64 `json:"gas_limit,omitempty"`
 	GasUsed     uint64 `json:"gas_used,omitempty"`
 	Miner       string `json:"miner,omitempty" validate:"omitempty,max=120"`
-	ParentHash  string `json:"parent_hash,omitempty" validate:"omitempty,len=66"`
+	ParentHash  string `json:"parent_hash,omitempty" validate:"omitempty"`
 	Nonce       string `json:"nonce,omitempty" validate:"omitempty,max=20"`
 	Difficulty  string `json:"difficulty,omitempty" validate:"omitempty,max=50"`
 	BaseFee     string `json:"base_fee,omitempty" validate:"omitempty,max=100"`
@@ -38,9 +38,9 @@ type CreateBlockRequest struct {
 	MinerTipEth string `json:"miner_tip_eth,omitempty" validate:"omitempty,max=100"`
 
 	// ETH状态根字段
-	StateRoot        string `json:"state_root,omitempty" validate:"omitempty,len=66"`
-	TransactionsRoot string `json:"transactions_root,omitempty" validate:"omitempty,len=66"`
-	ReceiptsRoot     string `json:"receipts_root,omitempty" validate:"omitempty,len=66"`
+	StateRoot        string `json:"state_root,omitempty" validate:"omitempty"`
+	TransactionsRoot string `json:"transactions_root,omitempty" validate:"omitempty"`
+	ReceiptsRoot     string `json:"receipts_root,omitempty" validate:"omitempty"`
 }
 
 // UpdateBlockRequest 更新区块请求DTO
@@ -53,7 +53,7 @@ type UpdateBlockRequest struct {
 	IsOrphan         *bool    `json:"is_orphan,omitempty"`
 
 	// BTC特有字段
-	MerkleRoot *string `json:"merkle_root,omitempty" validate:"omitempty,len=66"`
+	MerkleRoot *string `json:"merkle_root,omitempty" validate:"omitempty"`
 	Bits       *string `json:"bits,omitempty" validate:"omitempty,max=20"`
 	Version    *uint32 `json:"version,omitempty"`
 	Weight     *uint64 `json:"weight,omitempty"`
@@ -62,7 +62,7 @@ type UpdateBlockRequest struct {
 	GasLimit    *uint64 `json:"gas_limit,omitempty"`
 	GasUsed     *uint64 `json:"gas_used,omitempty"`
 	Miner       *string `json:"miner,omitempty" validate:"omitempty,max=120"`
-	ParentHash  *string `json:"parent_hash,omitempty" validate:"omitempty,len=66"`
+	ParentHash  *string `json:"parent_hash,omitempty" validate:"omitempty"`
 	Nonce       *string `json:"nonce,omitempty" validate:"omitempty,max=20"`
 	Difficulty  *string `json:"difficulty,omitempty" validate:"omitempty,max=50"`
 	BaseFee     *string `json:"base_fee,omitempty" validate:"omitempty,max=100"`
@@ -70,9 +70,9 @@ type UpdateBlockRequest struct {
 	MinerTipEth *string `json:"miner_tip_eth,omitempty" validate:"omitempty,max=100"`
 
 	// ETH状态根字段
-	StateRoot        *string `json:"state_root,omitempty" validate:"omitempty,len=66"`
-	TransactionsRoot *string `json:"transactions_root,omitempty" validate:"omitempty,len=66"`
-	ReceiptsRoot     *string `json:"receipts_root,omitempty" validate:"omitempty,len=66"`
+	StateRoot        *string `json:"state_root,omitempty" validate:"omitempty"`
+	TransactionsRoot *string `json:"transactions_root,omitempty" validate:"omitempty"`
+	ReceiptsRoot     *string `json:"receipts_root,omitempty" validate:"omitempty"`
 }
 
 // BlockResponse 区块响应DTO

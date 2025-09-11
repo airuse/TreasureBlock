@@ -176,7 +176,7 @@ const createEarningsChart = async () => {
     const trendResponse = await getEarningsTrend(1) // 改为1小时
     
     if (trendResponse.success) {
-      const trendData = trendResponse.data || []
+      const trendData = (trendResponse.data || []).filter((p: any) => p.source_chain === 'eth')
       
       // 数据累加处理：按时间戳分组并累加amount
       const aggregatedData = aggregateTrendData(trendData)
@@ -462,7 +462,8 @@ const loadEarnings = async () => {
     const recordsResponse = await getUserEarningsRecords({
       page: currentPage.value,
       page_size: pageSize.value,
-      period: selectedPeriod.value
+      period: selectedPeriod.value,
+      chain: 'eth'
     })
     
     if (recordsResponse.success) {
@@ -506,7 +507,7 @@ const loadUserData = async () => {
   try {
     // 并行加载用户余额和收益统计
     const [balanceResponse, statsResponse] = await Promise.all([
-      getUserBalance(),
+      getUserBalance({ chain: 'eth' }),
       getUserEarningsStats()
     ])
     

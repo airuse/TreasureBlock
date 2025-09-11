@@ -9,7 +9,7 @@ import (
 // Block 区块模型 - 支持BTC和ETH的通用模型
 type Block struct {
 	ID               uint      `json:"id" gorm:"primaryKey"`
-	Hash             string    `json:"hash" gorm:"type:varchar(255);uniqueIndex;not null"`
+	Hash             string    `json:"hash" gorm:"type:varchar(255);index;not null"`
 	Height           uint64    `json:"height" gorm:"index;not null"`
 	PreviousHash     string    `json:"previous_hash" gorm:"type:char(66);index"`
 	Timestamp        time.Time `json:"timestamp"`

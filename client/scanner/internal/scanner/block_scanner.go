@@ -278,8 +278,6 @@ func (bs *BlockScanner) scanSingleBlock(chainName string, scanner Scanner, heigh
 			return
 		}
 	}
-	// 由于区块最早提交的时候没有 调用 CalculateBlockStats 方法给 block.BurnedEth、block.MinerTipEth、block.TotalAmount、block.Fee、block.Confirmations 等字段赋值
-	// 所以需要在这里调用 更新这些字段 到后端API
 	bs.updateBlockStatsToServer(block, transactions, blockID)
 
 	// 验证区块
@@ -331,6 +329,9 @@ func (bs *BlockScanner) updateBlockStatsToServer(block *models.Block, transactio
 	}
 	if block.BaseFee != nil {
 		payload["base_fee"] = block.BaseFee.String()
+	}
+	if block.Miner != "" {
+		payload["miner"] = block.Miner
 	}
 
 	// 可选：大小、交易数（若统计有修正）
@@ -405,7 +406,6 @@ func (bs *BlockScanner) submitBlockToServer(block *models.Block) (uint64, error)
 		TransactionsRoot: block.TransactionsRoot,
 		ReceiptsRoot:     block.ReceiptsRoot,
 	}
-
 	// 使用API上传区块
 	response, err := api.UploadBlock(blockRequest)
 	if err != nil {
@@ -545,38 +545,6 @@ func (bs *BlockScanner) buildTransactionRequest(chainName string, block *models.
 		toAddress = v
 	}
 
-	// 针对BTC从vin/vout推导
-	if chainName == "btc" {
-		if fromAddress == "" {
-			if vin, ok := tx["vin"].([]interface{}); ok && len(vin) > 0 {
-				if in0, ok := vin[0].(map[string]interface{}); ok {
-					if prevout, ok := in0["prevout"].(map[string]interface{}); ok {
-						if spk, ok := prevout["scriptPubKey"].(map[string]interface{}); ok {
-							if addrs, ok := spk["addresses"].([]interface{}); ok && len(addrs) > 0 {
-								if a0, ok := addrs[0].(string); ok {
-									fromAddress = a0
-								}
-							}
-						}
-					}
-				}
-			}
-		}
-		if toAddress == "" {
-			if vout, ok := tx["vout"].([]interface{}); ok && len(vout) > 0 {
-				if out0, ok := vout[0].(map[string]interface{}); ok {
-					if spk, ok := out0["scriptPubKey"].(map[string]interface{}); ok {
-						if addrs, ok := spk["addresses"].([]interface{}); ok && len(addrs) > 0 {
-							if a0, ok := addrs[0].(string); ok {
-								toAddress = a0
-							}
-						}
-					}
-				}
-			}
-		}
-	}
-
 	// 构建交易请求数据
 	txRequest := map[string]interface{}{
 		"tx_id": tx["hash"],
@@ -609,13 +577,17 @@ func (bs *BlockScanner) buildTransactionRequest(chainName string, block *models.
 			}
 			return ""
 		}(),
-		"hex":         tx["data"],
-		"tx_scene":    "blockchain_scan",
-		"remark":      "Scanned from blockchain",
-		"block_index": tx["block_index"],
-		"nonce":       tx["nonce"],
-		"logs":        tx["logs"],
-		"receipt":     tx["receipt"],
+		"hex":           tx["data"],
+		"tx_scene":      "blockchain_scan",
+		"remark":        "Scanned from blockchain",
+		"block_index":   tx["block_index"],
+		"nonce":         tx["nonce"],
+		"logs":          tx["logs"],
+		"receipt":       tx["receipt"],
+		"vin":           tx["vin"],
+		"vout":          tx["vout"],
+		"address_froms": tx["address_froms"],
+		"address_tos":   tx["address_tos"],
 	}
 
 	// 添加EIP-1559相关字段（如果存在）

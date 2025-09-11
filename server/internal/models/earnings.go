@@ -33,13 +33,14 @@ func (EarningsRecord) TableName() string {
 // UserBalance 用户T币余额表
 type UserBalance struct {
 	ID              uint64         `gorm:"primaryKey;autoIncrement" json:"id"`
-	UserID          uint64         `gorm:"not null;uniqueIndex" json:"user_id"`    // 用户ID，唯一索引
-	Balance         int64          `gorm:"not null;default:0" json:"balance"`      // 当前余额（T币数量，单位：个）
-	TotalEarned     int64          `gorm:"not null;default:0" json:"total_earned"` // 累计获得的T币数量
-	TotalSpent      int64          `gorm:"not null;default:0" json:"total_spent"`  // 累计消耗的T币数量
-	LastEarningTime *time.Time     `json:"last_earning_time"`                      // 最后一次获得收益时间
-	LastSpendTime   *time.Time     `json:"last_spend_time"`                        // 最后一次消耗时间
-	Version         int64          `gorm:"not null;default:0" json:"version"`      // 版本号，用于乐观锁
+	UserID          uint64         `gorm:"not null;uniqueIndex:idx_user_chain" json:"user_id"`                          // 用户ID，唯一索引（与链组合）
+	SourceChain     string         `gorm:"size:50;not null;default:all;uniqueIndex:idx_user_chain" json:"source_chain"` // 余额归属链（如 btc/eth/all）
+	Balance         int64          `gorm:"not null;default:0" json:"balance"`                                           // 当前余额（T币数量，单位：个）
+	TotalEarned     int64          `gorm:"not null;default:0" json:"total_earned"`                                      // 累计获得的T币数量
+	TotalSpent      int64          `gorm:"not null;default:0" json:"total_spent"`                                       // 累计消耗的T币数量
+	LastEarningTime *time.Time     `json:"last_earning_time"`                                                           // 最后一次获得收益时间
+	LastSpendTime   *time.Time     `json:"last_spend_time"`                                                             // 最后一次消耗时间
+	Version         int64          `gorm:"not null;default:0" json:"version"`                                           // 版本号，用于乐观锁
 	CreatedAt       time.Time      `gorm:"autoCreateTime" json:"created_at"`
 	UpdatedAt       time.Time      `gorm:"autoUpdateTime" json:"updated_at"`
 	DeletedAt       gorm.DeletedAt `gorm:"index" json:"deleted_at"`

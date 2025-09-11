@@ -4,6 +4,19 @@
     <div class="flex justify-between items-center">
       <h1 class="text-2xl font-bold text-gray-900">区块列表</h1>
       <div class="flex items-center space-x-4">
+        <!-- WebSocket连接状态 -->
+        <div class="flex items-center space-x-2">
+          <div 
+            :class="[
+              'w-2 h-2 rounded-full',
+              isConnected ? 'bg-green-400' : 'bg-red-400'
+            ]"
+          ></div>
+          <span class="text-xs text-gray-500">
+            {{ isConnected ? '实时连接' : '连接断开' }}
+          </span>
+        </div>
+        
         <div class="text-sm text-gray-500">
           共 {{ totalBlocks.toLocaleString() }} 个区块
         </div>
@@ -57,8 +70,9 @@
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">时间戳</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">交易数</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">大小</th>
-              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">确认数</th>
               <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">难度</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">hash</th>
+              <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">fee</th>
             </tr>
           </thead>
           <transition-group tag="tbody" name="block-fade" class="bg-white divide-y divide-gray-200">
@@ -79,10 +93,13 @@
                   {{ formatBytes(block.size) }}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {{ totalBlocks - block.height + 1 }}
+                  {{ formatDifficulty(block.difficulty || 0) }}
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
-                  {{ formatDifficulty(block.difficulty || 0) }}
+                  {{ block.hash }}
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
+                  {{ block.fee }}
                 </td>
               </tr>
             </template>
@@ -182,6 +199,8 @@ interface BlockData {
   transactions: number
   size: number
   difficulty: number
+  hash: string
+  fee: number
 }
 
 const blocks = ref<BlockData[]>([])
@@ -266,7 +285,9 @@ const loadData = async () => {
           timestamp: typeof block.timestamp === 'string' ? new Date(block.timestamp).getTime() / 1000 : block.timestamp,
           transactions: block.transaction_count || block.transactions || 0,
           size: block.size,
-          difficulty: block.difficulty || 0
+          difficulty: block.difficulty || 0,
+          hash: block.hash || '',
+          fee: block.fee || 0
         }))
         
         totalBlocks.value = totalCount
@@ -280,9 +301,10 @@ const loadData = async () => {
     } else {
       // 未登录用户：调用 /no-auth/ 下的API（有限制）
       console.log('👤 未登录用户，调用 /no-auth/ API 获取区块列表（有限制）')
-      const response = await blocksApi.getBlocksPublic({ 
-        page: 1, 
-        page_size: 20, // 限制为20个区块
+      const { noAuth } = await import('@/api')
+      const response = await noAuth.getBlocks({ 
+        page: currentPage.value, 
+        page_size: Math.min(pageSize.value, 100), // 使用动态分页大小，但限制最大100个
         chain: 'btc' 
       })
       
@@ -319,7 +341,9 @@ const loadData = async () => {
           timestamp: typeof block.timestamp === 'string' ? new Date(block.timestamp).getTime() / 1000 : block.timestamp,
           transactions: block.transaction_count || block.transactions || 0,
           size: block.size,
-          difficulty: block.difficulty || 0
+          difficulty: block.difficulty || 0,
+          hash: block.hash || '',
+          fee: block.fee || 0
         }))
         
         totalBlocks.value = totalCount
@@ -366,50 +390,255 @@ const goToPage = (page: number) => {
 }
 
 // WebSocket集成
-const { subscribeChainEvent } = useChainWebSocket('btc')
+const { subscribeChainEvent, unsubscribeChainEvent, isConnected } = useChainWebSocket('btc')
+
+// 存储取消订阅函数
+let unsubscribeBlocks: (() => void) | null = null
+let unsubscribeStats: (() => void) | null = null
 
 function handleBlockCountUpdate(message: any) {
-  if (message.data && typeof message.data.totalBlocks === 'number') {
+  // 游客模式下不更新总区块数，保持限制在100个
+  if (authStore.isAuthenticated && message.data && typeof message.data.totalBlocks === 'number') {
     totalBlocks.value = message.data.totalBlocks
   }
 }
 
 function handleNewBlock(message: any) {
-  // 只在第一页才动画插入
+  // 游客模式下不接收新区块推送
+  if (!authStore.isAuthenticated) {
+    return
+  }
+  
+  // 搜索状态下不接收新区块推送
+  if (searchQuery.value.trim()) {
+    return
+  }
+  
+  // 只在第一页才处理新区块
   if (currentPage.value === 1 && message.data) {
-    const newBlock: BlockData = {
-      height: message.data.height,
-      timestamp: message.data.timestamp,
-      transactions: message.data.transactions,
-      size: message.data.size,
-      difficulty: message.data.difficulty
+    const newBlockHeight = message.data.height || message.data.number
+    
+    // 判断区块高度是否已存在
+    const existingBlockIndex = blocks.value.findIndex(block => block.height === newBlockHeight)
+    
+    if (existingBlockIndex !== -1) {
+      return
     }
     
-    blocks.value.unshift(newBlock)
-    if (blocks.value.length > pageSize.value) {
-      blocks.value.pop()
+    const newBlock: BlockData = {
+      height: newBlockHeight,
+      timestamp: typeof message.data.timestamp === 'string' 
+        ? new Date(message.data.timestamp).getTime() / 1000 
+        : message.data.timestamp,
+      transactions: message.data.transaction_count || message.data.transactions || 0,
+      size: message.data.size,
+      difficulty: message.data.difficulty || 0,
+      hash: message.data.hash || '',
+      fee: message.data.fee || 0
     }
+    
+    // 实现最新区块插入到列表头部的逻辑
+    // 1. 先删除列表中最晚的一条（如果列表已满）
+    if (blocks.value.length >= pageSize.value) {
+      blocks.value.pop() // 删除最后一条
+    }
+    
+    // 2. 在列表头部插入最新区块
+    blocks.value.unshift(newBlock)
+    
+    // 3. 更新总数（如果后端没有实时更新）- 仅限已登录用户
+    if (authStore.isAuthenticated && totalBlocks.value > 0) {
+      totalBlocks.value++
+    }
+  }
+}
+
+function handleBlockUpdate(message: any) {
+  if (message.data && message.action === 'update') {
+    const updatedBlock = message.data
+    const blockHeight = updatedBlock.height || updatedBlock.number
+    
+    if (blockHeight) {
+      // 在列表中查找并更新对应区块
+      const blockIndex = blocks.value.findIndex(block => block.height === blockHeight)
+      
+      if (blockIndex !== -1) {
+        // 更新现有区块信息
+        const existingBlock = blocks.value[blockIndex]
+        
+        // 只更新可能变化的字段
+        if (updatedBlock.transaction_count !== undefined) {
+          existingBlock.transactions = updatedBlock.transaction_count
+        }
+        if (updatedBlock.size !== undefined) {
+          existingBlock.size = updatedBlock.size
+        }
+        if (updatedBlock.difficulty !== undefined) {
+          existingBlock.difficulty = updatedBlock.difficulty
+        }
+        if (updatedBlock.fee !== undefined) {
+          existingBlock.fee = updatedBlock.fee
+        }
+        if (updatedBlock.hash !== undefined) {
+          existingBlock.hash = updatedBlock.hash
+        }
+      } else {
+        console.log('⚠️ 区块不在当前列表中，无法更新:', blockHeight)
+        console.log('当前列表中的区块高度:', blocks.value.map(b => b.height))
+      }
+    } else {
+      console.warn('⚠️ 更新消息中缺少区块高度:', updatedBlock)
+    }
+  } else {
+    console.warn('⚠️ 无效的更新消息格式:', message)
+  }
+}
+
+function handleStatsUpdate(message: any) {
+  // 游客模式下不更新总区块数，保持限制在100个
+  if (authStore.isAuthenticated && message.data && typeof message.data.totalBlocks === 'number') {
+    totalBlocks.value = message.data.totalBlocks
   }
 }
 
 onMounted(() => {
   loadData()
-  const unsubscribeStats = subscribeChainEvent('stats', handleBlockCountUpdate)
-  const unsubscribeBlocks = subscribeChainEvent('block', handleNewBlock)
   
-  onUnmounted(() => {
-    unsubscribeStats()
-    unsubscribeBlocks()
+  // 订阅WebSocket事件
+  console.log('🔌 开始订阅WebSocket事件...')
+  
+  // 订阅区块事件
+  unsubscribeBlocks = subscribeChainEvent('block', (message) => {
+    // 根据action区分创建和更新事件
+    if (message.action === 'update') {
+      handleBlockUpdate(message)
+    } else {
+      handleNewBlock(message)
+    }
   })
+  
+  // 订阅统计事件
+  unsubscribeStats = subscribeChainEvent('stats', handleStatsUpdate)
+  
+  console.log('✅ WebSocket事件订阅完成')
+})
+
+onUnmounted(() => {
+  // 取消WebSocket订阅
+  console.log('🔌 取消WebSocket订阅...')
+  
+  if (unsubscribeBlocks) {
+    unsubscribeBlocks()
+    unsubscribeBlocks = null
+  }
+  
+  if (unsubscribeStats) {
+    unsubscribeStats()
+    unsubscribeStats = null
+  }
+  
+  console.log('✅ WebSocket订阅已取消')
 })
 
 // 监听搜索查询
 watch(searchQuery, (newQuery) => {
   if (newQuery) {
-    // 这里应该实现搜索逻辑
-    console.log('搜索:', newQuery)
+    // 实现搜索逻辑
+    performSearch(newQuery)
+  } else {
+    // 清空搜索，重新加载默认数据
+    currentPage.value = 1
+    loadData()
   }
 })
+
+// 执行搜索
+const performSearch = async (query: string) => {
+  try {
+    isLoading.value = true
+    // 根据登录状态调用不同的搜索API
+    if (authStore.isAuthenticated) {
+      // 已登录用户：调用 /v1/ 下的搜索API
+      const { blocks: blocksApi } = await import('@/api')
+      const response = await blocksApi.searchBlocks({ 
+        query: query,
+        page: 1, 
+        page_size: pageSize.value
+      })
+      
+      if (response && response.success === true) {
+        handleSearchResults(response.data, query)
+      } else {
+        // 搜索失败时显示空结果
+        blocks.value = []
+        totalBlocks.value = 0
+      }
+    } else {
+      // 未登录用户：调用 /no-auth/ 下的搜索API
+      console.log('👤 未登录用户，调用 /no-auth/ API 搜索区块')
+      const { noAuth } = await import('@/api')
+      const response = await noAuth.searchBlocks({ 
+        query: query,
+        page: 1, 
+        page_size: Math.min(pageSize.value, 20) // 限制为20个
+      })
+      
+      if (response && response.success === true) {
+        handleSearchResults(response.data, query)
+      } else {
+        console.error('搜索失败:', response?.message)
+        // 搜索失败时显示空结果
+        blocks.value = []
+        totalBlocks.value = 0
+      }
+    }
+  } catch (error) {
+    console.error('搜索出错:', error)
+    // 搜索出错时显示空结果
+    blocks.value = []
+    totalBlocks.value = 0
+  } finally {
+    isLoading.value = false
+  }
+}
+
+// 处理搜索结果
+const handleSearchResults = (responseData: any, query: string) => {
+  let blocksData: any[] = []
+  let totalCount = 0
+  
+  // 检查不同的数据结构
+  if (Array.isArray(responseData)) {
+    blocksData = responseData
+    totalCount = responseData.length
+  } else if (responseData?.blocks && Array.isArray(responseData.blocks)) {
+    blocksData = responseData.blocks
+    totalCount = responseData.total || responseData.blocks.length
+  } else if (responseData?.data && Array.isArray(responseData.data)) {
+    blocksData = responseData.data
+    totalCount = responseData.pagination?.total || responseData.data.length
+  } else {
+    console.warn('未知的搜索响应数据结构:', responseData)
+    blocksData = []
+    totalCount = 0
+  }
+  
+  // 转换搜索结果
+  blocks.value = blocksData.map((block: any) => ({
+    height: block.height || block.number,
+    timestamp: typeof block.timestamp === 'string' ? new Date(block.timestamp).getTime() / 1000 : block.timestamp,
+    transactions: block.transaction_count || block.transactions || 0,
+    size: block.size,
+    difficulty: block.difficulty || 0,
+    hash: block.hash || '',
+    fee: block.fee || 0
+  }))
+  
+  totalBlocks.value = totalCount
+  currentPage.value = 1 // 搜索后重置到第一页
+  
+  console.log('✅ 搜索完成:', query, '找到', totalCount, '个结果')
+}
 
 // 监听页面大小变化
 watch(pageSize, () => {

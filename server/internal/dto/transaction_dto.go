@@ -28,6 +28,23 @@ type TransactionReceiptData struct {
 	TransactionIndex  interface{}              `json:"transactionIndex,omitempty"`
 }
 
+// BTCTransactionTurnsData BTC原生交易冗余数据（存入btc_transaction表）
+type BTCTransactionTurnsData struct {
+	TxID        string                   `json:"tx_id"`
+	BlockHash   string                   `json:"block_hash"`
+	BlockHeight uint64                   `json:"block_height"`
+	From        string                   `json:"from"`
+	To          string                   `json:"to"`
+	Amount      string                   `json:"amount"`
+	Fee         string                   `json:"fee"`
+	Size        uint                     `json:"size"`
+	Weight      uint                     `json:"weight"`
+	LockTime    uint32                   `json:"locktime"`
+	Hex         string                   `json:"hex"`
+	Vin         []map[string]interface{} `json:"vin"`
+	Vout        []map[string]interface{} `json:"vout"`
+}
+
 // CreateTransactionRequest 创建交易请求DTO - 匹配现有Transaction表结构
 type CreateTransactionRequest struct {
 	TxID         string  `json:"tx_id" validate:"required,len=66"`
@@ -49,8 +66,10 @@ type CreateTransactionRequest struct {
 	Symbol string `json:"symbol" validate:"required,oneof=eth btc"`
 
 	// 地址字段
-	AddressFrom string `json:"address_from" validate:"required"`
-	AddressTo   string `json:"address_to" validate:"required"`
+	AddressFrom  string  `json:"address_from" validate:"required"`
+	AddressTo    string  `json:"address_to" validate:"required"`
+	AddressFroms *string `json:"address_froms,omitempty"`
+	AddressTos   *string `json:"address_tos,omitempty"`
 
 	// Gas相关字段（ETH特有，BTC可为空）
 	GasLimit uint   `json:"gas_limit" validate:"required"`
@@ -69,9 +88,14 @@ type CreateTransactionRequest struct {
 	Nonce      uint64  `json:"nonce" validate:"required"`
 
 	// 新增字段
-	Logs    []map[string]interface{} `json:"logs,omitempty"`     // 日志数据（存储在交易表）
-	Receipt *TransactionReceiptData  `json:"receipt,omitempty"`  // 凭证数据（存储在凭证表）
-	BlockID *uint64                  `json:"block_id,omitempty"` // 关联的区块ID
+	Logs     []map[string]interface{} `json:"logs,omitempty"`      // 日志数据（存储在交易表）
+	Receipt  *TransactionReceiptData  `json:"receipt,omitempty"`   // 凭证数据（存储在凭证表）
+	BlockID  *uint64                  `json:"block_id,omitempty"`  // 关联的区块ID
+	TurnsOut *BTCTransactionTurnsData `json:"turns_out,omitempty"` // BTC原生冗余
+
+	// BTC 原始交易数据字段
+	Vin  *string `json:"vin,omitempty"`  // BTC输入数据(JSON格式)
+	Vout *string `json:"vout,omitempty"` // BTC输出数据(JSON格式)
 }
 
 // UpdateTransactionRequest 更新交易请求DTO
@@ -124,6 +148,8 @@ type TransactionResponse struct {
 	TokenIsStablecoin    bool      `json:"token_is_stablecoin,omitempty"`   // 是否为稳定币
 	TokenIsVerified      bool      `json:"token_is_verified,omitempty"`     // 是否已验证
 	Nonce                uint64    `json:"nonce"`                           // 添加Nonce字段
+	Vin                  *string   `json:"vin,omitempty"`                   // BTC输入数据(JSON格式)
+	Vout                 *string   `json:"vout,omitempty"`                  // BTC输出数据(JSON格式)
 	Ctime                time.Time `json:"ctime"`
 	Mtime                time.Time `json:"mtime"`
 }
@@ -159,23 +185,35 @@ func (req *CreateTransactionRequest) ToModel() *models.Transaction {
 	}
 
 	return &models.Transaction{
-		TxID:                 req.TxID,
-		TxType:               req.TxType,
-		Confirm:              req.Confirm,
-		Status:               req.Status,
-		SendStatus:           req.SendStatus,
-		Balance:              req.Balance,
-		Amount:               req.Amount,
-		TransID:              req.TransID,
-		Height:               req.Height,
-		ContractAddr:         req.ContractAddr,
-		Hex:                  req.Hex,
-		TxScene:              req.TxScene,
-		Remark:               req.Remark,
-		Chain:                req.Chain,
-		Symbol:               req.Symbol,
-		AddressFrom:          req.AddressFrom,
-		AddressTo:            req.AddressTo,
+		TxID:         req.TxID,
+		TxType:       req.TxType,
+		Confirm:      req.Confirm,
+		Status:       req.Status,
+		SendStatus:   req.SendStatus,
+		Balance:      req.Balance,
+		Amount:       req.Amount,
+		TransID:      req.TransID,
+		Height:       req.Height,
+		ContractAddr: req.ContractAddr,
+		Hex:          req.Hex,
+		TxScene:      req.TxScene,
+		Remark:       req.Remark,
+		Chain:        req.Chain,
+		Symbol:       req.Symbol,
+		AddressFrom:  req.AddressFrom,
+		AddressTo:    req.AddressTo,
+		AddressFroms: func() string {
+			if req.AddressFroms != nil {
+				return *req.AddressFroms
+			}
+			return ""
+		}(),
+		AddressTos: func() string {
+			if req.AddressTos != nil {
+				return *req.AddressTos
+			}
+			return ""
+		}(),
 		GasLimit:             req.GasLimit,
 		GasPrice:             req.GasPrice,
 		GasUsed:              req.GasUsed,
@@ -188,8 +226,20 @@ func (req *CreateTransactionRequest) ToModel() *models.Transaction {
 		BlockID:              req.BlockID,
 		Nonce:                req.Nonce,
 		Logs:                 logsJSON,
-		Ctime:                time.Now(),
-		Mtime:                time.Now(),
+		Vin: func() string {
+			if req.Vin != nil {
+				return *req.Vin
+			}
+			return ""
+		}(),
+		Vout: func() string {
+			if req.Vout != nil {
+				return *req.Vout
+			}
+			return ""
+		}(),
+		Ctime: time.Now(),
+		Mtime: time.Now(),
 	}
 }
 
@@ -258,6 +308,18 @@ func (resp *TransactionResponse) FromModel(tx *models.Transaction) {
 	resp.TokenIsStablecoin = tx.TokenIsStablecoin   // 添加是否为稳定币
 	resp.TokenIsVerified = tx.TokenIsVerified       // 添加是否已验证
 	resp.Nonce = tx.Nonce
+	resp.Vin = func() *string {
+		if tx.Vin != "" {
+			return &tx.Vin
+		}
+		return nil
+	}()
+	resp.Vout = func() *string {
+		if tx.Vout != "" {
+			return &tx.Vout
+		}
+		return nil
+	}()
 	resp.Ctime = tx.Ctime
 	resp.Mtime = tx.Mtime
 }
@@ -302,8 +364,20 @@ func NewTransactionResponse(tx *models.Transaction) *TransactionResponse {
 		TokenIsStablecoin:    tx.TokenIsStablecoin,  // 添加是否为稳定币
 		TokenIsVerified:      tx.TokenIsVerified,    // 添加是否已验证
 		Nonce:                tx.Nonce,
-		Ctime:                tx.Ctime,
-		Mtime:                tx.Mtime,
+		Vin: func() *string {
+			if tx.Vin != "" {
+				return &tx.Vin
+			}
+			return nil
+		}(),
+		Vout: func() *string {
+			if tx.Vout != "" {
+				return &tx.Vout
+			}
+			return nil
+		}(),
+		Ctime: tx.Ctime,
+		Mtime: tx.Mtime,
 	}
 }
 

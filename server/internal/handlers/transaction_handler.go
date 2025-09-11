@@ -344,6 +344,37 @@ func (h *TransactionHandler) CreateTransaction(c *gin.Context) {
 
 	}
 
+	// 如果是BTC且带有TurnsOut，保存到btc_transaction表
+	if req.Chain == "btc" && req.TurnsOut != nil {
+		btc := &models.BTCTransaction{
+			TxID:        req.TurnsOut.TxID,
+			BlockHash:   req.TurnsOut.BlockHash,
+			BlockHeight: req.TurnsOut.BlockHeight,
+			From:        req.TurnsOut.From,
+			To:          req.TurnsOut.To,
+			Amount:      req.TurnsOut.Amount,
+			Fee:         req.TurnsOut.Fee,
+			Size:        req.TurnsOut.Size,
+			Weight:      req.TurnsOut.Weight,
+			LockTime:    req.TurnsOut.LockTime,
+			Hex:         req.TurnsOut.Hex,
+		}
+		if req.TurnsOut.Vin != nil {
+			if b, err := json.Marshal(req.TurnsOut.Vin); err == nil {
+				btc.VinJSON = string(b)
+			}
+		}
+		if req.TurnsOut.Vout != nil {
+			if b, err := json.Marshal(req.TurnsOut.Vout); err == nil {
+				btc.VoutJSON = string(b)
+			}
+		}
+		if err := repository.NewBTCTransactionRepository().Create(btc); err != nil {
+			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "创建BTC原生交易失败", "details": err.Error()})
+			return
+		}
+	}
+
 	tx := req.ToModel()
 	if err := h.txService.CreateTransaction(c.Request.Context(), tx); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "创建交易失败", "details": err.Error()})
@@ -524,7 +555,7 @@ func (h *TransactionHandler) CreateTransactionsBatch(c *gin.Context) {
 			failedCount++
 			continue
 		}
-		if coinConfigMap[tx.AddressTo] != nil {
+		if _, ok := coinConfigMap[tx.AddressTo]; ok && req.Receipt != nil && req.Receipt.TransactionHash != nil {
 			txs = append(txs, []string{tx.TxID, *req.Receipt.TransactionHash})
 		}
 		successCount++

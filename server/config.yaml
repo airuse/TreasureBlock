@@ -13,10 +13,10 @@ server:
 
 database:
   driver: "mysql"
-  host: "39.106.34.163"
+  host: "127.0.0.1"
   port: 3306
-  username: "blockchain"
-  password: "Viruse123!QAZ.."
+  username: "root"
+  password: "123"
   dbname: "blockchain_browser"
   max_open_conns: 100
   max_idle_conns: 10
@@ -80,7 +80,7 @@ blockchain:
   max_verification_time: 20s       # 最大验证时间
   chains:
     btc:
-      chain_id: 0
+      chain_id: 1
       name: "Bitcoin"
       symbol: "BTC"
       decimals: 8

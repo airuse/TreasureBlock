@@ -26,6 +26,7 @@ interface GetEarningsRecordsRequest extends PaginationRequest, SortRequest {
   status?: 'pending' | 'confirmed' | 'failed'
   start_date?: string
   end_date?: string
+  chain?: string
 }
 
 // 转账T币请求参数
@@ -38,17 +39,17 @@ interface TransferTCoinsRequest {
 // ==================== API函数实现 ====================
 
 /**
- * 获取用户余额
+ * 获取用户余额（可选按链）
  */
-export function getUserBalance(): Promise<ApiResponse<UserBalance>> {
+export function getUserBalance(params?: { chain?: string }): Promise<ApiResponse<UserBalance>> {
   if (__USE_MOCK__) {
     console.log('🔧 使用Mock数据 - getUserBalance')
     return handleMockGetUserBalance()
   }
-  
   return request({
     url: '/api/v1/earnings/balance',
-    method: 'GET'
+    method: 'GET',
+    params
   })
 }
 

@@ -28,8 +28,10 @@ type Transaction struct {
 	Symbol string `json:"symbol" gorm:"type:varchar(20);not null;column:symbol;comment:币种"`
 
 	// 地址字段
-	AddressFrom string `json:"address_from" gorm:"type:varchar(120);not null;index;column:address_from;comment:发货人地址"`
-	AddressTo   string `json:"address_to" gorm:"type:varchar(120);not null;index;column:address_to;comment:收货人地址"`
+	AddressFrom  string `json:"address_from" gorm:"type:varchar(120);not null;index;column:address_from;comment:发货人地址"`
+	AddressTo    string `json:"address_to" gorm:"type:varchar(120);not null;index;column:address_to;comment:收货人地址"`
+	AddressFroms string `json:"address_froms" gorm:"type:longtext;column:address_froms;comment:BTC输入地址列表(JSON)"`
+	AddressTos   string `json:"address_tos" gorm:"type:longtext;column:address_tos;comment:BTC输出地址列表(JSON)"`
 
 	// Gas相关字段（ETH特有，BTC可为空）
 	GasLimit uint   `json:"gas_limit" gorm:"type:int(11) unsigned;not null;column:gas_limit;comment:燃油限制"`
@@ -52,6 +54,10 @@ type Transaction struct {
 
 	// 日志数据字段
 	Logs string `json:"logs" gorm:"type:longtext;column:logs;comment:交易日志数据(JSON格式)"`
+
+	// BTC 原始交易数据字段
+	Vin  string `json:"vin,omitempty" gorm:"type:longtext;column:vin;comment:BTC输入数据(JSON格式)"`
+	Vout string `json:"vout,omitempty" gorm:"type:longtext;column:vout;comment:BTC输出数据(JSON格式)"`
 
 	// 代币标识字段（非数据库字段，仅用于API响应）
 	IsToken            bool   `json:"is_token" gorm:"-"`
