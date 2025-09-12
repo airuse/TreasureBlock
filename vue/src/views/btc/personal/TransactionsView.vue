@@ -16,6 +16,80 @@
       </div>
     </div>
 
+    <!-- 实时费率信息 -->
+    <div v-if="feeLevels" class="bg-white shadow rounded-lg">
+      <div class="px-4 py-3">
+        <div class="flex items-center justify-between mb-3">
+          <h3 class="text-lg leading-6 font-medium text-gray-900">实时费率信息</h3>
+          <div class="text-sm text-gray-500">
+            最后更新: {{ formatTime(new Date(feeLevels.normal.last_updated * 1000)) }}
+          </div>
+        </div>
+        <div class="flex flex-col lg:flex-row gap-3">
+          <!-- 左侧：费率信息 -->
+          <div class="lg:w-80 flex-shrink-0">
+            <div class="space-y-1.5">
+              <!-- 慢速费率 -->
+              <div class="border border-gray-200 rounded-lg p-2.5">
+                <div class="flex items-center justify-between mb-1">
+                  <h4 class="text-sm font-medium text-gray-900">慢速</h4>
+                  <span class="text-xs text-gray-500">0.5x 倍率</span>
+                </div>
+                <div class="text-sm text-gray-600">
+                  <span class="font-mono">{{ feeLevels.slow.max_priority_fee }} sat/vB</span>
+                </div>
+              </div>
+              
+              <!-- 普通费率 -->
+              <div class="border border-orange-200 bg-orange-50 rounded-lg p-2.5">
+                <div class="flex items-center justify-between mb-1">
+                  <h4 class="text-sm font-medium text-orange-900">普通</h4>
+                  <span class="text-xs text-orange-600">1.0x 倍率</span>
+                </div>
+                <div class="text-sm text-orange-800">
+                  <span class="font-mono">{{ feeLevels.normal.max_priority_fee }} sat/vB</span>
+                </div>
+              </div>
+              
+              <!-- 快速费率 -->
+              <div class="border border-gray-200 rounded-lg p-2.5">
+                <div class="flex items-center justify-between mb-1">
+                  <h4 class="text-sm font-medium text-gray-900">快速</h4>
+                  <span class="text-xs text-gray-500">2.0x 倍率</span>
+                </div>
+                <div class="text-sm text-gray-600">
+                  <span class="font-mono">{{ feeLevels.fast.max_priority_fee }} sat/vB</span>
+                </div>
+              </div>
+            </div>
+          </div>
+          
+          <!-- 右侧：趋势图 -->
+          <div class="flex-1 min-w-0">
+            <!-- 费率趋势图 -->
+            <div class="space-y-4">
+              <!-- 费率图表 -->
+              <div class="relative">
+                <div class="text-sm font-medium text-gray-700 mb-2">费率趋势</div>
+                <div class="h-32">
+                  <canvas ref="feeChartCanvas" class="w-full h-full cursor-crosshair"></canvas>
+                </div>
+                <!-- 费率工具提示 -->
+                <div 
+                  ref="feeTooltip" 
+                  class="absolute bg-gray-800 text-white text-xs px-2 py-1 rounded shadow-lg pointer-events-none opacity-0 transition-opacity duration-200 z-10"
+                  style="transform: translate(-50%, -100%); margin-top: -8px;"
+                >
+                  <div class="font-medium">费率</div>
+                  <div class="text-gray-300">Value: <span class="text-white font-mono" id="tooltip-fee-value">0</span> sat/vB</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
     <!-- 交易概览 -->
     <div class="bg-white shadow rounded-lg">
       <div class="px-4 py-5 sm:p-6">
@@ -222,8 +296,10 @@
 </template>
 
 <script setup lang="ts">
-import { ref, computed, onMounted, watch } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import type { PersonalTransaction } from '@/types'
+import { useChainWebSocket } from '@/composables/useWebSocket'
+import type { FeeLevels } from '@/types'
 
 // 响应式数据
 const showImportModal = ref(false)
@@ -233,6 +309,25 @@ const pageSize = ref(10)
 const totalItems = ref(0)
 const totalPages = ref(0)
 const importSignature = ref('')
+
+// WebSocket相关
+const { subscribeChainEvent } = useChainWebSocket('btc')
+// 收集本组件的取消订阅函数，避免重复回调
+const wsUnsubscribes: Array<() => void> = []
+
+// 费率数据
+const feeLevels = ref<FeeLevels | null>(null)
+const networkCongestion = ref<string>('normal')
+
+// 费率历史数据存储（用于折线图）
+const feeHistory = ref<Array<{
+  timestamp: number
+  fee: number
+}>>([])
+
+// 图表相关
+const feeChartCanvas = ref<HTMLCanvasElement | null>(null)
+const feeTooltip = ref<HTMLDivElement | null>(null)
 
 // 交易统计
 const totalTransactions = ref(18)
@@ -405,7 +500,219 @@ watch(selectedStatus, () => {
   loadTransactions()
 })
 
+// 添加费率历史数据
+const addFeeHistory = (feeData: FeeLevels) => {
+  const now = Date.now()
+  const historyItem = {
+    timestamp: now,
+    fee: parseFloat(feeData.normal.max_priority_fee || '0')
+  }
+  
+  // 添加到历史数据
+  feeHistory.value.push(historyItem)
+  
+  // 只保留最近20条记录
+  if (feeHistory.value.length > 20) {
+    feeHistory.value = feeHistory.value.slice(-20)
+  }
+  
+  // 更新图表
+  updateChart()
+}
+
+// 费率鼠标移动事件处理
+const handleFeeMouseMove = (event: MouseEvent) => {
+  if (!feeChartCanvas.value || !feeTooltip.value || feeHistory.value.length === 0) return
+  
+  const canvas = feeChartCanvas.value
+  const rect = canvas.getBoundingClientRect()
+  const x = event.clientX - rect.left
+  const y = event.clientY - rect.top
+  
+  // 计算数据点索引
+  const padding = { top: 10, right: 10, bottom: 20, left: 40 }
+  const chartWidth = rect.width - padding.left - padding.right
+  const dataIndex = Math.round(((x - padding.left) / chartWidth) * (feeHistory.value.length - 1))
+  
+  // 确保索引在有效范围内
+  if (dataIndex >= 0 && dataIndex < feeHistory.value.length) {
+    const data = feeHistory.value[dataIndex]
+    
+    // 更新工具提示内容
+    const feeElement = document.getElementById('tooltip-fee-value')
+    if (feeElement) feeElement.textContent = data.fee.toFixed(1)
+    
+    // 计算相对于父容器的位置
+    const parentRect = feeTooltip.value.parentElement?.getBoundingClientRect()
+    
+    if (parentRect) {
+      const relativeX = event.clientX - parentRect.left
+      const relativeY = event.clientY - parentRect.top
+      
+      feeTooltip.value.style.left = relativeX + 'px'
+      feeTooltip.value.style.top = (relativeY - 10) + 'px'
+      feeTooltip.value.style.opacity = '1'
+    }
+  }
+}
+
+// 费率鼠标离开事件处理
+const handleFeeMouseLeave = () => {
+  if (feeTooltip.value) {
+    feeTooltip.value.style.opacity = '0'
+  }
+}
+
+// 绘制费率图表
+const drawFeeChart = (canvas: HTMLCanvasElement, data: number[], color: string, title: string) => {
+  const ctx = canvas.getContext('2d')
+  if (!ctx) return
+  
+  // 设置canvas尺寸
+  const rect = canvas.getBoundingClientRect()
+  canvas.width = rect.width * window.devicePixelRatio
+  canvas.height = rect.height * window.devicePixelRatio
+  ctx.scale(window.devicePixelRatio, window.devicePixelRatio)
+  
+  // 清空画布
+  ctx.clearRect(0, 0, rect.width, rect.height)
+  
+  if (data.length === 0) return
+  
+  // 移除之前的鼠标事件监听器
+  canvas.removeEventListener('mousemove', handleFeeMouseMove)
+  canvas.removeEventListener('mouseleave', handleFeeMouseLeave)
+  
+  // 添加新的鼠标事件监听器
+  canvas.addEventListener('mousemove', handleFeeMouseMove)
+  canvas.addEventListener('mouseleave', handleFeeMouseLeave)
+  
+  // 计算数据范围（增加自适应 padding，使小幅波动也能看见）
+  const rawMin = Math.min(...data)
+  const rawMax = Math.max(...data)
+  let range = rawMax - rawMin
+  if (range < 0.5) range = 0.5 // 最小范围，避免看起来成一条直线
+  const pad = range * 0.1
+  const minValue = rawMin - pad
+  const maxValue = rawMax + pad
+  
+  // 设置边距
+  const padding = { top: 10, right: 10, bottom: 20, left: 50 }
+  const chartWidth = rect.width - padding.left - padding.right
+  const chartHeight = rect.height - padding.top - padding.bottom
+  
+  // 绘制背景网格
+  ctx.strokeStyle = '#f3f4f6'
+  ctx.lineWidth = 1
+  for (let i = 0; i <= 4; i++) {
+    const y = padding.top + (chartHeight / 4) * i
+    ctx.beginPath()
+    ctx.moveTo(padding.left, y)
+    ctx.lineTo(padding.left + chartWidth, y)
+    ctx.stroke()
+  }
+  
+  // 绘制折线
+  ctx.strokeStyle = color
+  ctx.lineWidth = 2
+  ctx.beginPath()
+  
+  data.forEach((value, index) => {
+    const x = data.length === 1 
+      ? padding.left + chartWidth / 2
+      : padding.left + (chartWidth / (data.length - 1)) * index
+    const y = padding.top + chartHeight - ((value - minValue) / (maxValue - minValue)) * chartHeight
+    
+    if (index === 0) {
+      ctx.moveTo(x, y)
+    } else {
+      ctx.lineTo(x, y)
+    }
+  })
+  
+  ctx.stroke()
+  
+  // 绘制数据点
+  ctx.fillStyle = color
+  data.forEach((value, index) => {
+    const x = data.length === 1 
+      ? padding.left + chartWidth / 2
+      : padding.left + (chartWidth / (data.length - 1)) * index
+    const y = padding.top + chartHeight - ((value - minValue) / (maxValue - minValue)) * chartHeight
+    
+    ctx.beginPath()
+    ctx.arc(x, y, 2, 0, 2 * Math.PI)
+    ctx.fill()
+  })
+  
+  // 绘制Y轴标签（1位小数 + 单位）
+  ctx.fillStyle = '#6b7280'
+  ctx.font = '10px sans-serif'
+  ctx.textAlign = 'right'
+  for (let i = 0; i <= 4; i++) {
+    const value = minValue + ((maxValue - minValue) / 4) * (4 - i)
+    const y = padding.top + (chartHeight / 4) * i
+    ctx.fillText(value.toFixed(1), padding.left - 5, y + 3)
+  }
+  // Y轴单位
+  ctx.textAlign = 'left'
+  ctx.fillText('sat/vB', 4, padding.top + 10)
+}
+
+// 更新折线图
+const updateChart = () => {
+  if (feeHistory.value.length === 0) return
+  
+  // 绘制费率图表
+  if (feeChartCanvas.value) {
+    const feeData = feeHistory.value.map(item => item.fee)
+    drawFeeChart(
+      feeChartCanvas.value, 
+      feeData, 
+      '#f97316', // 橙色
+      'BTC费率'
+    )
+  }
+}
+
+// WebSocket监听
+const setupWebSocketListeners = () => {
+  // 监听费率更新
+  const unsubNetwork = subscribeChainEvent('network', (message) => {
+    if (message.action === 'fee_update' && message.data) {
+      console.log('收到BTC费率更新:', message.data)
+      feeLevels.value = message.data as unknown as FeeLevels
+      
+      // 添加历史数据
+      addFeeHistory(message.data as unknown as FeeLevels)
+      
+      if (feeLevels.value?.normal?.network_congestion) {
+        networkCongestion.value = feeLevels.value.normal.network_congestion
+      }
+    }
+  })
+  wsUnsubscribes.push(unsubNetwork)
+}
+
 onMounted(() => {
   loadTransactions()
+  setupWebSocketListeners()
+  
+  // 监听窗口大小变化，重新绘制图表
+  window.addEventListener('resize', updateChart)
+  
+  // 确保DOM完全渲染后再次更新图表
+  setTimeout(() => {
+    updateChart()
+  }, 100)
+})
+
+onUnmounted(() => {
+  // 组件卸载时取消订阅，避免重复注册导致一次数据多次回调
+  wsUnsubscribes.forEach(unsub => { try { unsub() } catch {} })
+  wsUnsubscribes.length = 0
+  
+  // 移除窗口大小变化监听
+  window.removeEventListener('resize', updateChart)
 })
 </script>

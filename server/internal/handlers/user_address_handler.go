@@ -70,7 +70,13 @@ func (h *UserAddressHandler) GetUserAddresses(c *gin.Context) {
 		return
 	}
 
-	addresses, err := h.userAddressService.GetUserAddresses(userID)
+	chain := c.Param("chain")
+	if chain == "" {
+		utils.ErrorResponse(c, http.StatusBadRequest, "chain参数不能为空")
+		return
+	}
+
+	addresses, err := h.userAddressService.GetUserAddresses(userID, chain)
 	if err != nil {
 		utils.ErrorResponse(c, http.StatusInternalServerError, "获取地址列表失败")
 		return
@@ -279,4 +285,37 @@ func (h *UserAddressHandler) RefreshBalance(c *gin.Context) {
 		return
 	}
 	c.JSON(200, gin.H{"success": true, "data": resp})
+}
+
+// GetAddressUTXOs 获取地址的UTXO列表
+// @Summary 获取地址的UTXO列表
+// @Description 获取指定地址的所有UTXO（未花费输出）
+// @Tags 用户地址管理
+// @Accept json
+// @Produce json
+// @Param address query string true "地址"
+// @Success 200 {object} utils.Response{data=[]models.BTCUTXO}
+// @Failure 400 {object} utils.Response
+// @Failure 401 {object} utils.Response
+// @Router /api/user/addresses/utxos [get]
+func (h *UserAddressHandler) GetAddressUTXOs(c *gin.Context) {
+	userID := c.GetUint("user_id")
+	if userID == 0 {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "未授权")
+		return
+	}
+
+	address := c.Query("address")
+	if address == "" {
+		utils.ErrorResponse(c, http.StatusBadRequest, "地址参数不能为空")
+		return
+	}
+
+	utxos, err := h.userAddressService.GetAddressUTXOs(userID, address)
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusInternalServerError, "获取UTXO列表失败: "+err.Error())
+		return
+	}
+
+	utils.SuccessResponse(c, http.StatusOK, "获取UTXO列表成功", utxos)
 }

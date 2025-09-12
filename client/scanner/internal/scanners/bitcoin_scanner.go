@@ -9,7 +9,6 @@ import (
 	"io"
 	"math/big"
 	"net/http"
-	"strings"
 	"time"
 
 	"blockChainBrowser/client/scanner/config"
@@ -746,12 +745,15 @@ func (bs *BitcoinScanner) ParseTransaction(txData map[string]interface{}) (map[s
 	}
 
 	// 计算 BTC 交易费用（在转换JSON之前）
-	fee, err := bs.CalculateTransactionFee(txData)
+	fee, totalInputValue, _, err := bs.CalculateTransactionFee(txData)
 	if err != nil {
 		fmt.Printf("[BTC Scanner] Warning: Failed to calculate transaction fee: %v\n", err)
 		fee = 0
+		totalInputValue = 0
 	}
 	txData["fee"] = fee
+
+	txData["value"] = totalInputValue * 1e8
 
 	// 存储 BTC 原始交易数据 vin 和 vout
 	if vin, ok := txData["vin"].([]interface{}); ok {
@@ -777,6 +779,25 @@ func (bs *BitcoinScanner) ParseTransaction(txData map[string]interface{}) (map[s
 	}
 
 	return txData, nil
+}
+
+// ensureJSONArrayField ensures tx[key] is a JSON array ([]interface{}).
+// If it's a JSON-encoded string, it will be unmarshaled back into an array.
+func (bs *BitcoinScanner) ensureJSONArrayField(tx map[string]interface{}, key string) []interface{} {
+	if tx == nil {
+		return nil
+	}
+	if arr, ok := tx[key].([]interface{}); ok {
+		return arr
+	}
+	if s, ok := tx[key].(string); ok && s != "" {
+		var out []interface{}
+		if err := json.Unmarshal([]byte(s), &out); err == nil {
+			tx[key] = out
+			return out
+		}
+	}
+	return nil
 }
 
 // CalculateBlockStats 计算区块统计信息（使用btcd包改进）
@@ -813,47 +834,25 @@ func (bs *BitcoinScanner) CalculateBlockStats(block *models.Block, transactions 
 	// 解析第一笔交易，它是矿工的信息！
 	if len(transactions) > 0 {
 		coinbaseTx := transactions[0]
-		// 检查是否为 coinbase 交易
-		if vin, ok := coinbaseTx["vin"].([]interface{}); ok && len(vin) > 0 {
-			if firstInput, ok := vin[0].(map[string]interface{}); ok {
+		// 恢复 vin/vout 为数组
+		vinArr := bs.ensureJSONArrayField(coinbaseTx, "vin")
+		voutArr := bs.ensureJSONArrayField(coinbaseTx, "vout")
+
+		// 检查是否为 coinbase 交易（依据 vin[0].coinbase 字段）
+		if len(vinArr) > 0 {
+			if firstInput, ok := vinArr[0].(map[string]interface{}); ok {
 				if _, isCoinbase := firstInput["coinbase"]; isCoinbase {
 					fmt.Printf("[BTC Scanner] 确认是 coinbase 交易\n")
 
 					// 解析矿工地址（第一个输出地址）
-					if vout, ok := coinbaseTx["vout"].([]interface{}); ok && len(vout) > 0 {
-						if firstOutput, ok := vout[0].(map[string]interface{}); ok {
+					if len(voutArr) > 0 {
+						if firstOutput, ok := voutArr[0].(map[string]interface{}); ok {
 							if spk, ok := firstOutput["scriptPubKey"].(map[string]interface{}); ok {
-								// 获取矿工地址
 								if minerAddr, ok := spk["address"].(string); ok && minerAddr != "" {
 									fmt.Printf("[BTC Scanner] 矿工地址: %s\n", minerAddr)
 									block.Miner = minerAddr
-									// 获取挖矿奖励金额
 									if reward, ok := firstOutput["value"].(float64); ok {
-										// 将 reward 转为聪（BTC最小单位，1 BTC = 100000000 satoshi）
 										block.BaseFee = big.NewInt(int64(reward * 1e8))
-									}
-
-									// 解析 coinbase 数据（可能包含矿池信息）
-									if coinbaseData, ok := firstInput["coinbase"].(string); ok {
-										fmt.Printf("[BTC Scanner] Coinbase 数据: %s\n", coinbaseData)
-
-										// 尝试解析 coinbase 数据中的矿池信息
-										if len(coinbaseData) > 8 {
-											// 跳过前4字节的区块高度，解析后面的数据
-											coinbaseHex := coinbaseData[8:]
-											if decoded, err := hex.DecodeString(coinbaseHex); err == nil {
-												// 尝试提取可打印的字符串（矿池名称等）
-												var poolInfo strings.Builder
-												for _, b := range decoded {
-													if b >= 32 && b <= 126 { // 可打印字符
-														poolInfo.WriteByte(b)
-													}
-												}
-												if poolInfo.Len() > 0 {
-													fmt.Printf("[BTC Scanner] 矿池信息: %s\n", poolInfo.String())
-												}
-											}
-										}
 									}
 								}
 							}
@@ -875,7 +874,7 @@ func (bs *BitcoinScanner) CalculateBlockStats(block *models.Block, transactions 
 }
 
 // CalculateTransactionFee 计算交易费用（使用btcd包改进）
-func (bs *BitcoinScanner) CalculateTransactionFee(txData map[string]interface{}) (float64, error) {
+func (bs *BitcoinScanner) CalculateTransactionFee(txData map[string]interface{}) (float64, float64, float64, error) {
 	var totalInputValue, totalOutputValue float64
 
 	// 计算输入总价值
@@ -905,10 +904,10 @@ func (bs *BitcoinScanner) CalculateTransactionFee(txData map[string]interface{})
 	// 计算费用 = 输入 - 输出
 	fee := totalInputValue - totalOutputValue
 	if fee < 0 {
-		return 0, fmt.Errorf("invalid transaction: output value exceeds input value")
+		return 0, 0, 0, fmt.Errorf("invalid transaction: output value exceeds input value")
 	}
 
-	return fee, nil
+	return fee, totalInputValue, totalOutputValue, nil
 }
 
 // GetNetworkInfo 获取网络信息（使用btcd包）

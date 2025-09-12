@@ -12,12 +12,14 @@ import (
 // TransactionRepository 交易仓储接口
 type TransactionRepository interface {
 	Create(ctx context.Context, tx *models.Transaction) error
+	CreateBatch(ctx context.Context, txs []*models.Transaction) error
 	GetByHash(ctx context.Context, hash string) (*models.Transaction, error)
 	GetByAddress(ctx context.Context, address string, offset, limit int) ([]*models.Transaction, int64, error)
 	GetByBlockHash(ctx context.Context, blockHash string) ([]*models.Transaction, error)
 	GetByBlockHeight(ctx context.Context, blockHeight uint64, offset, limit int, chain string) ([]*models.Transaction, int64, error)
 	GetByBlockID(ctx context.Context, blockID uint64) ([]*models.Transaction, error)
 	List(ctx context.Context, offset, limit int, chain string) ([]*models.Transaction, int64, error)
+	ListBTCTransactions(ctx context.Context, offset, limit int, chain string) ([]*models.Transaction, int64, error)
 	GetLatestBlockHeight(ctx context.Context, chain string) (uint64, error)
 	GetLatestTransactionsByBlockIndex(ctx context.Context, chain string, blockHeight uint64, limit int) ([]*models.Transaction, error)
 	Update(ctx context.Context, tx *models.Transaction) error
@@ -42,6 +44,14 @@ func NewTransactionRepository() TransactionRepository {
 // Create 创建交易
 func (r *transactionRepository) Create(ctx context.Context, tx *models.Transaction) error {
 	return r.db.WithContext(ctx).Create(tx).Error
+}
+
+// CreateBatch 批量创建交易
+func (r *transactionRepository) CreateBatch(ctx context.Context, txs []*models.Transaction) error {
+	if len(txs) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).CreateInBatches(txs, 1000).Error
 }
 
 // GetByHash 根据哈希获取交易
@@ -194,6 +204,24 @@ func (r *transactionRepository) List(ctx context.Context, offset, limit int, cha
 	}
 
 	// 获取分页数据
+	err := query.Order("block_index DESC").
+		Offset(offset).
+		Limit(limit).
+		Find(&txs).Error
+
+	return txs, total, err
+}
+
+// ListBTCTransactions 分页查询BTC交易列表
+func (r *transactionRepository) ListBTCTransactions(ctx context.Context, offset, limit int, chain string) ([]*models.Transaction, int64, error) {
+	var txs []*models.Transaction
+	var total int64
+
+	query := r.db.WithContext(ctx)
+	if chain != "" {
+		query = query.Where("chain = ?", chain)
+	}
+
 	err := query.Order("block_index DESC").
 		Offset(offset).
 		Limit(limit).

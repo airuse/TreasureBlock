@@ -80,6 +80,12 @@ func (h *BlockHandler) UpdateBlock(c *gin.Context) {
 	if req.TransactionCount != nil {
 		fields["transaction_count"] = *req.TransactionCount
 	}
+	if req.Miner != nil {
+		fields["miner"] = *req.Miner
+	}
+	if req.BaseFee != nil {
+		fields["base_fee"] = *req.BaseFee
+	}
 
 	if err := h.blockService.UpdateBlockFieldsByHash(c.Request.Context(), req.Hash, fields); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": err.Error()})

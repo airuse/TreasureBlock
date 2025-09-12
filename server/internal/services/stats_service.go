@@ -17,6 +17,7 @@ type StatsService interface {
 	GetTotalBlockCount(ctx context.Context, chain string) (int64, error)
 	GetTotalTransactionCount(ctx context.Context, chain string) (int64, error)
 	GetLatestBaseFee(ctx context.Context, chain string) (int64, error)
+	GetCurrentDifficulty(ctx context.Context, chain string) (int64, error)
 }
 
 // statsService 统计服务实现
@@ -69,4 +70,9 @@ func (s *statsService) GetTotalTransactionCount(ctx context.Context, chain strin
 // GetLatestBaseFee 获取最新区块的Base Fee
 func (s *statsService) GetLatestBaseFee(ctx context.Context, chain string) (int64, error) {
 	return s.statsRepo.GetLatestBaseFee(ctx, chain)
+}
+
+// GetCurrentDifficulty 获取当前难度
+func (s *statsService) GetCurrentDifficulty(ctx context.Context, chain string) (int64, error) {
+	return s.statsRepo.GetCurrentDifficulty(ctx, chain)
 }

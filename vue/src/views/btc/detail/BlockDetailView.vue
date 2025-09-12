@@ -43,7 +43,7 @@
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-500">交易数量</label>
-            <p class="mt-1 text-sm text-gray-900">{{ block.transactions?.toLocaleString() }}</p>
+            <p class="mt-1 text-sm text-gray-900">{{ (block.transaction_count || totalCount || transactions.length) ?.toLocaleString?.() || (block.transaction_count || totalCount || transactions.length) }}</p>
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-500">区块大小</label>
@@ -59,7 +59,7 @@
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-500">区块奖励</label>
-            <p class="mt-1 text-sm text-gray-900">{{ formatAmount(block.reward) }} BTC</p>
+            <p class="mt-1 text-sm text-gray-900">{{ formatSatoshiToBTC(block.base_fee) }} BTC</p>
           </div>
           <div>
             <label class="block text-sm font-medium text-gray-500">确认数</label>
@@ -71,9 +71,9 @@
       <!-- 交易列表 -->
       <div class="card">
         <div class="flex justify-between items-center mb-4">
-          <h2 class="text-lg font-medium text-gray-900">交易列表</h2>
+          <h2 class="text-lg font-medium text-gray-900">交易列表（BTC）</h2>
           <div class="text-sm text-gray-500">
-            共 {{ transactions.length }} 笔交易
+            共 {{ totalCount }} 笔交易 (第 {{ currentPage }}/{{ totalPages }} 页)
           </div>
         </div>
 
@@ -83,10 +83,7 @@
             <svg class="w-5 h-5 text-blue-600 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z"></path>
             </svg>
-            <span class="text-sm text-blue-800">
-              <span v-if="isFilteredByBlock">显示区块 #{{ blockHeight }} 的交易</span>
-              <span v-else>显示所有交易（后端暂不支持按区块筛选）</span>
-            </span>
+            <span class="text-sm text-blue-800">显示区块 #{{ blockHeight }} 的交易（BTC）</span>
           </div>
         </div>
 
@@ -107,25 +104,18 @@
             <div class="flex items-center justify-between">
               <div class="flex-1">
                 <div class="flex items-center space-x-4 mb-2">
-                  <span class="font-mono text-sm text-gray-600">{{ formatHash(tx.tx_id || tx.hash) }}</span>
+                  <span class="font-mono text-sm text-gray-600">{{ formatHash(tx.tx_id || tx.txid || tx.hash) }}</span>
                   <span class="text-sm text-gray-500">{{ formatTimestamp(tx.ctime || tx.timestamp) }}</span>
                 </div>
                 <div class="grid grid-cols-1 md:grid-cols-2 gap-2 text-sm">
+                  
                   <div>
-                    <span class="text-gray-500">从: </span>
-                    <span class="font-mono text-blue-600">{{ formatAddress(tx.address_from || tx.from) }}</span>
-                  </div>
-                  <div>
-                    <span class="text-gray-500">到: </span>
-                    <span class="font-mono text-blue-600">{{ formatAddress(tx.address_to || tx.to) }}</span>
-                  </div>
-                  <div>
-                    <span class="text-gray-500">金额: </span>
+                    <span class="text-gray-500">输入总金额: </span>
                     <span class="font-medium">{{ formatAmount(tx.amount || tx.value) }} BTC</span>
                   </div>
                   <div>
-                    <span class="text-gray-500">Gas: </span>
-                    <span class="text-gray-600">{{ tx.gas_used?.toLocaleString() || tx.gasUsed?.toLocaleString() || 'N/A' }}</span>
+                    <span class="text-gray-500">手续费: </span>
+                    <span class="text-gray-600">{{ tx.fee !== undefined && tx.fee !== null ? formatFeeBTC(tx.fee) + ' BTC' : 'N/A' }}</span>
                   </div>
                 </div>
               </div>
@@ -133,7 +123,97 @@
                 {{ getStatusText(tx.status) }}
               </span>
             </div>
+            <!-- BTC VIN 列表（交易输入） -->
+            <div v-if="parsedVin(tx).length" class="mt-4">
+              <div class="text-sm text-gray-700 font-medium mb-2">VIN（交易输入）</div>
+              <div class="overflow-x-auto">
+                <table class="min-w-full text-sm">
+                  <thead>
+                    <tr class="text-left text-gray-500">
+                      <th class="pr-4 py-1">引用TXID</th>
+                      <th class="pr-4 py-1">Vout</th>
+                      <th class="pr-4 py-1">地址</th>
+                      <th class="pr-4 py-1">金额 (BTC)</th>
+                      <th class="pr-4 py-1">脚本类型</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="(vin, idx) in parsedVin(tx)" :key="idx" class="border-t border-gray-200">
+                      <td class="pr-4 py-2 font-mono text-blue-700 truncate max-w-[220px]">{{ vin.txid || '-' }}</td>
+                      <td class="pr-4 py-2">{{ vin.vout ?? '-' }}</td>
+                      <td class="pr-4 py-2 font-mono text-blue-700">{{ vin.prevout?.scriptPubKey?.address || '-' }}</td>
+                      <td class="pr-4 py-2">{{ formatBTCAmount(vin.prevout?.value || 0) }}</td>
+                      <td class="pr-4 py-2">{{ vin.prevout?.scriptPubKey?.type || 'N/A' }}</td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
+            <!-- BTC UTXO 列表 -->
+            <div v-if="tx.btc_utxos && tx.btc_utxos.length" class="mt-4">
+              <div class="text-sm text-gray-700 font-medium mb-2">UTXOs（交易输出）</div>
+              <div class="overflow-x-auto">
+                <table class="min-w-full text-sm">
+                  <thead>
+                    <tr class="text-left text-gray-500">
+                      <th class="pr-4 py-1">#</th>
+                      <th class="pr-4 py-1">地址</th>
+                      <th class="pr-4 py-1">金额 (BTC)</th>
+                      <th class="pr-4 py-1">脚本类型</th>
+                      <th class="pr-4 py-1">花费状态</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    <tr v-for="u in tx.btc_utxos" :key="u.id" class="border-t border-gray-200">
+                      <td class="pr-4 py-2">{{ u.vout_index }}</td>
+                      <td class="pr-4 py-2 font-mono text-blue-700">{{ u.address }}</td>
+                      <td class="pr-4 py-2">{{ formatAmount(u.value_satoshi || 0) }}</td>
+                      <td class="pr-4 py-2">{{ u.script_type || 'N/A' }}</td>
+                      <td class="pr-4 py-2">
+                        <span v-if="u.spent_tx_id" class="inline-flex px-2 py-0.5 rounded-full text-xs bg-red-100 text-red-700">已花费</span>
+                        <span v-else class="inline-flex px-2 py-0.5 rounded-full text-xs bg-green-100 text-green-700">未花费</span>
+                      </td>
+                    </tr>
+                  </tbody>
+                </table>
+              </div>
+            </div>
           </div>
+        </div>
+
+        <!-- 分页控件（参考ETH实现） -->
+        <div v-if="totalPages > 1" class="mt-6 flex justify-center">
+          <nav class="flex items-center space-x-2">
+            <button 
+              @click="changePage(currentPage - 1)" 
+              :disabled="currentPage <= 1"
+              class="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              上一页
+            </button>
+            
+            <div class="flex items-center space-x-1">
+              <span v-for="p in visiblePages" :key="p" 
+                    @click="changePage(p)"
+                    :class="[
+                      'px-3 py-2 text-sm font-medium rounded-md cursor-pointer',
+                      p === currentPage 
+                        ? 'bg-blue-600 text-white' 
+                        : 'text-gray-500 bg-white border border-gray-300 hover:bg-gray-50'
+                    ]"
+              >
+                {{ p }}
+              </span>
+            </div>
+            
+            <button 
+              @click="changePage(currentPage + 1)" 
+              :disabled="currentPage >= totalPages"
+              class="px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed"
+            >
+              下一页
+            </button>
+          </nav>
         </div>
 
         <!-- 无交易状态 -->
@@ -208,7 +288,7 @@ const formatTimestamp = (timestamp: string | number) => {
 
 const formatAddress = (address: string) => {
   if (!address) return 'N/A'
-  return `${address.substring(0, 6)}...${address.substring(address.length - 4)}`
+  return address
 }
 
 const formatBytes = (bytes: number) => {
@@ -221,12 +301,12 @@ const formatBytes = (bytes: number) => {
 
 const formatAmount = (amount: number) => {
   if (!amount) return '0'
-  return (amount / 1e8).toFixed(8) // BTC使用8位小数
+  return (amount / 1e8).toFixed(9) // BTC显示9位小数
 }
 
 const formatHash = (hash: string) => {
   if (!hash) return 'N/A'
-  return `${hash.substring(0, 10)}...${hash.substring(hash.length - 10)}`
+  return hash
 }
 
 const getStatusClass = (status: number) => {
@@ -253,6 +333,37 @@ const getStatusText = (status: number) => {
     default:
       return 'Unknown'
   }
+}
+
+// 安全解析VIN（后端字段为JSON字符串）
+const parsedVin = (tx: any) => {
+  try {
+    const raw = (tx && tx.vin) || []
+    const vinArr = typeof raw === 'string' ? JSON.parse(raw) : raw
+    return Array.isArray(vinArr) ? vinArr : []
+  } catch (e) {
+    return []
+  }
+}
+
+// BTC单位金额格式化（输入prevout.value已为BTC）
+const formatBTCAmount = (amount: number) => {
+  if (!amount || isNaN(Number(amount))) return '0.000000000'
+  return Number(amount).toFixed(9)
+}
+
+// 手续费后端返回为 BTC 字符串/数字，不做换算，仅规范小数位
+const formatFeeBTC = (fee: string | number) => {
+  const n = Number(fee)
+  if (isNaN(n)) return '0.000000000'
+  return n.toFixed(9)
+}
+
+// base_fee 为聪（satoshi）字符串/数字，转为 BTC（9位）
+const formatSatoshiToBTC = (satoshi: string | number) => {
+  const n = Number(satoshi)
+  if (isNaN(n)) return '0.000000000'
+  return (n / 1e8).toFixed(9)
 }
 
 // 加载区块数据
@@ -299,7 +410,7 @@ const loadBlockData = async () => {
   }
 }
 
-// 加载交易数据
+// 加载交易数据（使用最新交易接口按区块高度获取BTC交易）
 const loadTransactions = async () => {
   try {
     loadingTransactions.value = true
@@ -307,53 +418,45 @@ const loadTransactions = async () => {
     // 根据登录状态调用不同的API
     if (authStore.isAuthenticated) {
       // 已登录用户：调用 /v1/ 下的API
-      console.log('🔐 已登录用户，调用 /v1/ API 获取区块交易')
-      const response = await blocksApi.getBlockTransactions({
-        height: parseInt(blockHeight.value),
+      console.log('🔐 已登录用户，调用 /v1/ 交易API（BTC按高度）')
+      const response = await transactionsApi.getBTCTransactionsByBlockHeight({
+        blockHeight: parseInt(blockHeight.value),
         chain: 'btc',
-        page: 1,
-        page_size: 100
+        page: currentPage.value,
+        page_size: pageSize.value
       })
       
-      if (response && response.success === true) {
-        console.log('📊 后端返回交易数据:', response.data)
-        
-        // 新API直接返回交易数据，不需要过滤
-        const responseData = response.data as any
-        if (responseData?.transactions && Array.isArray(responseData.transactions)) {
-          transactions.value = responseData.transactions
-          console.log('✅ 成功加载区块交易:', transactions.value.length, '笔交易')
-        } else {
-          console.warn('API返回数据格式异常:', responseData)
-          transactions.value = []
-        }
+      if (response) {
+        const data: any = response as any
+        const list = data?.data || []
+        transactions.value = Array.isArray(list) ? list : (list.transactions || [])
+        const pg = data?.pagination || data?.data?.pagination || data?.data?.page_info
+        totalCount.value = pg?.total_count || pg?.total || (Array.isArray(list) ? list.length : (list.transactions?.length || 0))
+        totalPages.value = Math.max(1, Math.ceil(totalCount.value / pageSize.value))
+        console.log('✅ 成功加载区块交易:', transactions.value.length, '笔交易')
       } else {
-        throw new Error(response?.message || '获取交易信息失败')
+        throw new Error('获取交易信息失败')
       }
     } else {
       // 未登录用户：调用 /no-auth/ 下的API（有限制）
-      console.log('👤 未登录用户，调用 /no-auth/ API 获取区块交易（有限制）')
-      const response = await blocksApi.getBlockTransactionsPublic({
-        height: parseInt(blockHeight.value),
+      console.log('👤 未登录用户，调用 /no-auth/ 交易API（BTC按高度，有限制）')
+      const response = await transactionsApi.getBTCTransactionsByBlockHeightPublic({
+        blockHeight: parseInt(blockHeight.value),
         chain: 'btc',
-        page: 1,
-        page_size: 50
+        page: currentPage.value,
+        page_size: pageSize.value
       })
       
-      if (response && response.success === true) {
-        console.log('📊 后端返回交易数据:', response.data)
-        
-        // 新API直接返回交易数据，不需要过滤
-        const responseData = response.data as any
-        if (responseData?.transactions && Array.isArray(responseData.transactions)) {
-          transactions.value = responseData.transactions
-          console.log('✅ 成功加载区块交易:', transactions.value.length, '笔交易')
-        } else {
-          console.warn('API返回数据格式异常:', responseData)
-          transactions.value = []
-        }
+      if (response) {
+        const data: any = response as any
+        const list = data?.data || []
+        transactions.value = Array.isArray(list) ? list : (list.transactions || [])
+        const pg = data?.pagination || data?.data?.pagination || data?.data?.page_info
+        totalCount.value = pg?.total_count || pg?.total || (Array.isArray(list) ? list.length : (list.transactions?.length || 0))
+        totalPages.value = Math.max(1, Math.ceil(totalCount.value / pageSize.value))
+        console.log('✅ 成功加载区块交易:', transactions.value.length, '笔交易')
       } else {
-        throw new Error(response?.message || '获取交易信息失败')
+        throw new Error('获取交易信息失败')
       }
     }
   } catch (error) {
@@ -379,6 +482,26 @@ const isFilteredByBlock = computed(() => {
     return txBlockHeight === parseInt(blockHeight.value)
   })
 })
+
+// 分页状态（与ETH保持一致风格）
+const currentPage = ref(1)
+const pageSize = ref(20)
+const totalCount = ref(0)
+const totalPages = ref(1)
+
+const visiblePages = computed(() => {
+  const pages = [] as number[]
+  const start = Math.max(1, currentPage.value - 2)
+  const end = Math.min(totalPages.value, currentPage.value + 2)
+  for (let i = start; i <= end; i++) pages.push(i)
+  return pages
+})
+
+const changePage = async (page: number) => {
+  if (page < 1 || page > totalPages.value) return
+  currentPage.value = page
+  await loadTransactions()
+}
 </script>
 
 <style scoped>

@@ -195,9 +195,9 @@ func (s *contractParseService) parseTransactionLogs(
 		}
 
 		// 检查幂等性
-		if s.isAlreadyProcessed(ctx, receipt.TxHash, uint(logIdx)) {
-			continue
-		}
+		// if s.isAlreadyProcessed(ctx, receipt.TxHash, uint(logIdx)) {
+		// 	continue
+		// }
 
 		// 提取日志数据
 		fromAddr := s.extractAddress(config.LogsParserRules.ExtractFromAddress, topics, data)
@@ -211,7 +211,6 @@ func (s *contractParseService) parseTransactionLogs(
 		if err != nil {
 			continue // 跳过没有币种配置的合约
 		}
-		fmt.Printf("提取日志数据结果： fromAddr: %s, toAddr: %s, ownerAddr: %s, spenderAddr: %s, amountWei: %s\n", fromAddr, toAddr, ownerAddr, spenderAddr, amountWei)
 
 		// 更新用户地址余额
 		if err := s.updateUserBalances(ctx, config.EventName, tx, fromAddr, toAddr, ownerAddr, spenderAddr, amountWei, coinConfig, uint(logIdx)); err != nil {

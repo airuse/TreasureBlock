@@ -158,10 +158,8 @@ import {
   ChartBarIcon 
 } from '@heroicons/vue/20/solid'
 import { formatNumber, formatTimestamp, formatHash, formatBytes, formatAmount, formatFee, formatHashrate, formatDifficulty } from '@/utils/formatters'
-import { useChainWebSocket } from '@/composables/useWebSocket'
-import { stats as statsApi } from '@/api'
-import { blocks as blocksApi } from '@/api'
-import { transactions as transactionsApi } from '@/api'
+import { useAuthStore } from '@/stores/auth'
+import { home, noAuth, blocks as blocksApi, transactions as transactionsApi } from '@/api'
 import type { Block, Transaction } from '@/types'
 
 // 响应式数据
@@ -182,45 +180,63 @@ import type { WebSocketBlockMessage, WebSocketTransactionMessage, WebSocketStats
 const latestBlocks = ref<Block[]>([])
 const latestTransactions = ref<Transaction[]>([])
 
-// WebSocket连接
-const { subscribeChainEvent } = useChainWebSocket('btc')
+// 认证store
+const authStore = useAuthStore()
 
 // 加载数据
 const loadData = async () => {
   try {
-    // 获取统计数据
-    const statsResponse = await statsApi.getNetworkStats({ chain: 'btc' })
+    // 获取首页统计数据（优先使用新的BTC首页接口）
+    let statsResponse
+    if (authStore.isAuthenticated) {
+      statsResponse = await home.getBtcHomeStats()
+    } else {
+      statsResponse = await noAuth.getBtcHomeStats()
+    }
     if (statsResponse && statsResponse.success === true) {
+      const data = (statsResponse as any).data || {}
+      const overview = data.overview || data
       stats.value = {
-        totalBlocks: statsResponse.data?.totalBlocks || 0,
-        totalTransactions: statsResponse.data?.totalTransactions || 0,
-        activeAddresses: statsResponse.data?.activeAddresses || 0,
-        networkHashrate: statsResponse.data?.networkHashrate || 0,
-        avgFee: statsResponse.data?.avgFee || 0,
-        avgBlockTime: statsResponse.data?.avgBlockTime || 0,
-        difficulty: statsResponse.data?.difficulty || 0,
-        dailyVolume: statsResponse.data?.dailyVolume || 0
+        totalBlocks: overview.totalBlocks || 0,
+        totalTransactions: overview.totalTransactions || 0,
+        activeAddresses: overview.activeAddresses || 0,
+        networkHashrate: overview.networkHashrate || 0,
+        avgFee: overview.avgFee || 0,
+        avgBlockTime: overview.avgBlockTime || 0,
+        difficulty: overview.difficulty || 0,
+        dailyVolume: overview.dailyVolume || 0
+      }
+      // 最新区块/交易（优先使用首页接口返回的数据）
+      if (Array.isArray(data.latestBlocks) && data.latestBlocks.length > 0) {
+        latestBlocks.value = data.latestBlocks
+      }
+      if (Array.isArray(data.latestTransactions) && data.latestTransactions.length > 0) {
+        latestTransactions.value = data.latestTransactions
       }
     }
 
-    // 获取最新区块
-    const blocksResponse = await blocksApi.getBlocks({ 
-      page: 1, 
-      page_size: 5, 
-      chain: 'btc' 
-    })
-    if (blocksResponse && blocksResponse.success === true) {
-      latestBlocks.value = blocksResponse.data || []
+    // 获取最新区块（仅在首页接口未返回时回退）
+    if (!latestBlocks.value || latestBlocks.value.length === 0) {
+      const blocksResponse = await blocksApi.getBlocks({ 
+        page: 1, 
+        page_size: 5, 
+        chain: 'btc' 
+      })
+      if (blocksResponse && blocksResponse.success === true) {
+        latestBlocks.value = blocksResponse.data || []
+      }
     }
 
-    // 获取最新交易
-    const transactionsResponse = await transactionsApi.getTransactions({ 
-      page: 1, 
-      page_size: 5, 
-      chain: 'btc' 
-    })
-    if (transactionsResponse && transactionsResponse.success === true) {
-      latestTransactions.value = transactionsResponse.data || []
+    // 获取最新交易（仅在首页接口未返回时回退）
+    if (!latestTransactions.value || latestTransactions.value.length === 0) {
+      const transactionsResponse = await transactionsApi.getTransactions({ 
+        page: 1, 
+        page_size: 5, 
+        chain: 'btc' 
+      })
+      if (transactionsResponse && transactionsResponse.success === true) {
+        latestTransactions.value = transactionsResponse.data || []
+      }
     }
   } catch (error) {
     console.error('Failed to load data:', error)
@@ -238,86 +254,22 @@ const loadData = async () => {
   }
 }
 
-// WebSocket事件处理
-const unsubscribeBlocks = subscribeChainEvent('block', (message) => {
-  console.log('New block received:', message.data)
-  // 更新最新区块数据
-  if (message.data && message.data.height) {
-    const blockData = message.data as unknown as WebSocketBlockMessage
-    const newBlock: Block = {
-      hash: blockData.hash || `0000000000000000000000000000000000000000000000000000000000000000${blockData.height.toString(16).padStart(8, '0')}`,
-      number: blockData.height,
-      height: blockData.height,
-      timestamp: blockData.timestamp || Math.floor(Date.now() / 1000),
-      transactions_count: blockData.transactions || 0,
-      transactions: blockData.transactions || 0,
-      size: blockData.size || 0,
-      chain: 'btc'
-    }
-    
-    // 将新区块添加到列表开头
-    latestBlocks.value.unshift(newBlock)
-    // 保持最多5个区块
-    if (latestBlocks.value.length > 5) {
-      latestBlocks.value = latestBlocks.value.slice(0, 5)
-    }
-    
-    // 更新统计信息
-    stats.value.totalBlocks = blockData.totalBlocks || stats.value.totalBlocks
-  }
-})
-
-const unsubscribeTransactions = subscribeChainEvent('transaction', (message) => {
-  console.log('New transaction received:', message.data)
-  // 更新最新交易数据
-  if (message.data && message.data.hash) {
-    const txData = message.data as unknown as WebSocketTransactionMessage
-    const newTransaction: Transaction = {
-      hash: txData.hash,
-      block_hash: txData.blockHash || '0000000000000000000000000000000000000000000000000000000000000000',
-      block_number: txData.blockNumber || 0,
-      from_address: txData.from || '1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa',
-      to_address: txData.to || '1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2',
-      value: (txData.amount || 0).toString(),
-      gas_price: (txData.fee || 0).toString(),
-      gas_used: 1000,
-      nonce: 0,
-      timestamp: txData.timestamp || Math.floor(Date.now() / 1000),
-      chain: 'btc'
-    }
-    
-    // 将新交易添加到列表开头
-    latestTransactions.value.unshift(newTransaction)
-    // 保持最多5个交易
-    if (latestTransactions.value.length > 5) {
-      latestTransactions.value = latestTransactions.value.slice(0, 5)
-    }
-    
-    // 更新统计信息
-    stats.value.totalTransactions = txData.totalTransactions || stats.value.totalTransactions
-  }
-})
-
-const unsubscribeStats = subscribeChainEvent('stats', (message) => {
-  console.log('Stats update received:', message.data)
-  // 更新统计信息
-  if (message.data) {
-    const statsData = message.data as unknown as WebSocketStatsMessage
-    stats.value = {
-      ...stats.value,
-      ...statsData
-    }
-  }
-})
+// 定时刷新（每30秒）
+const refreshInterval = ref<number | null>(null)
 
 onMounted(() => {
   loadData()
+  // 启动自动刷新
+  refreshInterval.value = window.setInterval(() => {
+    loadData()
+  }, 30000)
 })
 
 onUnmounted(() => {
-  // 清理WebSocket订阅
-  unsubscribeBlocks()
-  unsubscribeTransactions()
-  unsubscribeStats()
+  // 清理定时器
+  if (refreshInterval.value) {
+    clearInterval(refreshInterval.value)
+    refreshInterval.value = null
+  }
 })
 </script> 

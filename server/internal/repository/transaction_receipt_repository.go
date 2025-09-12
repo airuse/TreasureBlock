@@ -12,6 +12,7 @@ import (
 // TransactionReceiptRepository 交易凭证仓储接口
 type TransactionReceiptRepository interface {
 	Create(ctx context.Context, receipt *models.TransactionReceipt) error
+	CreateBatch(ctx context.Context, receipts []*models.TransactionReceipt) error
 	GetByTxHash(ctx context.Context, txHash string) (*models.TransactionReceipt, error)
 	GetByBlockHash(ctx context.Context, blockHash string) ([]*models.TransactionReceipt, error)
 	GetByBlockNumber(ctx context.Context, blockNumber uint64, chain string) ([]*models.TransactionReceipt, error)
@@ -40,6 +41,14 @@ func (r *transactionReceiptRepository) Create(ctx context.Context, receipt *mode
 		return fmt.Errorf("failed to create transaction receipt: %w", err)
 	}
 	return nil
+}
+
+// CreateBatch 批量创建交易凭证
+func (r *transactionReceiptRepository) CreateBatch(ctx context.Context, receipts []*models.TransactionReceipt) error {
+	if len(receipts) == 0 {
+		return nil
+	}
+	return r.db.WithContext(ctx).CreateInBatches(receipts, 1000).Error
 }
 
 // GetByTxHash 根据交易哈希获取凭证

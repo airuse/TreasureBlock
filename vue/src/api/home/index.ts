@@ -29,3 +29,18 @@ export function getHomeStats(data: GetHomeStatsRequest): Promise<HomeApiResponse
     params: data
   })
 }
+
+/**
+ * 获取比特币首页统计数据（认证）
+ */
+export function getBtcHomeStats(): Promise<HomeApiResponse> {
+  if (__USE_MOCK__) {
+    console.log('🔧 使用Mock数据 - getBtcHomeStats')
+    return handleMockGetHomeStats('btc')
+  }
+
+  return request({
+    url: '/api/v1/home/btc/stats',
+    method: 'GET'
+  })
+}

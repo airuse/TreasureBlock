@@ -3,7 +3,8 @@ import {
   handleMockGetTransactions, 
   handleMockGetTransaction,
   handleMockSearchTransactions,
-  handleMockGetParsedTransaction
+  handleMockGetParsedTransaction,
+  handleMockGetBTCTransactionsByBlockHeight
 } from '../mock/transactions'
 import type { Transaction, ParsedContractResult } from '@/types'
 import type { ApiResponse, PaginatedResponse, PaginationRequest, SortRequest, SearchRequest } from '../types'
@@ -22,6 +23,11 @@ interface GetTransactionRequest {
 
 interface SearchTransactionsRequest extends SearchRequest {
   // 继承SearchRequest的query, page, page_size
+}
+
+interface GetBTCTransactionsByBlockHeightRequest extends PaginationRequest, SortRequest {
+  blockHeight: number
+  chain?: string
 }
 
 // ==================== API函数实现 ====================
@@ -128,5 +134,38 @@ export function getParsedTransaction(hash: string): Promise<ApiResponse<ParsedCo
   return request({
     url: `/api/v1/transactions/parsed/${hash}`,
     method: 'GET'
+  })
+}
+
+/**
+ * 根据区块高度获取BTC交易列表
+ */
+export function getBTCTransactionsByBlockHeight(data: GetBTCTransactionsByBlockHeightRequest): Promise<PaginatedResponse<Transaction>> {
+  if (__USE_MOCK__) {
+    console.log('🔧 使用Mock数据 - getBTCTransactionsByBlockHeight')
+    // 复用通用交易列表的Mock逻辑以返回相同结构
+    return handleMockGetBTCTransactionsByBlockHeight(data as any)
+  }
+  
+  return request({
+    url: `/api/v1/transactions/btc/block-height/${data.blockHeight}`,
+    method: 'GET',
+    params: data
+  })
+}
+
+/**
+ * 根据区块高度获取BTC交易列表（公开接口，有限制）
+ */
+export function getBTCTransactionsByBlockHeightPublic(data: GetBTCTransactionsByBlockHeightRequest): Promise<PaginatedResponse<Transaction>> {
+  if (__USE_MOCK__) {
+    console.log('🔧 使用Mock数据 - getBTCTransactionsByBlockHeightPublic')
+    return handleMockGetBTCTransactionsByBlockHeight(data as any)
+  } 
+  
+  return request({
+    url: `/api/no-auth/transactions/btc/block-height/${data.blockHeight}`,
+    method: 'GET',
+    params: data
   })
 }

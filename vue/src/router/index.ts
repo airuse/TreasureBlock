@@ -101,7 +101,11 @@ const router = createRouter({
       name: 'btc-block-detail',
       component: BTCBlockDetailView
     },
-
+    {
+      path: '/btc/address-transactions',
+      name: 'btc-address-transactions',
+      component: () => import('../views/btc/detail/AddressTransactionsView.vue')
+    },
     {
       path: '/btc/statistics',
       name: 'btc-statistics',

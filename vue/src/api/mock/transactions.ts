@@ -63,3 +63,18 @@ export const handleMockGetParsedTransaction = (hash: string): Promise<any> => {
     }, 200)
   })
 }
+
+/**
+ * 模拟获取BTC交易列表接口
+ */
+export const handleMockGetBTCTransactionsByBlockHeight = (data: any): Promise<any> => {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      const response = (apiData as any).paths['/transactions/btc/block-height/{blockHeight}'].get.responses['200'].content['application/json'].example
+      resolve({
+        ...response,
+        timestamp: Date.now()
+      })
+    }, 300)
+  })
+}

@@ -21,6 +21,7 @@ type StatsRepository interface {
 	GetTotalBlockCount(ctx context.Context, chain string) (int64, error)
 	GetTotalTransactionCount(ctx context.Context, chain string) (int64, error)
 	GetLatestBaseFee(ctx context.Context, chain string) (int64, error)
+	GetCurrentDifficulty(ctx context.Context, chain string) (int64, error)
 }
 
 // statsRepository 统计仓储实现

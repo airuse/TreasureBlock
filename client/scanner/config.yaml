@@ -30,7 +30,7 @@ blockchain:
       # BTC链特定的扫描配置
       scan:
         enabled: true
-        interval: 1s
+        interval: 3s
         max_retries: 3
         retry_delay: 5s
         confirmations: 6
@@ -106,7 +106,7 @@ blockchain:
       # ETH链特定的扫描配置
       scan:
         enabled: false                # 是否启用ETH链扫描
-        interval: 1s                 # 扫描区块的时间间隔
+        interval: 2s                 # 扫描区块的时间间隔
         max_retries: 3               # 区块扫描失败时的最大重试次数
         retry_delay: 3s              # 重试间隔时间
         confirmations: 61            # 需要等待的区块确认数

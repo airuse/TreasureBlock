@@ -13,6 +13,7 @@ import (
 // TransactionReceiptService 交易凭证服务接口
 type TransactionReceiptService interface {
 	CreateTransactionReceipt(ctx context.Context, receiptData map[string]interface{}) error
+	CreateTransactionReceiptsBatch(ctx context.Context, receiptsData []map[string]interface{}) error
 	GetTransactionReceiptByHash(ctx context.Context, txHash string) (*models.TransactionReceipt, error)
 	GetTransactionReceiptsByBlockHash(ctx context.Context, blockHash string) ([]*models.TransactionReceipt, error)
 	GetTransactionReceiptsByBlockNumber(ctx context.Context, blockNumber uint64, chain string) ([]*models.TransactionReceipt, error)
@@ -39,13 +40,14 @@ func (s *transactionReceiptService) CreateTransactionReceipt(ctx context.Context
 	}
 
 	// 检查凭证是否已存在
-	exists, err := s.receiptRepo.Exists(ctx, txHash)
-	if err != nil {
-		return fmt.Errorf("failed to check receipt existence: %w", err)
-	}
-	if exists {
-		return nil // 已存在，跳过创建
-	}
+
+	// exists, err := s.receiptRepo.Exists(ctx, txHash)
+	// if err != nil {
+	// 	return fmt.Errorf("failed to check receipt existence: %w", err)
+	// }
+	// if exists {
+	// 	return nil // 已存在，跳过创建
+	// }
 
 	// 转换数据为模型
 	receipt := &models.TransactionReceipt{
@@ -114,6 +116,89 @@ func (s *transactionReceiptService) CreateTransactionReceipt(ctx context.Context
 	}
 
 	return nil
+}
+
+// CreateTransactionReceiptsBatch 批量创建交易凭证
+func (s *transactionReceiptService) CreateTransactionReceiptsBatch(ctx context.Context, receiptsData []map[string]interface{}) error {
+	if len(receiptsData) == 0 {
+		return nil
+	}
+	receipts := make([]*models.TransactionReceipt, 0, len(receiptsData))
+	for _, receiptData := range receiptsData {
+		// 复用单条校验逻辑的关键字段校验
+		txHash, ok := receiptData["tx_hash"].(string)
+		if !ok || txHash == "" {
+			return fmt.Errorf("tx_hash is required")
+		}
+		// 已存在则跳过（为避免逐条 Exists 查询的 N+1，可在上层过滤或在此处简单跳过）
+
+		// exists, err := s.receiptRepo.Exists(ctx, txHash)
+		// if err != nil {
+		// 	return fmt.Errorf("failed to check receipt existence: %w", err)
+		// }
+		// if exists {
+		// 	continue
+		// }
+
+		receipt := &models.TransactionReceipt{
+			TxHash: txHash,
+			Chain:  getStringValue(receiptData, "chain"),
+		}
+		if txType, ok := receiptData["tx_type"].(uint8); ok {
+			receipt.TxType = txType
+		}
+		if postState, ok := receiptData["post_state"].(string); ok {
+			receipt.PostState = postState
+		}
+		if status, ok := receiptData["status"].(uint64); ok {
+			receipt.Status = status
+		}
+		if effectiveGasPrice, ok := receiptData["effective_gas_price"].(string); ok {
+			receipt.EffectiveGasPrice = effectiveGasPrice
+		}
+		if blobGasUsed, ok := receiptData["blob_gas_used"].(uint64); ok {
+			receipt.BlobGasUsed = blobGasUsed
+		}
+		if blobGasPrice, ok := receiptData["blob_gas_price"].(string); ok {
+			receipt.BlobGasPrice = blobGasPrice
+		}
+		if bloom, ok := receiptData["bloom"].(string); ok {
+			receipt.Bloom = bloom
+		}
+		if contractAddress, ok := receiptData["contract_address"].(string); ok {
+			receipt.ContractAddress = contractAddress
+		}
+		if gasUsed, ok := receiptData["gas_used"].(uint64); ok {
+			receipt.GasUsed = gasUsed
+		}
+		if blockHash, ok := receiptData["block_hash"].(string); ok {
+			receipt.BlockHash = blockHash
+		}
+		if blockNumber, ok := receiptData["block_number"].(uint64); ok {
+			receipt.BlockNumber = blockNumber
+		}
+		if transactionIndex, ok := receiptData["transaction_index"].(uint); ok {
+			receipt.TransactionIndex = transactionIndex
+		}
+		if cumulativeGasUsed, ok := receiptData["cumulative_gas_used"].(uint64); ok {
+			receipt.CumulativeGasUsed = strconv.FormatUint(cumulativeGasUsed, 10)
+		}
+		if blockID, ok := receiptData["block_id"].(uint64); ok {
+			receipt.BlockID = blockID
+		}
+		if logsData, ok := receiptData["logs_data"]; ok {
+			if logsJSON, err := json.Marshal(logsData); err == nil {
+				receipt.LogsData = string(logsJSON)
+			} else {
+				return fmt.Errorf("failed to marshal logs data for tx %s: %w", txHash, err)
+			}
+		}
+		receipts = append(receipts, receipt)
+	}
+	if len(receipts) == 0 {
+		return nil
+	}
+	return s.receiptRepo.CreateBatch(ctx, receipts)
 }
 
 // GetTransactionReceiptByHash 根据交易哈希获取凭证

@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"sync"
 	"time"
@@ -554,11 +555,18 @@ func (bs *BlockScanner) buildTransactionRequest(chainName string, block *models.
 			}
 			return 0
 		}(),
-		"confirm":      1,
-		"status":       1,
-		"send_status":  1,
-		"balance":      "0",
-		"amount":       tx["value"],
+		"confirm":     1,
+		"status":      1,
+		"send_status": 1,
+		"balance":     "0",
+		"amount": func() string {
+			if amount, ok := tx["value"].(float64); ok {
+				return strconv.FormatFloat(amount, 'f', -1, 64)
+			} else if amount, ok := tx["value"].(string); ok {
+				return amount
+			}
+			return "0"
+		}(),
 		"trans_id":     0,
 		"chain":        chainName,
 		"symbol":       chainName,
@@ -567,10 +575,17 @@ func (bs *BlockScanner) buildTransactionRequest(chainName string, block *models.
 		"gas_limit":    tx["gasLimit"],
 		"gas_price":    tx["gasPrice"],
 		"gas_used":     tx["gasUsed"],
-		"fee":          "0",
-		"used_fee":     nil,
-		"height":       block.Height,
-		"block_id":     blockID,
+		"fee": func() string {
+			if fee, ok := tx["fee"].(float64); ok {
+				return strconv.FormatFloat(fee, 'f', -1, 64)
+			} else if fee, ok := tx["fee"].(string); ok {
+				return fee
+			}
+			return "0"
+		}(),
+		"used_fee": nil,
+		"height":   block.Height,
+		"block_id": blockID,
 		"contract_addr": func() string {
 			if contractAddr, ok := tx["contract_address"].(string); ok {
 				return contractAddr

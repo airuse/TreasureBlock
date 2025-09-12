@@ -556,7 +556,7 @@ const initEthFields = () => {
 // 加载地址列表
 const loadAddresses = async () => {
   try {
-    const response = await getPersonalAddresses()
+    const response = await getPersonalAddresses("eth")
     if (response.success) {
       addresses.value = response.data || []
     }

@@ -95,13 +95,14 @@ func SetupRoutes(
 		addresses := userAPI.Group("/addresses")
 		{
 			addresses.POST("", userAddressHandler.CreateAddress)                      // 创建地址
-			addresses.GET("", userAddressHandler.GetUserAddresses)                    // 获取地址列表
+			addresses.GET("/chain/:chain", userAddressHandler.GetUserAddresses)       // 获取地址列表（使用 ?chain=eth|btc 查询参数）
 			addresses.GET("/:id", userAddressHandler.GetAddressByID)                  // 获取地址详情
 			addresses.PUT("/:id", userAddressHandler.UpdateAddress)                   // 更新地址
 			addresses.DELETE("/:id", userAddressHandler.DeleteAddress)                // 删除地址
 			addresses.GET("/transactions", userAddressHandler.GetAddressTransactions) // 获取地址交易列表
 			addresses.GET("/authorized", userAddressHandler.GetAuthorizedAddresses)   // 根据发送地址查询授权关系
 			addresses.POST("/:id/refresh-balance", userAddressHandler.RefreshBalance) // 刷新余额
+			addresses.GET("/utxos", userAddressHandler.GetAddressUTXOs)               // 获取地址UTXO列表
 		}
 
 		// 用户交易管理
@@ -133,7 +134,8 @@ func SetupRoutes(
 		// 首页相关路由（公开）
 		home := noAuthAPI.Group("/home")
 		{
-			home.GET("/stats", homeHandler.GetHomeStats) // 获取首页统计数据
+			home.GET("/stats", homeHandler.GetHomeStats)        // 获取首页统计数据（通用，需传 chain）
+			home.GET("/btc/stats", homeHandler.GetBtcHomeStats) // 获取比特币首页统计数据（固定链）
 		}
 		contracts := noAuthAPI.Group("/contracts")
 		{
@@ -141,11 +143,12 @@ func SetupRoutes(
 			contracts.GET("/:address/logo", contractHandler.GetContractLogo) // 按地址获取Logo
 		}
 
-		noAuthAPI.GET("/blocks", blockHandler.ListBlocksPublic)                                                // 限制最多20个区块
-		noAuthAPI.GET("/blocks/height/:height", blockHandler.GetBlockByHeightPublic)                           // 根据高度获取区块详情（公开接口）
-		noAuthAPI.GET("/blocks/search", blockHandler.SearchBlocksPublic)                                       // 搜索区块（公开接口）
-		noAuthAPI.GET("/transactions", txHandler.ListTransactionsPublic)                                       // 限制最多1000条交易
-		noAuthAPI.GET("/transactions/block-height/:blockHeight", txHandler.GetTransactionsByBlockHeightPublic) // 根据区块高度获取交易（公开接口）
+		noAuthAPI.GET("/blocks", blockHandler.ListBlocksPublic)                                                       // 限制最多20个区块
+		noAuthAPI.GET("/blocks/height/:height", blockHandler.GetBlockByHeightPublic)                                  // 根据高度获取区块详情（公开接口）
+		noAuthAPI.GET("/blocks/search", blockHandler.SearchBlocksPublic)                                              // 搜索区块（公开接口）
+		noAuthAPI.GET("/transactions", txHandler.ListTransactionsPublic)                                              // 限制最多1000条交易
+		noAuthAPI.GET("/transactions/block-height/:blockHeight", txHandler.GetTransactionsByBlockHeightPublic)        // 根据区块高度获取交易（公开接口）
+		noAuthAPI.GET("/transactions/btc/block-height/:blockHeight", txHandler.GetBTCTransactionsByBlockHeightPublic) // 根据区块高度获取BTC交易（公开接口）
 	}
 
 	// 区块验证相关路由
@@ -159,7 +162,8 @@ func SetupRoutes(
 		// 首页相关路由
 		home := v1.Group("/home")
 		{
-			home.GET("/stats", homeHandler.GetHomeStats) // 获取首页统计数据
+			home.GET("/stats", homeHandler.GetHomeStats)        // 获取首页统计数据（通用，需传 chain）
+			home.GET("/btc/stats", homeHandler.GetBtcHomeStats) // 获取比特币首页统计数据（固定链）
 		}
 
 		// 区块相关路由
@@ -182,15 +186,16 @@ func SetupRoutes(
 		// 交易相关路由
 		transactions := v1.Group("/transactions")
 		{
-			transactions.GET("", txHandler.ListTransactions)                                       // 获取交易列表
-			transactions.GET("/hash/:hash", txHandler.GetTransactionByHash)                        // 根据哈希获取交易
-			transactions.GET("/address/:address", txHandler.GetTransactionsByAddress)              // 根据地址获取交易
-			transactions.GET("/block-hash/:blockHash", txHandler.GetTransactionsByBlockHash)       // 根据区块哈希获取交易
-			transactions.GET("/block-height/:blockHeight", txHandler.GetTransactionsByBlockHeight) // 根据区块高度获取交易
-			transactions.POST("/create", txHandler.CreateTransaction)                              // 创建交易记录
-			transactions.POST("/create/batch", txHandler.CreateTransactionsBatch)                  // 批量创建交易记录
-			transactions.GET("/receipt/:hash", txHandler.GetTransactionReceiptByHash)              // 根据哈希获取交易凭证
-			transactions.GET("/parsed/:hash", contractParseResultHandler.GetByTxHash)              // 根据哈希获取解析结果
+			transactions.GET("", txHandler.ListTransactions)                                              // 获取交易列表
+			transactions.GET("/hash/:hash", txHandler.GetTransactionByHash)                               // 根据哈希获取交易
+			transactions.GET("/address/:address", txHandler.GetTransactionsByAddress)                     // 根据地址获取交易
+			transactions.GET("/block-hash/:blockHash", txHandler.GetTransactionsByBlockHash)              // 根据区块哈希获取交易
+			transactions.GET("/block-height/:blockHeight", txHandler.GetTransactionsByBlockHeight)        // 根据区块高度获取交易
+			transactions.GET("/btc/block-height/:blockHeight", txHandler.GetBTCTransactionsByBlockHeight) // 根据区块高度获取BTC交易
+			transactions.POST("/create", txHandler.CreateTransaction)                                     // 创建交易记录
+			transactions.POST("/create/batch", txHandler.CreateTransactionsBatch)                         // 批量创建交易记录
+			transactions.GET("/receipt/:hash", txHandler.GetTransactionReceiptByHash)                     // 根据哈希获取交易凭证
+			transactions.GET("/parsed/:hash", contractParseResultHandler.GetByTxHash)                     // 根据哈希获取解析结果
 		}
 
 		// 地址相关路由

@@ -1,11 +1,14 @@
 package handlers
 
 import (
+	"context"
+	"encoding/json"
 	"net/http"
 	"strconv"
 
 	"blockChainBrowser/server/internal/dto"
 	"blockChainBrowser/server/internal/middleware"
+	"blockChainBrowser/server/internal/models"
 	"blockChainBrowser/server/internal/services"
 
 	"github.com/gin-gonic/gin"
@@ -17,14 +20,18 @@ type BlockVerificationHandler struct {
 	verificationService  services.BlockVerificationService
 	earningsService      services.EarningsService
 	contractParseService services.ContractParseService
+	btcUTXOService       services.BTCUTXOService
+	transactionService   services.TransactionService
 }
 
 // NewBlockVerificationHandler 创建区块验证处理器
-func NewBlockVerificationHandler(verificationService services.BlockVerificationService, earningsService services.EarningsService, contractParseService services.ContractParseService) *BlockVerificationHandler {
+func NewBlockVerificationHandler(verificationService services.BlockVerificationService, earningsService services.EarningsService, contractParseService services.ContractParseService, btcUTXOService services.BTCUTXOService, transactionService services.TransactionService) *BlockVerificationHandler {
 	return &BlockVerificationHandler{
 		verificationService:  verificationService,
 		earningsService:      earningsService,
 		contractParseService: contractParseService,
+		btcUTXOService:       btcUTXOService,
+		transactionService:   transactionService,
 	}
 }
 
@@ -68,8 +75,23 @@ func (h *BlockVerificationHandler) VerifyBlock(c *gin.Context) {
 		})
 		return
 	}
-
-	h.contractParseService.ParseBlockTransactions(c.Request.Context(), blockID)
+	// 获取区块，非BTC直接跳过
+	block, err := h.verificationService.GetBlockByID(c.Request.Context(), blockID)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "BLOCK_VERIFICATION_FAILED",
+			"details": err.Error(),
+		})
+		return
+	}
+	if block != nil && block.Chain == "btc" {
+		if err := h.ParseBTCBlockTransactions(c.Request.Context(), blockID); err != nil {
+			logrus.Errorf("ParseBTCBlockTransactions failed for block %d: %v", blockID, err)
+		}
+	} else if block != nil && block.Chain == "eth" {
+		h.contractParseService.ParseBlockTransactions(c.Request.Context(), blockID)
+	}
 
 	// 验证通过需要吧数据库 block 表的 verification_status 更新为 1
 	h.verificationService.UpdateBlockVerificationStatus(c.Request.Context(), blockID, true, "验证通过")
@@ -154,4 +176,116 @@ func (h *BlockVerificationHandler) GetLastVerifiedBlockHeight(c *gin.Context) {
 		},
 		"message": "获取成功",
 	})
+}
+
+// ParseBTCBlockTransactions 解析BTC区块内交易的 vin/vout，维护本地UTXO表
+func (h *BlockVerificationHandler) ParseBTCBlockTransactions(ctx context.Context, blockID uint64) error {
+
+	txs, err := h.transactionService.GetTransactionsByBlockID(ctx, blockID)
+	if err != nil {
+		return err
+	}
+	if len(txs) == 0 {
+		return nil
+	}
+
+	// 定义解析结构
+	type scriptPubKey struct {
+		Address   string   `json:"address"`
+		Addresses []string `json:"addresses"`
+		ASM       string   `json:"asm"`
+		Desc      string   `json:"desc"`
+		Hex       string   `json:"hex"`
+		Type      string   `json:"type"`
+	}
+	type parsedVout struct {
+		N            int          `json:"n"`
+		ScriptPubKey scriptPubKey `json:"scriptPubKey"`
+		Value        float64      `json:"value"`
+	}
+	type prevoutInfo struct {
+		Generated    bool         `json:"generated"`
+		Height       uint64       `json:"height"`
+		ScriptPubKey scriptPubKey `json:"scriptPubKey"`
+		Value        float64      `json:"value"`
+	}
+	type parsedVin struct {
+		Coinbase    string       `json:"coinbase"`
+		Txid        string       `json:"txid"`
+		Vout        int          `json:"vout"`
+		Prevout     *prevoutInfo `json:"prevout"`
+		Sequence    uint32       `json:"sequence"`
+		Txinwitness []string     `json:"txinwitness"`
+	}
+
+	// 辅助：BTC -> satoshi（避免负数，做四舍五入）
+	toSatoshi := func(v float64) int64 {
+		if v <= 0 {
+			return 0
+		}
+		return int64(v*1e8 + 0.5)
+	}
+
+	var utxoBatch []*models.BTCUTXO
+
+	for _, tx := range txs {
+		if tx == nil || tx.Vout == "" {
+			continue
+		}
+
+		// 解析 vout 生成 UTXO
+		var vouts []parsedVout
+		if err := json.Unmarshal([]byte(tx.Vout), &vouts); err != nil {
+			logrus.Errorf("unmarshal vout failed for tx %s: %v", tx.TxID, err)
+		} else {
+			for _, o := range vouts {
+				address := o.ScriptPubKey.Address
+				if address == "" && len(o.ScriptPubKey.Addresses) > 0 {
+					address = o.ScriptPubKey.Addresses[0]
+				}
+				utxo := &models.BTCUTXO{
+					Chain:        "btc",
+					TxID:         tx.TxID,
+					VoutIndex:    uint32(o.N),
+					BlockHeight:  tx.Height,
+					BlockID:      tx.BlockID,
+					Address:      address,
+					ScriptPubKey: o.ScriptPubKey.Hex,
+					ScriptType:   o.ScriptPubKey.Type,
+					IsCoinbase:   false, // 输出是否来自coinbase由vin判断；保留false，这里不强制
+					ValueSatoshi: toSatoshi(o.Value),
+				}
+				utxoBatch = append(utxoBatch, utxo)
+			}
+		}
+
+		// 解析 vin 标记已花费的 UTXO
+		if tx.Vin != "" {
+			var vins []parsedVin
+			if err := json.Unmarshal([]byte(tx.Vin), &vins); err != nil {
+				logrus.Errorf("unmarshal vin failed for tx %s: %v", tx.TxID, err)
+			} else {
+				for vinIdx, in := range vins {
+					// coinbase 输入不花费任何UTXO
+					if in.Coinbase != "" || (in.Prevout != nil && in.Prevout.Generated) {
+						continue
+					}
+					if in.Txid == "" {
+						continue
+					}
+					if err := h.btcUTXOService.MarkSpent(ctx, "btc", in.Txid, uint32(in.Vout), tx.TxID, uint32(vinIdx), tx.Height); err != nil {
+						logrus.Errorf("mark spent failed prev %s:%d by %s vin %d: %v", in.Txid, in.Vout, tx.TxID, vinIdx, err)
+					}
+				}
+			}
+		}
+	}
+
+	if len(utxoBatch) > 0 {
+		if err := h.btcUTXOService.UpsertOutputs(ctx, utxoBatch); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }

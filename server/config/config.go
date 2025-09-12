@@ -127,10 +127,11 @@ type ChainConfig struct {
 	Symbol   string   `yaml:"symbol"`
 	Decimals int      `yaml:"decimals"`
 	Enabled  bool     `yaml:"enabled"`
-	RPCURL   string   `yaml:"rpc_url"`  // RPC节点URL（兼容单个）
-	RPCURLs  []string `yaml:"rpc_urls"` // 多个RPC节点URL（推荐）
-	Username string   `yaml:"username"` // RPC用户名（如果需要）
-	Password string   `yaml:"password"` // RPC密码（如果需要）
+	RPCURL   string   `yaml:"rpc_url"`   // RPC节点URL（兼容单个）
+	RPCURLs  []string `yaml:"rpc_urls"`  // 多个RPC节点URL（用于JSON-RPC）
+	RESTURLs []string `yaml:"rest_urls"` // 多个REST API URL（用于地址查询）
+	Username string   `yaml:"username"`  // RPC用户名（如果需要）
+	Password string   `yaml:"password"`  // RPC密码（如果需要）
 }
 
 // CacheConfig 缓存配置

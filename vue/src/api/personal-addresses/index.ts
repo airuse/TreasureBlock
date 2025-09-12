@@ -14,7 +14,8 @@ import type {
   CreatePersonalAddressRequest, 
   UpdatePersonalAddressRequest,
   GetAuthorizedAddressesRequest,
-  AuthorizedAddressesResponse
+  AuthorizedAddressesResponse,
+  BTCUTXO
 } from '@/types/personal-address'
 import type { AddressTransactionsResponse } from '@/types/transaction'
 import type { ApiResponse } from '../types'
@@ -48,14 +49,14 @@ export function createPersonalAddress(data: CreatePersonalAddressRequest): Promi
 /**
  * 获取个人地址列表
  */
-export function getPersonalAddresses(): Promise<ApiResponse<PersonalAddressItem[]>> {
+export function getPersonalAddresses(chain: string): Promise<ApiResponse<PersonalAddressItem[]>> {
   if (__USE_MOCK__) {
     console.log('🔧 使用Mock数据 - getPersonalAddresses')
     return handleMockGetPersonalAddresses()
   }
   
   return request({
-    url: '/api/user/addresses',
+    url: `/api/user/addresses/chain/${chain}`,
     method: 'GET'
   })
 }
@@ -159,5 +160,16 @@ export function refreshPersonalAddressBalance(id: number): Promise<ApiResponse<P
   return request({
     url: `/api/user/addresses/${id}/refresh-balance`,
     method: 'POST'
+  })
+}
+
+/**
+ * 获取地址的UTXO列表（仅BTC）
+ */
+export function getAddressUTXOs(address: string): Promise<ApiResponse<BTCUTXO[]>> {
+  return request({
+    url: '/api/user/addresses/utxos',
+    method: 'GET',
+    params: { address }
   })
 }

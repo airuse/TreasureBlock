@@ -13,22 +13,27 @@ type TransactionService interface {
 	GetTransactionsByAddress(ctx context.Context, address string, page, pageSize int) ([]*models.Transaction, int64, error)
 	GetTransactionsByBlockHash(ctx context.Context, blockHash string) ([]*models.Transaction, error)
 	GetTransactionsByBlockHeight(ctx context.Context, blockHeight uint64, page, pageSize int, chain string) ([]*models.Transaction, int64, error)
+	GetTransactionsByBlockID(ctx context.Context, blockID uint64) ([]*models.Transaction, error)
 	ListTransactions(ctx context.Context, page, pageSize int, chain string) ([]*models.Transaction, int64, error)
 	GetLatestTransactions(ctx context.Context, chain string, limit int) ([]*models.Transaction, error)
 	CreateTransaction(ctx context.Context, tx *models.Transaction) error
+	CreateTransactionsBatch(ctx context.Context, txs []*models.Transaction) error
 	UpdateTransaction(ctx context.Context, tx *models.Transaction) error
 	DeleteTransaction(ctx context.Context, hash string) error
+	GetBTCTransactionsByBlockHeight(ctx context.Context, blockHeight uint64, page, pageSize int, chain string) ([]*models.Transaction, int64, error)
 }
 
 type transactionService struct {
 	txRepo         repository.TransactionRepository
 	coinConfigRepo repository.CoinConfigRepository
+	btcUtxoRepo    repository.BTCUTXORepository
 }
 
-func NewTransactionService(txRepo repository.TransactionRepository, coinConfigRepo repository.CoinConfigRepository) TransactionService {
+func NewTransactionService(txRepo repository.TransactionRepository, coinConfigRepo repository.CoinConfigRepository, btcUtxoRepo repository.BTCUTXORepository) TransactionService {
 	return &transactionService{
 		txRepo:         txRepo,
 		coinConfigRepo: coinConfigRepo,
+		btcUtxoRepo:    btcUtxoRepo,
 	}
 }
 
@@ -112,6 +117,11 @@ func (s *transactionService) GetTransactionsByBlockHeight(ctx context.Context, b
 	return txs, total, nil
 }
 
+// GetTransactionsByBlockID 根据区块ID获取交易列表
+func (s *transactionService) GetTransactionsByBlockID(ctx context.Context, blockID uint64) ([]*models.Transaction, error) {
+	return s.txRepo.GetByBlockID(ctx, blockID)
+}
+
 // ListTransactions 分页查询交易列表
 func (s *transactionService) ListTransactions(ctx context.Context, page, pageSize int, chain string) ([]*models.Transaction, int64, error) {
 	if page < 1 {
@@ -137,6 +147,41 @@ func (s *transactionService) ListTransactions(ctx context.Context, page, pageSiz
 	// 为每个交易添加代币标识
 	for _, tx := range txs {
 		tx.IsToken = s.isTokenTransaction(tx, tokenMap)
+	}
+
+	return txs, total, nil
+}
+
+// ListTransactions 分页查询交易列表
+func (s *transactionService) GetBTCTransactionsByBlockHeight(ctx context.Context, blockHeight uint64, page, pageSize int, chain string) ([]*models.Transaction, int64, error) {
+	if page < 1 {
+		page = 1
+	}
+	if pageSize < 1 || pageSize > 100 {
+		pageSize = 20
+	}
+
+	offset := (page - 1) * pageSize
+	txs, total, err := s.txRepo.GetByBlockHeight(ctx, blockHeight, offset, pageSize, chain)
+	if err != nil {
+		return nil, 0, fmt.Errorf("failed to get transactions by block height: %w", err)
+	}
+
+	// 获取utxo数据
+	utxoMap, err := s.btcUtxoRepo.GetOutputsByHeight(ctx, chain, blockHeight)
+	if err != nil {
+		// 如果获取utxo数据失败，记录错误但不影响交易列表返回
+		// fmt.Printf("Warning: Failed to get utxo data for chain %s: %v\n", chain, err)
+	}
+	fmt.Printf("获取到了 utxoMap，总数为 %d\n", len(utxoMap))
+
+	// 为每个交易添加utxo标识
+	for _, tx := range txs {
+		for _, utxo := range utxoMap {
+			if utxo.TxID == tx.TxID {
+				tx.BTCUTXOs = append(tx.BTCUTXOs, utxo)
+			}
+		}
 	}
 
 	return txs, total, nil
@@ -192,6 +237,14 @@ func (s *transactionService) CreateTransaction(ctx context.Context, tx *models.T
 	}
 
 	return nil
+}
+
+// CreateTransactionsBatch 批量创建交易
+func (s *transactionService) CreateTransactionsBatch(ctx context.Context, txs []*models.Transaction) error {
+	if len(txs) == 0 {
+		return nil
+	}
+	return s.txRepo.CreateBatch(ctx, txs)
 }
 
 // UpdateTransaction 更新交易

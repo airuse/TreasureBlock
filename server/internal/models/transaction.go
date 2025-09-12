@@ -72,6 +72,8 @@ type Transaction struct {
 	TokenIsStablecoin  bool   `json:"token_is_stablecoin,omitempty" gorm:"-"`   // 是否为稳定币（非数据库字段）
 	TokenIsVerified    bool   `json:"token_is_verified,omitempty" gorm:"-"`     // 是否已验证（非数据库字段）
 
+	// BTC UTXO 标识字段（非数据库字段，仅用于API响应）
+	BTCUTXOs []*BTCUTXO `json:"btc_utxos,omitempty" gorm:"-"`
 	// 时间字段
 	Ctime     time.Time      `json:"ctime" gorm:"type:timestamp;not null;default:CURRENT_TIMESTAMP;column:ctime;index;comment:入库时间"`
 	Mtime     time.Time      `json:"mtime" gorm:"type:timestamp;not null;default:CURRENT_TIMESTAMP;column:mtime;comment:更改时间"`

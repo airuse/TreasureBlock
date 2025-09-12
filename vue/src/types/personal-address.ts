@@ -13,6 +13,7 @@ export interface PersonalAddressItem {
   contract_balance?: string
   contract_balance_height?: number
   transaction_count: number
+  utxo_count?: number  // UTXO数量（仅BTC使用）
   is_active: boolean
   balance_height: number
   created_at: string
@@ -32,6 +33,7 @@ export interface PersonalAddressListItem {
   contract_balance?: string
   contract_balance_height?: number
   transaction_count: number
+  utxo_count?: number  // UTXO数量（仅BTC使用）
   is_active: boolean
   balance_height: number
   created_at: string
@@ -60,6 +62,7 @@ export interface PersonalAddressDetail {
 export interface CreatePersonalAddressRequest {
   address: string
   label: string
+  chain?: string  // 区块链类型：eth, btc, sol, other
   type?: string
   contract_id?: number  // 使用与后端一致的字段名
   authorized_addresses?: string[]
@@ -92,4 +95,25 @@ export interface GetAuthorizedAddressesRequest {
 // 授权地址响应类型
 export interface AuthorizedAddressesResponse {
   authorized_addresses: PersonalAddressItem[]
+}
+
+// BTC UTXO类型定义
+export interface BTCUTXO {
+  id: number
+  chain: string
+  tx_id: string
+  vout_index: number
+  block_height: number
+  block_id?: number
+  address: string
+  script_pub_key: string
+  script_type: string
+  is_coinbase: boolean
+  value_satoshi: number
+  spent_tx_id?: string
+  spent_vin_index?: number
+  spent_height?: number
+  spent_at?: string
+  ctime: string
+  mtime: string
 }

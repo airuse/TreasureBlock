@@ -79,7 +79,7 @@ func autoMigrate() error {
 	return DB.AutoMigrate(
 		&models.Block{},
 		&models.Transaction{},
-		&models.BTCTransaction{},
+		&models.BTCUTXO{},
 		&models.Address{},
 		&models.User{},
 		&models.APIKey{},

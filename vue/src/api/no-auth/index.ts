@@ -145,6 +145,22 @@ export function getHomeStats(data: NoAuthGetHomeStatsRequest): Promise<ApiRespon
 }
 
 /**
+ * 获取比特币首页统计数据（游客模式）
+ */
+export function getBtcHomeStats(): Promise<ApiResponse<HomeOverview>> {
+  if (__USE_MOCK__) {
+    console.log('🔧 使用Mock数据 - getBtcHomeStats (游客模式)')
+    return handleMockNoAuthGetHomeStats({ chain: 'btc' } as any)
+  }
+
+  console.log('🌐 游客模式API - getBtcHomeStats')
+  return request({
+    url: '/api/no-auth/home/btc/stats',
+    method: 'GET'
+  })
+}
+
+/**
  * 获取合约列表（游客模式）
  */
 export function getContracts(data: NoAuthGetContractsRequest): Promise<ApiResponse<Contract[]>> {
@@ -172,5 +188,6 @@ export default {
   getTransactions,
   getTransactionsByBlockHeight,
   getHomeStats,
+  getBtcHomeStats,
   getContracts
 }

@@ -3,6 +3,7 @@ package services
 import (
 	"context"
 	"fmt"
+	"math"
 	"math/big"
 	"time"
 
@@ -10,6 +11,7 @@ import (
 	"blockChainBrowser/server/internal/repository"
 	"blockChainBrowser/server/internal/utils"
 
+	"github.com/ethereum/go-ethereum/core/types"
 	"github.com/sirupsen/logrus"
 )
 
@@ -62,9 +64,11 @@ func (fs *FeeScheduler) SetWebSocketHandler(handler interfaces.WebSocketBroadcas
 func (fs *FeeScheduler) Start(ctx context.Context) {
 	fs.logger.Info("费率调度器已启动")
 
-	// 每10秒更新一次费率
-	ticker := time.NewTicker(10 * time.Second)
-	defer ticker.Stop()
+	// ETH每10秒更新一次，BTC每30秒更新一次（Mempool数据变化较快）
+	ethTicker := time.NewTicker(10 * time.Second)
+	btcTicker := time.NewTicker(30 * time.Second)
+	defer ethTicker.Stop()
+	defer btcTicker.Stop()
 
 	// 立即执行一次
 	fs.updateFeeData(ctx)
@@ -74,8 +78,12 @@ func (fs *FeeScheduler) Start(ctx context.Context) {
 		case <-ctx.Done():
 			fs.logger.Info("费率调度器已停止")
 			return
-		case <-ticker.C:
-			fs.updateFeeData(ctx)
+		case <-ethTicker.C:
+			// 更新ETH费率
+			fs.updateETHFeeData(ctx)
+		case <-btcTicker.C:
+			// 更新BTC费率
+			fs.updateBTCFeeData(ctx)
 		}
 	}
 }
@@ -83,14 +91,23 @@ func (fs *FeeScheduler) Start(ctx context.Context) {
 // updateFeeData 更新费率数据
 func (fs *FeeScheduler) updateFeeData(ctx context.Context) {
 	// 更新ETH费率
+	fs.updateETHFeeData(ctx)
+	// 更新BTC费率
+	fs.updateBTCFeeData(ctx)
+}
+
+// updateETHFeeData 更新ETH费率数据
+func (fs *FeeScheduler) updateETHFeeData(ctx context.Context) {
 	ethFeeData, err := fs.getETHFeeData(ctx)
 	if err != nil {
 		fs.logger.Errorf("获取ETH费率失败: %v", err)
 	} else {
 		fs.broadcastFeeData("eth", ethFeeData)
 	}
+}
 
-	// 更新BTC费率（如果需要）
+// updateBTCFeeData 更新BTC费率数据
+func (fs *FeeScheduler) updateBTCFeeData(ctx context.Context) {
 	btcFeeData, err := fs.getBTCFeeData(ctx)
 	if err != nil {
 		fs.logger.Errorf("获取BTC费率失败: %v", err)
@@ -167,41 +184,58 @@ func (fs *FeeScheduler) getETHFeeData(ctx context.Context) (*FeeLevels, error) {
 
 // getBTCFeeData 获取BTC费率数据
 func (fs *FeeScheduler) getBTCFeeData(ctx context.Context) (*FeeLevels, error) {
-	// BTC费率计算逻辑
-	// 这里可以根据需要实现BTC的费率计算
-	// 暂时返回默认值
-	return &FeeLevels{
+	// 获取最新区块信息
+	latestBlock, err := fs.getLatestBTCBlock(ctx)
+	if err != nil {
+		fs.logger.Errorf("获取最新BTC区块失败: %v", err)
+		return fs.getDefaultBTCFeeData(), nil
+	}
+
+	// 基于最近3个区块计算费率
+	feeRates, err := fs.calculateBTCFeeRatesFromHistory(ctx)
+	if err != nil {
+		fs.logger.Warnf("计算BTC费率失败，使用默认值: %v", err)
+		return fs.getDefaultBTCFeeData(), nil
+	}
+
+	// 计算网络拥堵状态
+	congestion := fs.calculateBTCNetworkCongestion(feeRates.Normal)
+
+	// 创建费率等级
+	feeLevels := &FeeLevels{
 		Slow: FeeData{
 			Chain:             "btc",
-			BaseFee:           "10", // 10 sat/vB
-			MaxPriorityFee:    "10",
-			MaxFee:            "10",
-			GasPrice:          "10",
+			BaseFee:           feeRates.Slow,
+			MaxPriorityFee:    feeRates.Slow,
+			MaxFee:            feeRates.Slow,
+			GasPrice:          feeRates.Slow,
 			LastUpdated:       time.Now().Unix(),
-			BlockNumber:       0,
-			NetworkCongestion: "normal",
+			BlockNumber:       latestBlock.Number,
+			NetworkCongestion: congestion,
 		},
 		Normal: FeeData{
 			Chain:             "btc",
-			BaseFee:           "20", // 20 sat/vB
-			MaxPriorityFee:    "20",
-			MaxFee:            "20",
-			GasPrice:          "20",
+			BaseFee:           feeRates.Normal,
+			MaxPriorityFee:    feeRates.Normal,
+			MaxFee:            feeRates.Normal,
+			GasPrice:          feeRates.Normal,
 			LastUpdated:       time.Now().Unix(),
-			BlockNumber:       0,
-			NetworkCongestion: "normal",
+			BlockNumber:       latestBlock.Number,
+			NetworkCongestion: congestion,
 		},
 		Fast: FeeData{
 			Chain:             "btc",
-			BaseFee:           "50", // 50 sat/vB
-			MaxPriorityFee:    "50",
-			MaxFee:            "50",
-			GasPrice:          "50",
+			BaseFee:           feeRates.Fast,
+			MaxPriorityFee:    feeRates.Fast,
+			MaxFee:            feeRates.Fast,
+			GasPrice:          feeRates.Fast,
 			LastUpdated:       time.Now().Unix(),
-			BlockNumber:       0,
-			NetworkCongestion: "normal",
+			BlockNumber:       latestBlock.Number,
+			NetworkCongestion: congestion,
 		},
-	}, nil
+	}
+
+	return feeLevels, nil
 }
 
 // BlockInfo 区块信息结构
@@ -213,6 +247,39 @@ type BlockInfo struct {
 	Timestamp uint64
 }
 
+// BTCBlockInfo BTC区块信息结构
+type BTCBlockInfo struct {
+	Number    uint64
+	Hash      string
+	Timestamp uint64
+	TxCount   int
+}
+
+// BTCFeeRates BTC费率结构
+type BTCFeeRates struct {
+	Slow   string // sat/vB
+	Normal string // sat/vB
+	Fast   string // sat/vB
+}
+
+// BTCTransaction BTC交易结构
+type BTCTransaction struct {
+	TxID       string
+	Fee        int64 // 交易费 (satoshi)
+	Size       int   // 交易大小 (bytes)
+	FeeRate    int64 // 费率 (satoshi per vbyte)
+	IsCoinbase bool  // 是否为coinbase交易
+}
+
+// BTCMempoolTransaction Mempool中的BTC交易结构
+type BTCMempoolTransaction struct {
+	TxID    string
+	Fee     int64 // 交易费 (satoshi)
+	Size    int   // 交易大小 (bytes)
+	FeeRate int64 // 费率 (satoshi per vbyte)
+	Time    int64 // 进入Mempool的时间戳
+}
+
 // getLatestBlock 获取最新区块
 func (fs *FeeScheduler) getLatestBlock(ctx context.Context, chain string) (*BlockInfo, error) {
 	// 使用RPCClientManager获取最新区块号
@@ -222,17 +289,34 @@ func (fs *FeeScheduler) getLatestBlock(ctx context.Context, chain string) (*Bloc
 	}
 
 	// 使用RPCClientManager获取区块详情
-	block, err := fs.rpcManager.GetBlockByNumber(ctx, chain, big.NewInt(int64(blockNumber)))
+	blockInterface, err := fs.rpcManager.GetBlockByNumber(ctx, chain, big.NewInt(int64(blockNumber)))
 	if err != nil {
 		return nil, fmt.Errorf("获取区块详情失败: %v", err)
 	}
 
+	// 根据链类型解析区块数据
+	if chain == "eth" {
+		block, ok := blockInterface.(*types.Block)
+		if !ok {
+			return nil, fmt.Errorf("无效的ETH区块数据格式")
+		}
+
+		return &BlockInfo{
+			Number:    blockNumber,
+			BaseFee:   block.BaseFee(),
+			GasUsed:   block.GasUsed(),
+			GasLimit:  block.GasLimit(),
+			Timestamp: block.Time(),
+		}, nil
+	}
+
+	// 对于其他链，返回默认值
 	return &BlockInfo{
 		Number:    blockNumber,
-		BaseFee:   block.BaseFee(),
-		GasUsed:   block.GasUsed(),
-		GasLimit:  block.GasLimit(),
-		Timestamp: block.Time(),
+		BaseFee:   big.NewInt(20000000000), // 默认20 Gwei
+		GasUsed:   0,
+		GasLimit:  0,
+		Timestamp: 0,
 	}, nil
 }
 
@@ -252,9 +336,16 @@ func (fs *FeeScheduler) calculateMaxPriorityFeeFromHistory(ctx context.Context, 
 	}
 
 	previousBlockNumber := currentBlockNumber - 1
-	block, err := fs.rpcManager.GetBlockByNumber(ctx, "eth", big.NewInt(int64(previousBlockNumber)))
+	blockInterface, err := fs.rpcManager.GetBlockByNumber(ctx, "eth", big.NewInt(int64(previousBlockNumber)))
 	if err != nil {
 		fs.logger.Warnf("获取上一个区块失败，使用默认费率: %v", err)
+		return "2000000000", nil // 默认2 Gwei
+	}
+
+	// 将interface{}转换为ETH区块类型
+	block, ok := blockInterface.(*types.Block)
+	if !ok {
+		fs.logger.Warnf("无效的ETH区块数据格式，使用默认费率")
 		return "2000000000", nil // 默认2 Gwei
 	}
 
@@ -474,6 +565,175 @@ func (fs *FeeScheduler) GetLastFeeData(chain string) *FeeLevels {
 // GetAllLastFeeData 获取所有链的上一次推送的费率数据
 func (fs *FeeScheduler) GetAllLastFeeData() map[string]*FeeLevels {
 	return fs.lastFeeData
+}
+
+// getLatestBTCBlock 获取最新BTC区块
+func (fs *FeeScheduler) getLatestBTCBlock(ctx context.Context) (*BTCBlockInfo, error) {
+	// 使用RPCClientManager获取最新区块号
+	blockNumber, err := fs.rpcManager.GetBlockNumber(ctx, "btc")
+	if err != nil {
+		return nil, fmt.Errorf("获取BTC区块号失败: %v", err)
+	}
+
+	// 获取区块详情
+	blockInterface, err := fs.rpcManager.GetBlockByNumber(ctx, "btc", big.NewInt(int64(blockNumber)))
+	if err != nil {
+		return nil, fmt.Errorf("获取BTC区块详情失败: %v", err)
+	}
+
+	// 将interface{}转换为map[string]interface{}
+	block, ok := blockInterface.(map[string]interface{})
+	if !ok {
+		return nil, fmt.Errorf("无效的区块数据格式")
+	}
+
+	// 解析区块信息
+	hash, _ := block["hash"].(string)
+	timestamp, _ := block["time"].(float64)
+	txs, _ := block["tx"].([]interface{})
+
+	return &BTCBlockInfo{
+		Number:    blockNumber,
+		Hash:      hash,
+		Timestamp: uint64(timestamp),
+		TxCount:   len(txs),
+	}, nil
+}
+
+// getBTCMempoolFeeRates 获取BTC Mempool中的费率数据
+func (fs *FeeScheduler) getBTCMempoolFeeRates(ctx context.Context) ([]float64, error) {
+	// 获取BTC故障转移管理器
+	fo, exists := fs.rpcManager.GetBTCFailover("btc")
+	if !exists {
+		return nil, fmt.Errorf("未找到BTC故障转移管理器")
+	}
+
+	// 获取Mempool中的交易
+	mempoolTxs, err := fo.GetMempoolTransactions(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("获取Mempool交易失败: %w", err)
+	}
+
+	var feeRates []float64
+	for _, tx := range mempoolTxs {
+		if tx.FeeRate > 0 {
+			feeRates = append(feeRates, tx.FeeRate)
+		}
+	}
+
+	fs.logger.Infof("从Mempool获取到%d笔交易的费率数据", len(feeRates))
+	return feeRates, nil
+}
+
+// calculateBTCFeeRatesFromMempool 基于Mempool数据计算费率
+func (fs *FeeScheduler) calculateBTCFeeRatesFromMempool(feeRates []float64) (*BTCFeeRates, error) {
+	if len(feeRates) == 0 {
+		return &BTCFeeRates{
+			Slow:   "10.0",
+			Normal: "20.0",
+			Fast:   "50.0",
+		}, nil
+	}
+
+	// 计算不同等级的费率（一位小数）
+	slowRate := fs.calculateBTCPercentileFloat(feeRates, 20)
+	normalRate := fs.calculateBTCPercentileFloat(feeRates, 50)
+	fastRate := fs.calculateBTCPercentileFloat(feeRates, 80)
+
+	fs.logger.Infof("基于Mempool计算BTC费率: 慢速=%.1f sat/vB，普通=%.1f sat/vB，快速=%.1f sat/vB",
+		slowRate, normalRate, fastRate)
+
+	return &BTCFeeRates{
+		Slow:   fmt.Sprintf("%.1f", slowRate),
+		Normal: fmt.Sprintf("%.1f", normalRate),
+		Fast:   fmt.Sprintf("%.1f", fastRate),
+	}, nil
+}
+
+// calculateBTCFeeRatesFromHistory 基于Mempool和历史数据计算BTC费率
+func (fs *FeeScheduler) calculateBTCFeeRatesFromHistory(ctx context.Context) (*BTCFeeRates, error) {
+	// 使用Mempool数据（实时性最好）
+	mempoolRates, err := fs.getBTCMempoolFeeRates(ctx)
+	if err != nil {
+		fs.logger.Warnf("获取Mempool费率失败: %v", err)
+	}
+	// 使用Mempool数据计算费率
+	return fs.calculateBTCFeeRatesFromMempool(mempoolRates)
+}
+
+// calculateBTCPercentileFloat 计算百分位（浮点）
+func (fs *FeeScheduler) calculateBTCPercentileFloat(feeRates []float64, percentile int) float64 {
+	if len(feeRates) == 0 {
+		return 20.0
+	}
+	// 简单排序
+	for i := 0; i < len(feeRates)-1; i++ {
+		for j := i + 1; j < len(feeRates); j++ {
+			if feeRates[i] > feeRates[j] {
+				feeRates[i], feeRates[j] = feeRates[j], feeRates[i]
+			}
+		}
+	}
+	idx := (len(feeRates) * percentile) / 100
+	if idx >= len(feeRates) {
+		idx = len(feeRates) - 1
+	}
+	// 一位小数
+	v := feeRates[idx]
+	return math.Round(v*10) / 10
+}
+
+// calculateBTCNetworkCongestion 计算BTC网络拥堵状态
+func (fs *FeeScheduler) calculateBTCNetworkCongestion(normalRate string) string {
+	rate, err := fmt.Sscanf(normalRate, "%f", new(float64))
+	if err != nil {
+		return "normal"
+	}
+
+	// 根据费率判断拥堵状态
+	if rate > 100 {
+		return "high" // 高拥堵
+	} else if rate > 50 {
+		return "medium" // 中等拥堵
+	} else {
+		return "low" // 低拥堵
+	}
+}
+
+// getDefaultBTCFeeData 获取默认BTC费率数据
+func (fs *FeeScheduler) getDefaultBTCFeeData() *FeeLevels {
+	return &FeeLevels{
+		Slow: FeeData{
+			Chain:             "btc",
+			BaseFee:           "10", // 10 sat/vB
+			MaxPriorityFee:    "10",
+			MaxFee:            "10",
+			GasPrice:          "10",
+			LastUpdated:       time.Now().Unix(),
+			BlockNumber:       0,
+			NetworkCongestion: "normal",
+		},
+		Normal: FeeData{
+			Chain:             "btc",
+			BaseFee:           "20", // 20 sat/vB
+			MaxPriorityFee:    "20",
+			MaxFee:            "20",
+			GasPrice:          "20",
+			LastUpdated:       time.Now().Unix(),
+			BlockNumber:       0,
+			NetworkCongestion: "normal",
+		},
+		Fast: FeeData{
+			Chain:             "btc",
+			BaseFee:           "50", // 50 sat/vB
+			MaxPriorityFee:    "50",
+			MaxFee:            "50",
+			GasPrice:          "50",
+			LastUpdated:       time.Now().Unix(),
+			BlockNumber:       0,
+			NetworkCongestion: "normal",
+		},
+	}
 }
 
 // Stop 停止费率调度器

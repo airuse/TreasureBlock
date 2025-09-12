@@ -111,47 +111,48 @@ type UpdateTransactionRequest struct {
 
 // TransactionResponse 交易响应DTO
 type TransactionResponse struct {
-	ID                   uint      `json:"id"`
-	TxID                 string    `json:"tx_id"`
-	TxType               uint8     `json:"tx_type"`
-	Confirm              uint      `json:"confirm"`
-	Status               uint8     `json:"status"`
-	SendStatus           uint8     `json:"send_status"`
-	Balance              string    `json:"balance"`
-	Amount               string    `json:"amount"`
-	TransID              uint      `json:"trans_id"`
-	Symbol               string    `json:"symbol"`
-	AddressFrom          string    `json:"address_from"`
-	AddressTo            string    `json:"address_to"`
-	GasLimit             uint      `json:"gas_limit"`
-	GasPrice             string    `json:"gas_price"`
-	GasUsed              uint      `json:"gas_used"`
-	MaxFeePerGas         string    `json:"max_fee_per_gas,omitempty"`
-	MaxPriorityFeePerGas string    `json:"max_priority_fee_per_gas,omitempty"`
-	EffectiveGasPrice    string    `json:"effective_gas_price,omitempty"`
-	Fee                  string    `json:"fee"`
-	UsedFee              *string   `json:"used_fee"`
-	Height               uint64    `json:"height"`
-	ContractAddr         string    `json:"contract_addr"`
-	Hex                  *string   `json:"hex"`
-	TxScene              string    `json:"tx_scene"`
-	Remark               string    `json:"remark"`
-	IsToken              bool      `json:"is_token"`
-	TokenName            string    `json:"token_name,omitempty"`            // 代币全名
-	TokenSymbol          string    `json:"token_symbol,omitempty"`          // 代币符号
-	TokenDecimals        uint8     `json:"token_decimals,omitempty"`        // 代币精度
-	TokenDescription     string    `json:"token_description,omitempty"`     // 代币描述
-	TokenWebsite         string    `json:"token_website,omitempty"`         // 代币官网
-	TokenExplorer        string    `json:"token_explorer,omitempty"`        // 代币浏览器链接
-	TokenLogo            string    `json:"token_logo,omitempty"`            // 代币Logo
-	TokenMarketCapRank   *int      `json:"token_market_cap_rank,omitempty"` // 市值排名
-	TokenIsStablecoin    bool      `json:"token_is_stablecoin,omitempty"`   // 是否为稳定币
-	TokenIsVerified      bool      `json:"token_is_verified,omitempty"`     // 是否已验证
-	Nonce                uint64    `json:"nonce"`                           // 添加Nonce字段
-	Vin                  *string   `json:"vin,omitempty"`                   // BTC输入数据(JSON格式)
-	Vout                 *string   `json:"vout,omitempty"`                  // BTC输出数据(JSON格式)
-	Ctime                time.Time `json:"ctime"`
-	Mtime                time.Time `json:"mtime"`
+	ID                   uint              `json:"id"`
+	TxID                 string            `json:"tx_id"`
+	TxType               uint8             `json:"tx_type"`
+	Confirm              uint              `json:"confirm"`
+	Status               uint8             `json:"status"`
+	SendStatus           uint8             `json:"send_status"`
+	Balance              string            `json:"balance"`
+	Amount               string            `json:"amount"`
+	TransID              uint              `json:"trans_id"`
+	Symbol               string            `json:"symbol"`
+	AddressFrom          string            `json:"address_from"`
+	AddressTo            string            `json:"address_to"`
+	GasLimit             uint              `json:"gas_limit"`
+	GasPrice             string            `json:"gas_price"`
+	GasUsed              uint              `json:"gas_used"`
+	MaxFeePerGas         string            `json:"max_fee_per_gas,omitempty"`
+	MaxPriorityFeePerGas string            `json:"max_priority_fee_per_gas,omitempty"`
+	EffectiveGasPrice    string            `json:"effective_gas_price,omitempty"`
+	Fee                  string            `json:"fee"`
+	UsedFee              *string           `json:"used_fee"`
+	Height               uint64            `json:"height"`
+	ContractAddr         string            `json:"contract_addr"`
+	Hex                  *string           `json:"hex"`
+	TxScene              string            `json:"tx_scene"`
+	Remark               string            `json:"remark"`
+	IsToken              bool              `json:"is_token"`
+	TokenName            string            `json:"token_name,omitempty"`            // 代币全名
+	TokenSymbol          string            `json:"token_symbol,omitempty"`          // 代币符号
+	TokenDecimals        uint8             `json:"token_decimals,omitempty"`        // 代币精度
+	TokenDescription     string            `json:"token_description,omitempty"`     // 代币描述
+	TokenWebsite         string            `json:"token_website,omitempty"`         // 代币官网
+	TokenExplorer        string            `json:"token_explorer,omitempty"`        // 代币浏览器链接
+	TokenLogo            string            `json:"token_logo,omitempty"`            // 代币Logo
+	TokenMarketCapRank   *int              `json:"token_market_cap_rank,omitempty"` // 市值排名
+	TokenIsStablecoin    bool              `json:"token_is_stablecoin,omitempty"`   // 是否为稳定币
+	TokenIsVerified      bool              `json:"token_is_verified,omitempty"`     // 是否已验证
+	Nonce                uint64            `json:"nonce"`                           // 添加Nonce字段
+	Vin                  *string           `json:"vin,omitempty"`                   // BTC输入数据(JSON格式)
+	Vout                 *string           `json:"vout,omitempty"`                  // BTC输出数据(JSON格式)
+	BTCUTXOs             []*models.BTCUTXO `json:"btc_utxos,omitempty"`             // BTC UTXO数据(JSON格式)
+	Ctime                time.Time         `json:"ctime"`
+	Mtime                time.Time         `json:"mtime"`
 }
 
 // TransactionSummaryResponse 交易摘要响应DTO
@@ -376,8 +377,9 @@ func NewTransactionResponse(tx *models.Transaction) *TransactionResponse {
 			}
 			return nil
 		}(),
-		Ctime: tx.Ctime,
-		Mtime: tx.Mtime,
+		Ctime:    tx.Ctime,
+		Mtime:    tx.Mtime,
+		BTCUTXOs: tx.BTCUTXOs,
 	}
 }
 

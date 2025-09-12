@@ -828,7 +828,7 @@ const loadContracts = async () => {
 const loadAddresses = async () => {
   loading.value = true
   try {
-    const response = await getPersonalAddresses()
+    const response = await getPersonalAddresses("eth")
     if (response.success) {
       addressesList.value = response.data || []
     } else {
@@ -853,6 +853,7 @@ const addAddress = async () => {
   try {
     const addressData = {
       ...newAddress.value,
+      chain: 'eth',  // 为ETH地址添加chain字段
       authorized_addresses: filteredAuthorizedAddresses
     }
     

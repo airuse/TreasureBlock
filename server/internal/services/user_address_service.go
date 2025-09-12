@@ -19,7 +19,7 @@ import (
 // UserAddressService 用户地址服务接口
 type UserAddressService interface {
 	CreateAddress(userID uint, req *dto.CreateUserAddressRequest) (*dto.UserAddressResponse, error)
-	GetUserAddresses(userID uint) ([]dto.UserAddressResponse, error)
+	GetUserAddresses(userID uint, chain string) ([]dto.UserAddressResponse, error)
 	UpdateAddress(userID uint, addressID uint, req *dto.UpdateUserAddressRequest) (*dto.UserAddressResponse, error)
 	DeleteAddress(userID uint, addressID uint) error
 	GetAddressByID(userID uint, addressID uint) (*dto.UserAddressResponse, error)
@@ -30,6 +30,7 @@ type UserAddressService interface {
 	UpdateReduceWalletBalance(ID uint, amount uint64) error
 	GetAddressesByAuthorizedAddress(authorizedAddr string) ([]dto.UserAddressResponse, error)
 	RefreshAddressBalances(userID uint, addressID uint) (*dto.UserAddressResponse, error)
+	GetAddressUTXOs(userID uint, address string) ([]*models.BTCUTXO, error)
 }
 
 // userAddressService 用户地址服务实现
@@ -39,33 +40,38 @@ type userAddressService struct {
 	transactionRepo repository.TransactionRepository
 	contractRepo    repository.ContractRepository
 	contractCall    ContractCallService
+	btcUtxoService  BTCUTXOService
+	baseConfigRepo  repository.BaseConfigRepository
 }
 
 // NewUserAddressService 创建用户地址服务
-func NewUserAddressService(userAddressRepo repository.UserAddressRepository, blockRepo repository.BlockRepository, contractRepo repository.ContractRepository, contractCall ContractCallService) UserAddressService {
+func NewUserAddressService(userAddressRepo repository.UserAddressRepository, blockRepo repository.BlockRepository, contractRepo repository.ContractRepository, contractCall ContractCallService, btcUtxoService BTCUTXOService, baseConfigRepo repository.BaseConfigRepository) UserAddressService {
 	return &userAddressService{
 		userAddressRepo: userAddressRepo,
 		blockRepo:       blockRepo,
 		transactionRepo: repository.NewTransactionRepository(),
 		contractRepo:    contractRepo,
 		contractCall:    contractCall,
+		btcUtxoService:  btcUtxoService,
+		baseConfigRepo:  baseConfigRepo,
 	}
 }
 
 // CreateAddress 创建用户地址
 func (s *userAddressService) CreateAddress(userID uint, req *dto.CreateUserAddressRequest) (*dto.UserAddressResponse, error) {
-	// 验证地址格式
-	if !s.isValidAddress(req.Address) {
-		return nil, errors.New("无效的地址格式")
-	}
+	// 验证地址格式（按链类型）
 
-	// 自动获取当前区块高度和地址余额
-	createdHeight, balance, err := s.getCurrentBlockHeightAndBalance(req.Address)
-	if err != nil {
-		// 如果获取失败，记录错误日志，使用默认值，但不影响地址创建
-		// fmt.Printf("警告：获取区块高度和余额失败: %v，使用默认值\n", err)
-		createdHeight = 0
-		balance = "0"
+	// 自动获取当前区块高度和地址余额（仅对ETH执行）
+	createdHeight := uint64(0)
+	balance := "0"
+	if strings.ToLower(req.Chain) == "eth" {
+		var err error
+		createdHeight, balance, err = s.getCurrentBlockHeightAndBalance(req.Address)
+		if err != nil {
+			// 如果获取失败，记录错误日志，使用默认值，但不影响地址创建
+			createdHeight = 0
+			balance = "0"
+		}
 	}
 
 	// 处理授权地址，确保空数组正确处理
@@ -83,6 +89,7 @@ func (s *userAddressService) CreateAddress(userID uint, req *dto.CreateUserAddre
 	userAddress := &models.UserAddress{
 		UserID:              userID,
 		Address:             req.Address,
+		Chain:               strings.ToLower(req.Chain),
 		Label:               req.Label,
 		Type:                req.Type,
 		ContractID:          req.ContractID,
@@ -130,7 +137,7 @@ func (s *userAddressService) CreateAddress(userID uint, req *dto.CreateUserAddre
 }
 
 // GetUserAddresses 获取用户的所有地址
-func (s *userAddressService) GetUserAddresses(userID uint) ([]dto.UserAddressResponse, error) {
+func (s *userAddressService) GetUserAddresses(userID uint, chain string) ([]dto.UserAddressResponse, error) {
 	addresses, err := s.userAddressRepo.GetByUserID(userID)
 	if err != nil {
 		return nil, err
@@ -138,6 +145,9 @@ func (s *userAddressService) GetUserAddresses(userID uint) ([]dto.UserAddressRes
 
 	var responses []dto.UserAddressResponse
 	for _, addr := range addresses {
+		if !strings.EqualFold(addr.Chain, chain) {
+			continue
+		}
 		// 直接返回存储的余额，不进行动态计算
 		// 余额现在由交易处理和合约解析自动维护
 		responses = append(responses, *s.convertToResponse(&addr))
@@ -265,6 +275,7 @@ func (s *userAddressService) convertToResponse(address *models.UserAddress) *dto
 	return &dto.UserAddressResponse{
 		ID:                  address.ID,
 		Address:             address.Address,
+		Chain:               address.Chain,
 		Label:               address.Label,
 		Type:                address.Type,
 		ContractID:          address.ContractID,
@@ -273,6 +284,7 @@ func (s *userAddressService) convertToResponse(address *models.UserAddress) *dto
 		Balance:             address.Balance,
 		ContractBalance:     address.ContractBalance,
 		TransactionCount:    address.TransactionCount,
+		UTXOCount:           address.UTXOCount,
 		IsActive:            address.IsActive,
 		BalanceHeight:       address.BalanceHeight,
 		CreatedAt:           address.CreatedAt.Format("2006-01-02 15:04:05"),
@@ -479,11 +491,38 @@ func (s *userAddressService) RefreshAddressBalances(userID uint, addressID uint)
 		return nil, fmt.Errorf("无权限操作此地址")
 	}
 
-	// 刷新钱包余额
-	height, bal, err := s.getCurrentBlockHeightAndBalance(addr.Address)
-	if err == nil {
-		addr.Balance = &bal
-		addr.BalanceHeight = height
+	// 根据链类型刷新钱包余额
+	height := uint64(0)
+	bal := "0"
+
+	switch strings.ToLower(addr.Chain) {
+	case "eth":
+		var err error
+		height, bal, err = s.getCurrentBlockHeightAndBalance(addr.Address)
+		if err == nil {
+			addr.Balance = &bal
+			addr.BalanceHeight = height
+		}
+	case "btc":
+		// 对于BTC，从UTXO计算余额
+		var err error
+		height, bal, err = s.getBTCBalanceFromUTXO(addr.Address)
+		if err == nil {
+			addr.Balance = &bal
+			addr.BalanceHeight = height
+		}
+		// 同时更新UTXO数量
+		if s.btcUtxoService != nil {
+			ctx := context.Background()
+			utxoCount, utxoErr := s.btcUtxoService.GetUTXOCountByAddress(ctx, "btc", addr.Address)
+			if utxoErr == nil {
+				addr.UTXOCount = utxoCount
+			}
+		}
+	default:
+		// 其他链类型暂时不处理
+		height = 0
+		bal = "0"
 	}
 
 	// 刷新合约余额与授权额度（仅当为合约/被授权合约且具备依赖）
@@ -522,4 +561,76 @@ func (s *userAddressService) RefreshAddressBalances(userID uint, addressID uint)
 		return nil, err
 	}
 	return s.convertToResponse(addr), nil
+}
+
+// getBTCBalanceFromUTXO 从外部API获取BTC余额
+func (s *userAddressService) getBTCBalanceFromUTXO(address string) (uint64, string, error) {
+	// 直接从外部API获取余额
+	btcFailover, err := utils.NewBTCFailoverFromChain("btc")
+	if err != nil {
+		return 0, "0", fmt.Errorf("创建BTC故障转移管理器失败: %w", err)
+	}
+
+	ctx := context.Background()
+
+	// 获取最新高度
+	fmt.Println("开始获取最新高度")
+	height, err := btcFailover.GetLatestBlockHeight(ctx)
+	if err != nil {
+		return 0, "0", fmt.Errorf("获取最新高度失败: %w", err)
+	}
+	balanceHeightOffset, err := s.baseConfigRepo.GetByConfigKey(ctx, "confirmations_btc", 1, "scan")
+
+	if err != nil {
+		return 0, "0", fmt.Errorf("获取平衡高度偏移失败: %w", err)
+	}
+
+	// 解析配置值
+	offset, err := strconv.ParseUint(balanceHeightOffset.ConfigValue, 10, 64)
+	if err != nil {
+		return 0, "0", fmt.Errorf("解析高度偏移配置失败: %w", err)
+	}
+
+	// 高度等于最新高度- 安全高度偏移
+	if height > offset {
+		height = height - offset
+	} else {
+		height = 0
+	}
+	// 使用最新高度获取余额
+	apiResponse, apiErr := btcFailover.GetBalanceAtHeight(ctx, address, height)
+	if apiErr != nil {
+		return 0, "0", fmt.Errorf("获取BTC余额失败: %w", apiErr)
+	}
+
+	return apiResponse.Height, apiResponse.Balance, nil
+}
+
+// GetAddressUTXOs 获取地址的UTXO列表
+func (s *userAddressService) GetAddressUTXOs(userID uint, address string) ([]*models.BTCUTXO, error) {
+	ctx := context.Background()
+
+	// 首先验证地址是否存在
+	userAddress, err := s.userAddressRepo.GetByAddress(address)
+	if err != nil {
+		return nil, fmt.Errorf("地址不存在: %w", err)
+	}
+
+	// 验证地址是否属于该用户
+	if userAddress.UserID != userID {
+		return nil, fmt.Errorf("地址不属于当前用户")
+	}
+
+	// 只允许BTC地址获取UTXO
+	if userAddress.Chain != "btc" {
+		return nil, fmt.Errorf("只有BTC地址支持UTXO查询")
+	}
+
+	// 获取UTXO列表
+	utxos, err := s.btcUtxoService.GetUTXOsByAddress(ctx, "btc", address)
+	if err != nil {
+		return nil, fmt.Errorf("获取UTXO列表失败: %w", err)
+	}
+
+	return utxos, nil
 }

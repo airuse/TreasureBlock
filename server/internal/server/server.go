@@ -52,6 +52,7 @@ func New() *Server {
 	statsRepo := repository.NewStatsRepository()
 	earningsRepo := repository.NewEarningsRepository(database.GetDB())
 	userBalanceRepo := repository.NewUserBalanceRepository(database.GetDB())
+	btcUTXORepo := repository.NewBTCUTXORepository(database.GetDB())
 
 	// RPC 管理器与合约调用服务
 	rpcManager := utils.NewRPCClientManager()
@@ -62,12 +63,13 @@ func New() *Server {
 
 	// 创建服务
 	blockService := services.NewBlockService(blockRepo)
-	txService := services.NewTransactionService(txRepo, coinConfigRepo)
+	txService := services.NewTransactionService(txRepo, coinConfigRepo, btcUTXORepo)
 	addressService := services.NewAddressService(addressRepo)
 	assetService := services.NewAssetService(assetRepo)
 	baseConfigService := services.NewBaseConfigService(baseConfigRepo)
 	coinConfigService := services.NewCoinConfigService(coinConfigRepo)
 	contractService := services.NewContractService(contractRepo, coinConfigRepo)
+	btcUTXOService := services.NewBTCUTXOService(btcUTXORepo)
 	// 权限服务依赖
 	roleRepo := repository.NewRoleRepository(database.GetDB())
 	permissionRepo := repository.NewPermissionRepository(database.GetDB())
@@ -80,7 +82,7 @@ func New() *Server {
 		config.AppConfig.Security.JWTSecret,
 		config.AppConfig.Security.JWTExpiration,
 	)
-	userAddressService := services.NewUserAddressService(userAddressRepo, blockRepo, contractRepo, contractCallService)
+	userAddressService := services.NewUserAddressService(userAddressRepo, blockRepo, contractRepo, contractCallService, btcUTXOService, baseConfigRepo)
 	statsService := services.NewStatsService(statsRepo)
 
 	// 创建收益相关服务
@@ -117,7 +119,7 @@ func New() *Server {
 	earningsHandler := handlers.NewEarningsHandler(earningsService)
 	userTransactionHandler := handlers.NewUserTransactionHandler()
 	contractParseResultHandler := handlers.NewContractParseResultHandler(contractParseResultService)
-	blockVerificationHandler := handlers.NewBlockVerificationHandler(blockVerificationService, earningsService, contractParseResultService)
+	blockVerificationHandler := handlers.NewBlockVerificationHandler(blockVerificationService, earningsService, contractParseResultService, btcUTXOService, txService)
 
 	// 启动WebSocket处理器
 	wsHandler.Start()

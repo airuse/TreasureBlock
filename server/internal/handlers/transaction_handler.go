@@ -344,37 +344,6 @@ func (h *TransactionHandler) CreateTransaction(c *gin.Context) {
 
 	}
 
-	// 如果是BTC且带有TurnsOut，保存到btc_transaction表
-	if req.Chain == "btc" && req.TurnsOut != nil {
-		btc := &models.BTCTransaction{
-			TxID:        req.TurnsOut.TxID,
-			BlockHash:   req.TurnsOut.BlockHash,
-			BlockHeight: req.TurnsOut.BlockHeight,
-			From:        req.TurnsOut.From,
-			To:          req.TurnsOut.To,
-			Amount:      req.TurnsOut.Amount,
-			Fee:         req.TurnsOut.Fee,
-			Size:        req.TurnsOut.Size,
-			Weight:      req.TurnsOut.Weight,
-			LockTime:    req.TurnsOut.LockTime,
-			Hex:         req.TurnsOut.Hex,
-		}
-		if req.TurnsOut.Vin != nil {
-			if b, err := json.Marshal(req.TurnsOut.Vin); err == nil {
-				btc.VinJSON = string(b)
-			}
-		}
-		if req.TurnsOut.Vout != nil {
-			if b, err := json.Marshal(req.TurnsOut.Vout); err == nil {
-				btc.VoutJSON = string(b)
-			}
-		}
-		if err := repository.NewBTCTransactionRepository().Create(btc); err != nil {
-			c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "创建BTC原生交易失败", "details": err.Error()})
-			return
-		}
-	}
-
 	tx := req.ToModel()
 	if err := h.txService.CreateTransaction(c.Request.Context(), tx); err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "创建交易失败", "details": err.Error()})
@@ -413,23 +382,16 @@ func (h *TransactionHandler) CreateTransactionsBatch(c *gin.Context) {
 		return
 	}
 
-	// 找到非合约交易，并更新余额
-	user_wallet_addresses, err := h.userAddressService.GetAllWalletAddressModels()
-	if err != nil {
-		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "获取用户地址失败", "details": err.Error()})
-		return
-	}
-
 	// 批量处理交易
 	var successCount int
 	var failedCount int
 	var errors []string
+	txModels := make([]*models.Transaction, 0)
+	receiptsData := make([]map[string]interface{}, 0)
 
-	txs := make([][]string, 0)
 	coinConfigs, err := h.coinConfigService.GetAllCoinConfigs(c.Request.Context())
 	if err != nil {
-		errors = append(errors, fmt.Sprintf("获取币种配置失败: %s", err))
-		failedCount++
+		c.JSON(http.StatusInternalServerError, gin.H{"success": false, "error": "获取币种配置失败", "details": err.Error()})
 		return
 	}
 	coinConfigMap := make(map[string]*models.CoinConfig)
@@ -541,41 +503,29 @@ func (h *TransactionHandler) CreateTransactionsBatch(c *gin.Context) {
 				}
 			}
 
-			if err := h.receiptService.CreateTransactionReceipt(c.Request.Context(), receiptData); err != nil {
-				errors = append(errors, fmt.Sprintf("第%d条交易凭证创建失败: %v", i+1, err))
-				failedCount++
-				continue
-			}
+			// 累积凭证，后续统一批量入库
+			receiptsData = append(receiptsData, receiptData)
 		}
 
-		// 创建交易记录
+		// 累积待批量创建的交易记录
 		tx := req.ToModel()
-		if err := h.txService.CreateTransaction(c.Request.Context(), tx); err != nil {
-			errors = append(errors, fmt.Sprintf("第%d条交易创建失败: %v", i+1, err))
-			failedCount++
-			continue
-		}
-		if _, ok := coinConfigMap[tx.AddressTo]; ok && req.Receipt != nil && req.Receipt.TransactionHash != nil {
-			txs = append(txs, []string{tx.TxID, *req.Receipt.TransactionHash})
-		}
-		successCount++
+		txModels = append(txModels, tx)
+	}
 
-		// 更新用户wallet钱包余额
-		for _, addr := range user_wallet_addresses {
-			if addr.BalanceHeight >= tx.Height {
-				// 余额高度大于等于当前余额高度不用修改！
-				continue
-			}
-			amount, err := strconv.ParseInt(tx.Amount, 10, 64)
-			if err != nil {
-				continue
-			}
-			if addr.Address == tx.AddressFrom {
-				h.userAddressService.UpdateReduceWalletBalance(addr.ID, uint64(amount))
-			}
-			if addr.Address == tx.AddressTo {
-				h.userAddressService.UpdateAddWalletBalance(addr.ID, uint64(amount))
-			}
+	// 真正批量插入交易
+	if len(txModels) > 0 {
+		if err := h.txService.CreateTransactionsBatch(c.Request.Context(), txModels); err != nil {
+			errors = append(errors, fmt.Sprintf("批量创建交易失败: %v", err))
+			failedCount += len(txModels)
+		} else {
+			successCount += len(txModels)
+		}
+	}
+
+	// 真正批量插入交易凭证
+	if len(receiptsData) > 0 {
+		if err := h.receiptService.CreateTransactionReceiptsBatch(c.Request.Context(), receiptsData); err != nil {
+			errors = append(errors, fmt.Sprintf("批量创建交易凭证失败: %v", err))
 		}
 	}
 
@@ -700,6 +650,98 @@ func (h *TransactionHandler) GetTransactionsByBlockHeight(c *gin.Context) {
 	})
 }
 
+// GetBTCTransactionsByBlockHeight 根据区块高度获取BTC交易列表
+func (h *TransactionHandler) GetBTCTransactionsByBlockHeight(c *gin.Context) {
+	blockHeightStr := c.Param("blockHeight")
+	if blockHeightStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "block height is required",
+		})
+		return
+	}
+
+	// 解析区块高度
+	blockHeight, err := strconv.ParseUint(blockHeightStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "invalid block height format",
+		})
+		return
+	}
+
+	// 解析分页参数（公开接口限制更严格）
+	pageStr := c.DefaultQuery("page", "1")
+	pageSizeStr := c.DefaultQuery("page_size", "50")
+	chain := c.Query("chain")
+
+	page, err := strconv.Atoi(pageStr)
+	if err != nil || page < 1 {
+		page = 1
+	}
+
+	pageSize, err := strconv.Atoi(pageSizeStr)
+	if err != nil || pageSize < 1 {
+		pageSize = 50
+	}
+
+	// 限制每页最大数量
+	const maxPageSize = 100
+	if pageSize > maxPageSize {
+		pageSize = maxPageSize
+	}
+
+	// 限制最大页码（防止深度翻页）
+	const maxPage = 10
+	if page > maxPage {
+		page = maxPage
+	}
+
+	// 调用服务获取交易
+	txs, total, err := h.txService.GetBTCTransactionsByBlockHeight(c.Request.Context(), blockHeight, page, pageSize, chain)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "获取区块交易失败",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	// 构建响应
+	txResponses := make([]*dto.TransactionResponse, len(txs))
+	for i, tx := range txs {
+		txResponses[i] = dto.NewTransactionResponse(tx)
+	}
+
+	// 计算分页信息
+	totalPages := (total + int64(pageSize) - 1) / int64(pageSize)
+
+	response := gin.H{
+		"transactions": txResponses,
+		"pagination": gin.H{
+			"current_page": page,
+			"page_size":    pageSize,
+			"total_pages":  totalPages,
+			"total_count":  total,
+		},
+		"block_height": blockHeight,
+		"chain":        chain,
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    response,
+		"message": "获取区块交易成功（公开接口）",
+		"limits": gin.H{
+			"max_page_size": maxPageSize,
+			"max_page":      maxPage,
+			"note":          "如需更多数据，请登录后使用完整API",
+		},
+	})
+}
+
 // GetTransactionsByBlockHeightPublic 根据区块高度获取交易列表（公开接口，有限制）
 func (h *TransactionHandler) GetTransactionsByBlockHeightPublic(c *gin.Context) {
 	blockHeightStr := c.Param("blockHeight")
@@ -750,6 +792,98 @@ func (h *TransactionHandler) GetTransactionsByBlockHeightPublic(c *gin.Context) 
 
 	// 调用服务获取交易
 	txs, total, err := h.txService.GetTransactionsByBlockHeight(c.Request.Context(), blockHeight, page, pageSize, chain)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "获取区块交易失败",
+			"details": err.Error(),
+		})
+		return
+	}
+
+	// 构建响应
+	txResponses := make([]*dto.TransactionResponse, len(txs))
+	for i, tx := range txs {
+		txResponses[i] = dto.NewTransactionResponse(tx)
+	}
+
+	// 计算分页信息
+	totalPages := (total + int64(pageSize) - 1) / int64(pageSize)
+
+	response := gin.H{
+		"transactions": txResponses,
+		"pagination": gin.H{
+			"current_page": page,
+			"page_size":    pageSize,
+			"total_pages":  totalPages,
+			"total_count":  total,
+		},
+		"block_height": blockHeight,
+		"chain":        chain,
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data":    response,
+		"message": "获取区块交易成功（公开接口）",
+		"limits": gin.H{
+			"max_page_size": maxPageSize,
+			"max_page":      maxPage,
+			"note":          "如需更多数据，请登录后使用完整API",
+		},
+	})
+}
+
+// GetBTCTransactionsByBlockHeightPublic 根据区块高度获取BTC 交易列表（公开接口，有限制）
+func (h *TransactionHandler) GetBTCTransactionsByBlockHeightPublic(c *gin.Context) {
+	blockHeightStr := c.Param("blockHeight")
+	if blockHeightStr == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "block height is required",
+		})
+		return
+	}
+
+	// 解析区块高度
+	blockHeight, err := strconv.ParseUint(blockHeightStr, 10, 64)
+	if err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "invalid block height format",
+		})
+		return
+	}
+
+	// 解析分页参数（公开接口限制更严格）
+	pageStr := c.DefaultQuery("page", "1")
+	pageSizeStr := c.DefaultQuery("page_size", "50")
+	chain := c.Query("chain")
+
+	page, err := strconv.Atoi(pageStr)
+	if err != nil || page < 1 {
+		page = 1
+	}
+
+	pageSize, err := strconv.Atoi(pageSizeStr)
+	if err != nil || pageSize < 1 {
+		pageSize = 50
+	}
+
+	// 限制每页最大数量
+	const maxPageSize = 100
+	if pageSize > maxPageSize {
+		pageSize = maxPageSize
+	}
+
+	// 限制最大页码（防止深度翻页）
+	const maxPage = 10
+	if page > maxPage {
+		page = maxPage
+	}
+
+	// 调用服务获取交易
+	txs, total, err := h.txService.GetBTCTransactionsByBlockHeight(c.Request.Context(), blockHeight, page, pageSize, chain)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"success": false,

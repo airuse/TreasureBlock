@@ -98,6 +98,56 @@ func (h *HomeHandler) GetHomeStats(c *gin.Context) {
 	c.JSON(http.StatusOK, response)
 }
 
+// GetBtcHomeStats 获取比特币首页统计数据（固定链为 btc）
+func (h *HomeHandler) GetBtcHomeStats(c *gin.Context) {
+	chain := "btc"
+
+	ctx := c.Request.Context()
+
+	// 获取概览数据
+	overview, err := h.getOverviewStats(ctx, chain)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "获取概览数据失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 获取最新区块
+	latestBlocks, err := h.getLatestBlocks(ctx, chain, 3)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "获取最新区块失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 获取最新交易
+	latestTransactions, err := h.getLatestTransactions(ctx, chain, 3)
+	if err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "获取最新交易失败: " + err.Error(),
+		})
+		return
+	}
+
+	// 构建响应数据
+	response := gin.H{
+		"success": true,
+		"data": gin.H{
+			"overview":           overview,
+			"latestBlocks":       latestBlocks,
+			"latestTransactions": latestTransactions,
+		},
+		"message": "成功获取比特币首页统计数据",
+	}
+
+	c.JSON(http.StatusOK, response)
+}
+
 // getOverviewStats 获取概览统计数据
 func (h *HomeHandler) getOverviewStats(ctx context.Context, chain string) (gin.H, error) {
 	// 使用并发查询优化性能
@@ -107,7 +157,7 @@ func (h *HomeHandler) getOverviewStats(ctx context.Context, chain string) (gin.H
 		err   error
 	}
 
-	resultChan := make(chan result, 6) // 缓冲通道，增加到6个查询
+	resultChan := make(chan result, 7) // 缓冲通道，增加到7个查询
 
 	// 并发执行所有统计查询
 	go func() {
@@ -129,11 +179,15 @@ func (h *HomeHandler) getOverviewStats(ctx context.Context, chain string) (gin.H
 	}()
 
 	go func() {
-		// 3. 最新区块的Base Fee
-		if baseFee, err := h.statsService.GetLatestBaseFee(ctx, chain); err == nil {
-			resultChan <- result{key: "baseFee", value: baseFee}
+		// 3. 最新区块的Base Fee（仅ETH）
+		if chain == "eth" {
+			if baseFee, err := h.statsService.GetLatestBaseFee(ctx, chain); err == nil {
+				resultChan <- result{key: "baseFee", value: baseFee}
+			} else {
+				resultChan <- result{key: "baseFee", value: int64(0), err: err}
+			}
 		} else {
-			resultChan <- result{key: "baseFee", value: int64(0), err: err}
+			resultChan <- result{key: "baseFee", value: int64(0)}
 		}
 	}()
 
@@ -147,11 +201,15 @@ func (h *HomeHandler) getOverviewStats(ctx context.Context, chain string) (gin.H
 	}()
 
 	go func() {
-		// 5. 10分钟内的平均Gas价格（节省计算资源）
-		if gasPrice, err := h.statsService.GetAverageGasPrice(ctx, chain, 10*time.Minute); err == nil {
-			resultChan <- result{key: "avgGasPrice", value: gasPrice}
+		// 5. 10分钟内的平均Gas价格（仅ETH）
+		if chain == "eth" {
+			if gasPrice, err := h.statsService.GetAverageGasPrice(ctx, chain, 10*time.Minute); err == nil {
+				resultChan <- result{key: "avgGasPrice", value: gasPrice}
+			} else {
+				resultChan <- result{key: "avgGasPrice", value: int64(0), err: err}
+			}
 		} else {
-			resultChan <- result{key: "avgGasPrice", value: int64(0), err: err}
+			resultChan <- result{key: "avgGasPrice", value: int64(0)}
 		}
 	}()
 
@@ -164,6 +222,15 @@ func (h *HomeHandler) getOverviewStats(ctx context.Context, chain string) (gin.H
 		}
 	}()
 
+	go func() {
+		// 7. 当前难度（两条链均可）
+		if difficulty, err := h.statsService.GetCurrentDifficulty(ctx, chain); err == nil {
+			resultChan <- result{key: "difficulty", value: difficulty}
+		} else {
+			resultChan <- result{key: "difficulty", value: int64(0), err: err}
+		}
+	}()
+
 	// 收集所有结果
 	results := make(map[string]interface{})
 	var errors []error
@@ -171,7 +238,7 @@ func (h *HomeHandler) getOverviewStats(ctx context.Context, chain string) (gin.H
 	// 等待所有查询完成，设置超时时间
 	timeout := time.After(5 * time.Second) // 5秒超时
 
-	for i := 0; i < 6; i++ { // 增加到6个查询
+	for i := 0; i < 7; i++ { // 增加到7个查询
 		select {
 		case result := <-resultChan:
 			if result.err != nil {
@@ -195,11 +262,13 @@ func (h *HomeHandler) getOverviewStats(ctx context.Context, chain string) (gin.H
 		"totalBlocks":       results["totalBlocks"],
 		"totalTransactions": results["totalTransactions"],
 		"baseFee":           results["baseFee"],
-		"activeAddresses":   0, // 固定为0，因为查询太慢
-		"networkHashrate":   0, // 固定为0，因为验证者数据拿不到
+		"activeAddresses":   0,
+		"networkHashrate":   0,
 		"dailyVolume":       results["dailyVolume"],
 		"avgGasPrice":       results["avgGasPrice"],
 		"avgBlockTime":      results["avgBlockTime"],
+		"difficulty":        results["difficulty"],
+		"avgFee":            0,
 	}, nil
 }
 
