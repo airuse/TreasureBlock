@@ -242,6 +242,247 @@ func (m *BTCFailoverManager) getBalanceFromRESTAPI(ctx context.Context, baseURL,
 	}, nil
 }
 
+// BTCAddressUTXO REST接口返回的地址UTXO结构
+type BTCAddressUTXO struct {
+	TxID   string `json:"txid"`
+	Vout   int    `json:"vout"`
+	Value  int64  `json:"value"`
+	Status struct {
+		Confirmed   bool   `json:"confirmed"`
+		BlockHeight uint64 `json:"block_height"`
+		BlockHash   string `json:"block_hash"`
+		BlockTime   int64  `json:"block_time"`
+	} `json:"status"`
+}
+
+// GetAddressUTXOs 故障转移获取某地址当前未花费输出列表（UTXO）
+func (m *BTCFailoverManager) GetAddressUTXOs(ctx context.Context, address string) ([]BTCAddressUTXO, error) {
+	var lastErr error
+	deadline := time.Now().Add(m.timeout)
+
+	for time.Now().Before(deadline) {
+		base := m.nextREST()
+		url := fmt.Sprintf("%s/address/%s/utxo", base, address)
+		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		client := &http.Client{Timeout: m.timeout}
+		resp, err := client.Do(req)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if resp.StatusCode != http.StatusOK {
+			lastErr = fmt.Errorf("REST API返回错误: %d", resp.StatusCode)
+			continue
+		}
+
+		var utxos []BTCAddressUTXO
+		if err := json.Unmarshal(body, &utxos); err != nil {
+			lastErr = err
+			continue
+		}
+		return utxos, nil
+	}
+
+	return nil, fmt.Errorf("获取地址UTXO失败: %w", lastErr)
+}
+
+// BTCTx 简化的交易响应（esplora风格）
+type BTCTx struct {
+	TxID string `json:"txid"`
+	Vout []struct {
+		ScriptPubKey     string `json:"scriptpubkey"`
+		ScriptPubKeyType string `json:"scriptpubkey_type"`
+		ScriptPubKeyAddr string `json:"scriptpubkey_address"`
+		Value            int64  `json:"value"`
+		N                int    `json:"n"`
+	} `json:"vout"`
+}
+
+// GetTransaction 故障转移获取交易详情（用于读取 vout 脚本与类型）
+func (m *BTCFailoverManager) GetTransaction(ctx context.Context, txid string) (*BTCTx, error) {
+	var lastErr error
+	attempts := len(m.restURLs)
+	if attempts == 0 {
+		return nil, fmt.Errorf("no REST URLs configured")
+	}
+	for i := 0; i < attempts; i++ {
+		base := m.nextREST()
+		url := fmt.Sprintf("%s/tx/%s", base, txid)
+		req, err := http.NewRequestWithContext(ctx, "GET", url, nil)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		client := &http.Client{Timeout: m.timeout}
+		resp, err := client.Do(req)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if resp.StatusCode != http.StatusOK {
+			lastErr = fmt.Errorf("REST API返回错误: %d", resp.StatusCode)
+			continue
+		}
+		var tx BTCTx
+		if err := json.Unmarshal(body, &tx); err != nil {
+			lastErr = err
+			continue
+		}
+		// 某些实现不包含 n 字段，补齐索引
+		for i := range tx.Vout {
+			if tx.Vout[i].N == 0 {
+				tx.Vout[i].N = i
+			}
+		}
+		tx.TxID = txid
+		return &tx, nil
+	}
+	return nil, fmt.Errorf("获取交易详情失败: %w", lastErr)
+}
+
+// ScanUTXOsByAddress 使用 JSON-RPC scantxoutset 扫描指定地址的UTXO
+func (m *BTCFailoverManager) ScanUTXOsByAddress(ctx context.Context, address string) ([]map[string]interface{}, error) {
+	// JSON-RPC: scantxoutset ["start", ["addr(<address>)"]]
+	var lastErr error
+	attempts := len(m.rpcURLs)
+	if attempts == 0 {
+		return nil, fmt.Errorf("no RPC URLs configured")
+	}
+	for i := 0; i < attempts; i++ {
+		base := m.nextRPC()
+		payload := map[string]interface{}{
+			"jsonrpc": "2.0",
+			"id":      1,
+			"method":  "scantxoutset",
+			"params":  []interface{}{"start", []interface{}{fmt.Sprintf("addr(%s)", address)}},
+		}
+		jsonData, err := json.Marshal(payload)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		req, err := http.NewRequestWithContext(ctx, "POST", base, strings.NewReader(string(jsonData)))
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		req.Header.Set("Content-Type", "application/json")
+		client := &http.Client{Timeout: m.timeout}
+		resp, err := client.Do(req)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if resp.StatusCode != http.StatusOK {
+			lastErr = fmt.Errorf("RPC返回错误: %d", resp.StatusCode)
+			continue
+		}
+		var rpcResp struct {
+			Result struct {
+				Unspents []map[string]interface{} `json:"unspents"`
+			} `json:"result"`
+			Error *struct {
+				Code    int    `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(body, &rpcResp); err != nil {
+			lastErr = err
+			continue
+		}
+		if rpcResp.Error != nil {
+			lastErr = fmt.Errorf("RPC错误: %s", rpcResp.Error.Message)
+			continue
+		}
+		return rpcResp.Result.Unspents, nil
+	}
+	return nil, fmt.Errorf("scantxoutset 失败: %w", lastErr)
+}
+
+// GetRawTransactionVerbose 使用 JSON-RPC 获取交易详情（verbose=true）
+func (m *BTCFailoverManager) GetRawTransactionVerbose(ctx context.Context, txid string) (map[string]interface{}, error) {
+	var lastErr error
+	attempts := len(m.rpcURLs)
+	if attempts == 0 {
+		return nil, fmt.Errorf("no RPC URLs configured")
+	}
+	for i := 0; i < attempts; i++ {
+		base := m.nextRPC()
+		payload := map[string]interface{}{
+			"jsonrpc": "2.0",
+			"id":      1,
+			"method":  "getrawtransaction",
+			"params":  []interface{}{txid, true},
+		}
+		jsonData, err := json.Marshal(payload)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		req, err := http.NewRequestWithContext(ctx, "POST", base, strings.NewReader(string(jsonData)))
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		req.Header.Set("Content-Type", "application/json")
+		client := &http.Client{Timeout: m.timeout}
+		resp, err := client.Do(req)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		body, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		if resp.StatusCode != http.StatusOK {
+			lastErr = fmt.Errorf("RPC返回错误: %d", resp.StatusCode)
+			continue
+		}
+		var rpcResp struct {
+			Result map[string]interface{} `json:"result"`
+			Error  *struct {
+				Code    int    `json:"code"`
+				Message string `json:"message"`
+			} `json:"error"`
+		}
+		if err := json.Unmarshal(body, &rpcResp); err != nil {
+			lastErr = err
+			continue
+		}
+		if rpcResp.Error != nil {
+			lastErr = fmt.Errorf("RPC错误: %s", rpcResp.Error.Message)
+			continue
+		}
+		return rpcResp.Result, nil
+	}
+	return nil, fmt.Errorf("getrawtransaction 失败: %w", lastErr)
+}
+
 // GetBlockHash 故障转移获取区块哈希
 func (m *BTCFailoverManager) GetBlockHash(ctx context.Context, blockNumber uint64) (string, error) {
 	var lastErr error

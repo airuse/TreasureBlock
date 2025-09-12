@@ -597,13 +597,130 @@ func (s *userAddressService) getBTCBalanceFromUTXO(address string) (uint64, stri
 	} else {
 		height = 0
 	}
-	// 使用最新高度获取余额
-	apiResponse, apiErr := btcFailover.GetBalanceAtHeight(ctx, address, height)
-	if apiErr != nil {
-		return 0, "0", fmt.Errorf("获取BTC余额失败: %w", apiErr)
+
+	// 拉取地址UTXO并入库（作为余额的结构化来源）
+	if s.btcUtxoService != nil {
+		addrUtxos, err := btcFailover.GetAddressUTXOs(ctx, address)
+		if err == nil && len(addrUtxos) > 0 {
+			// 预拉取并缓存相关交易以获得脚本与类型
+			outputs := make([]*models.BTCUTXO, 0, len(addrUtxos))
+			txCache := make(map[string]*utils.BTCTx)
+			for _, u := range addrUtxos {
+				var tx *utils.BTCTx
+				if cached, ok := txCache[u.TxID]; ok {
+					tx = cached
+				} else {
+					if t, terr := btcFailover.GetTransaction(ctx, u.TxID); terr == nil {
+						tx = t
+						txCache[u.TxID] = t
+					}
+				}
+
+				var scriptHex, scriptType string
+				if tx != nil {
+					// 保护性检查索引
+					if u.Vout >= 0 && u.Vout < len(tx.Vout) {
+						vo := tx.Vout[u.Vout]
+						scriptHex = vo.ScriptPubKey
+						scriptType = convertBTCScriptTypeRESTToRPC(vo.ScriptPubKeyType)
+					}
+				}
+				// 如果区块高度大于最新高度，则跳过
+				if u.Status.BlockHeight > height {
+					continue
+				}
+
+				out := &models.BTCUTXO{
+					Chain:        "btc",
+					TxID:         u.TxID,
+					VoutIndex:    uint32(u.Vout),
+					BlockHeight:  u.Status.BlockHeight,
+					Address:      address,
+					ScriptPubKey: scriptHex,
+					ScriptType:   scriptType,
+					IsCoinbase:   false,
+					ValueSatoshi: u.Value,
+				}
+				// 如果没有高度，使用前面计算的安全高度
+				outputs = append(outputs, out)
+			}
+			// 批量Upsert到 btc_utxo 表
+			if upErr := s.btcUtxoService.UpsertOutputs(ctx, outputs); upErr != nil {
+				fmt.Printf("UTXO入库失败: %v\n", upErr)
+			}
+		}
 	}
 
-	return apiResponse.Height, apiResponse.Balance, nil
+	// 通过数据库 btcUtxoService 获取余额
+	utxos, err := s.btcUtxoService.GetUTXOsByAddress(ctx, "btc", address)
+	if err != nil {
+		return 0, "0", fmt.Errorf("获取BTC余额失败: %w", err)
+	}
+	balance := int64(0)
+	for _, u := range utxos {
+		balance += u.ValueSatoshi
+	}
+
+	return height, strconv.FormatInt(balance, 10), nil
+}
+
+// convertBTCScriptTypeRESTToRPC 将 REST/Esplora 风格脚本类型转换为与扫块程序一致的类型命名
+// 统一目标：
+// - p2pkh            -> pubkeyhash
+// - p2sh             -> scripthash
+// - v0_p2wpkh        -> witness_v0_keyhash
+// - v0_p2wsh         -> witness_v0_scripthash
+// - v1_p2tr          -> witness_v1_taproot
+// - nulldata         -> nulldata
+// - nonstandard      -> nonstandard
+// - multisig         -> multisig
+// - 其他/unknown     -> witness_unknown（与扫描端保持类别一致）
+func convertBTCScriptTypeRESTToRPC(t string) string {
+	tt := strings.ToLower(strings.TrimSpace(t))
+	switch tt {
+	case "p2pkh":
+		return "pubkeyhash"
+	case "p2sh":
+		return "scripthash"
+	case "v0_p2wpkh":
+		return "witness_v0_keyhash"
+	case "v0_p2wsh":
+		return "witness_v0_scripthash"
+	case "v1_p2tr":
+		return "witness_v1_taproot"
+	case "nulldata":
+		return "nulldata"
+	case "nonstandard":
+		return "nonstandard"
+	case "multisig":
+		return "multisig"
+	case "witness_unknown":
+		return "witness_unknown"
+	case "unknown":
+		return "witness_unknown"
+	default:
+		// 兜底：部分实现可能返回简化/变体命名，这里做一些宽松匹配
+		if strings.Contains(tt, "wpkh") {
+			return "witness_v0_keyhash"
+		}
+		if strings.Contains(tt, "wsh") {
+			return "witness_v0_scripthash"
+		}
+		if strings.Contains(tt, "taproot") || strings.Contains(tt, "p2tr") {
+			return "witness_v1_taproot"
+		}
+		if strings.Contains(tt, "pkh") {
+			return "pubkeyhash"
+		}
+		if strings.Contains(tt, "sh") {
+			return "scripthash"
+		}
+		if strings.HasPrefix(tt, "v0_") {
+			// 未知v0见证，归类为unknown见证
+			return "witness_unknown"
+		}
+		return "witness_unknown"
+	}
 }
 
 // GetAddressUTXOs 获取地址的UTXO列表

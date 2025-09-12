@@ -137,6 +137,9 @@ func SetupRoutes(
 			home.GET("/stats", homeHandler.GetHomeStats)        // 获取首页统计数据（通用，需传 chain）
 			home.GET("/btc/stats", homeHandler.GetBtcHomeStats) // 获取比特币首页统计数据（固定链）
 		}
+
+		// Gas缓存（公开）：页面初次打开快速展示
+		noAuthAPI.GET("/gas/btc", gasHandler.GetBTCGasRatesCached)
 		contracts := noAuthAPI.Group("/contracts")
 		{
 			contracts.GET("", contractHandler.GetAllContracts)               // 获取所有合约

@@ -300,6 +300,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import type { PersonalTransaction } from '@/types'
 import { useChainWebSocket } from '@/composables/useWebSocket'
 import type { FeeLevels } from '@/types'
+import { getBtcCachedGasRates } from '@/api/no-auth'
 
 // 响应式数据
 const showImportModal = ref(false)
@@ -696,6 +697,19 @@ const setupWebSocketListeners = () => {
 
 onMounted(() => {
   loadTransactions()
+  // 优先加载一次缓存的BTC费率，页面初次打开即可展示
+  getBtcCachedGasRates()
+    .then((res) => {
+      if ((res as any)?.success && (res as any)?.data) {
+        feeLevels.value = (res as any).data as FeeLevels
+        addFeeHistory((res as any).data as FeeLevels)
+        if (feeLevels.value?.normal?.network_congestion) {
+          networkCongestion.value = feeLevels.value.normal.network_congestion
+        }
+      }
+    })
+    .catch(() => {})
+
   setupWebSocketListeners()
   
   // 监听窗口大小变化，重新绘制图表

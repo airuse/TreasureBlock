@@ -67,3 +67,20 @@ func (h *GasHandler) GetAllGasRates(c *gin.Context) {
 
 	utils.SuccessResponse(c, http.StatusOK, "获取所有Gas费率成功", allFeeData)
 }
+
+// GetBTCGasRatesCached 获取BTC缓存费率信息（无鉴权初始加载用）
+// @Summary 获取BTC缓存费率信息（无鉴权）
+// @Description 读取调度器内存缓存的BTC费率，适合页面初次打开时快速展示
+// @Tags Gas费率
+// @Produce json
+// @Success 200 {object} utils.Response{data=services.FeeLevels} "获取成功"
+// @Failure 404 {object} utils.Response "暂无费率数据"
+// @Router /api/no-auth/gas/btc [get]
+func (h *GasHandler) GetBTCGasRatesCached(c *gin.Context) {
+	feeData := h.feeScheduler.GetLastFeeData("btc")
+	if feeData == nil {
+		utils.ErrorResponse(c, http.StatusNotFound, "暂无BTC费率数据，请稍后重试", nil)
+		return
+	}
+	utils.SuccessResponse(c, http.StatusOK, "获取BTC缓存费率成功", feeData)
+}

@@ -21,6 +21,7 @@ import type { Block } from '@/types'
 import type { Transaction } from '@/types'
 import type { Contract } from '@/types'
 import type { HomeOverview } from '@/types'
+import type { FeeLevels } from '@/types'
 import type { ApiResponse, PaginatedResponse } from '../types'
 
 // ==================== API函数实现 ====================
@@ -190,4 +191,21 @@ export default {
   getHomeStats,
   getBtcHomeStats,
   getContracts
+}
+
+/**
+ * 获取BTC缓存费率（游客模式，页面初次打开快速展示）
+ */
+export function getBtcCachedGasRates(): Promise<ApiResponse<FeeLevels>> {
+  if (__USE_MOCK__) {
+    // 复用mock gas数据
+    // @ts-ignore
+    const { handleMockGetGasRates } = require('../mock/gas')
+    return handleMockGetGasRates({ chain: 'btc' })
+  }
+
+  return request({
+    url: '/api/no-auth/gas/btc',
+    method: 'GET'
+  })
 }

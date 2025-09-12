@@ -88,8 +88,8 @@ blockchain:
       rpc_urls:
         - "https://bitcoin-testnet.core.chainstack.com/fc0977c5fde70ec8c26e2d500a1491dd"  # JSON-RPC (仅用于获取区块高度)
       rest_urls:
-        - "https://blockstream.info/api"  # REST API (用于获取地址余额)
-        - "https://mempool.space/api"     # REST API (备用)
+        - "https://blockstream.info/testnet/api"  # REST API (用于获取地址余额)
+        - "https://mempool.space/testnet/api"     # REST API (备用)
       username: "bitcoin"
       password: "bitcoin123"
     eth:
