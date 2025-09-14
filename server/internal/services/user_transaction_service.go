@@ -27,12 +27,13 @@ type UserTransactionService interface {
 	CreateTransaction(ctx context.Context, userID uint64, req *dto.CreateUserTransactionRequest) (*dto.UserTransactionResponse, error)
 	GetTransactionByID(ctx context.Context, id uint, userID uint64) (*dto.UserTransactionResponse, error)
 	GetUserTransactions(ctx context.Context, userID uint64, page, pageSize int, status string) (*dto.UserTransactionListResponse, error)
+	GetUserTransactionsByChain(ctx context.Context, userID uint64, chain string, page, pageSize int, status string) (*dto.UserTransactionListResponse, error)
 	UpdateTransaction(ctx context.Context, id uint, userID uint64, req *dto.UpdateUserTransactionRequest) (*dto.UserTransactionResponse, error)
 	DeleteTransaction(ctx context.Context, id uint, userID uint64) error
 	ExportTransaction(ctx context.Context, id uint, userID uint64, req *dto.ExportTransactionRequest) (*dto.ExportTransactionResponse, error)
 	ImportSignature(ctx context.Context, id uint, userID uint64, req *dto.ImportSignatureRequest) (*dto.UserTransactionResponse, error)
 	SendTransaction(ctx context.Context, id uint, userID uint64) (*dto.UserTransactionResponse, error)
-	GetUserTransactionStats(ctx context.Context, userID uint64) (*dto.UserTransactionStatsResponse, error)
+	GetUserTransactionStats(ctx context.Context, userID uint64, chain string) (*dto.UserTransactionStatsResponse, error)
 }
 
 // userTransactionService 用户交易服务实现
@@ -75,6 +76,28 @@ func (s *userTransactionService) CreateTransaction(ctx context.Context, userID u
 		ContractOperationType: req.ContractOperationType,
 		TokenContractAddress:  req.TokenContractAddress,
 		AllowanceAddress:      req.AllowanceAddress,
+	}
+
+	// 如果为BTC，持久化原始交易关键字段
+	if strings.ToLower(req.Chain) == "btc" {
+		if req.BTCVersion != nil {
+			userTx.BTCVersion = req.BTCVersion
+		}
+		if req.BTCLockTime != nil {
+			userTx.BTCLockTime = req.BTCLockTime
+		}
+		if len(req.BTCTxIn) > 0 {
+			if b, err := json.Marshal(req.BTCTxIn); err == nil {
+				s := string(b)
+				userTx.BTCTxInJSON = &s
+			}
+		}
+		if len(req.BTCTxOut) > 0 {
+			if b, err := json.Marshal(req.BTCTxOut); err == nil {
+				s := string(b)
+				userTx.BTCTxOutJSON = &s
+			}
+		}
 	}
 
 	// 保存到数据库
@@ -137,6 +160,60 @@ func (s *userTransactionService) GetUserTransactions(ctx context.Context, userID
 	}, nil
 }
 
+// GetUserTransactionsByChain 根据链类型获取用户交易列表
+func (s *userTransactionService) GetUserTransactionsByChain(ctx context.Context, userID uint64, chain string, page, pageSize int, status string) (*dto.UserTransactionListResponse, error) {
+	transactions, total, err := s.userTxRepo.GetByChain(ctx, userID, chain, page, pageSize)
+	if err != nil {
+		return nil, fmt.Errorf("获取交易列表失败: %w", err)
+	}
+
+	// 如果指定了状态，进行过滤
+	if status != "" {
+		var filteredTransactions []*models.UserTransaction
+		for _, tx := range transactions {
+			if tx.Status == status {
+				filteredTransactions = append(filteredTransactions, tx)
+			}
+		}
+		transactions = filteredTransactions
+		// 重新计算总数（这里简化处理，实际应该修改repository层支持状态过滤）
+		total = int64(len(transactions))
+	}
+
+	// 获取代币配置信息，用于填充代币精度
+	tokenConfigs, err := s.getTokenConfigs(ctx)
+	if err != nil {
+		// 如果获取代币配置失败，记录错误但不影响交易列表返回
+		// fmt.Printf("Warning: Failed to get token configs: %v\n", err)
+	}
+
+	// 转换为响应DTO
+	var responses []dto.UserTransactionResponse
+	for _, tx := range transactions {
+		// 如果是代币交易，尝试获取代币精度信息
+		if tx.TransactionType == "token" && tx.TokenContractAddress != "" {
+			if config, exists := tokenConfigs[strings.ToLower(tx.TokenContractAddress)]; exists {
+				tx.TokenName = config.Name
+				// 转换类型：*uint -> *uint8
+				decimals := uint8(config.Decimals)
+				tx.TokenDecimals = &decimals
+			}
+		}
+		responses = append(responses, *s.convertToResponse(tx))
+	}
+
+	// 计算是否有更多数据
+	hasMore := int64(page*pageSize) < total
+
+	return &dto.UserTransactionListResponse{
+		Transactions: responses,
+		Total:        total,
+		Page:         page,
+		PageSize:     pageSize,
+		HasMore:      hasMore,
+	}, nil
+}
+
 // UpdateTransaction 更新用户交易
 func (s *userTransactionService) UpdateTransaction(ctx context.Context, id uint, userID uint64, req *dto.UpdateUserTransactionRequest) (*dto.UserTransactionResponse, error) {
 	// 获取现有交易
@@ -145,7 +222,77 @@ func (s *userTransactionService) UpdateTransaction(ctx context.Context, id uint,
 		return nil, err
 	}
 
-	// 更新字段
+	// 更新基础字段
+	if req.FromAddress != nil {
+		userTx.FromAddress = *req.FromAddress
+	}
+	if req.ToAddress != nil {
+		userTx.ToAddress = *req.ToAddress
+	}
+	if req.Amount != nil {
+		userTx.Amount = *req.Amount
+	}
+	if req.Fee != nil {
+		userTx.Fee = *req.Fee
+	}
+	if req.Remark != nil {
+		userTx.Remark = *req.Remark
+	}
+
+	// 更新ETH相关字段
+	if req.GasLimit != nil {
+		userTx.GasLimit = req.GasLimit
+	}
+	if req.GasPrice != nil {
+		userTx.GasPrice = req.GasPrice
+	}
+	if req.Nonce != nil {
+		userTx.Nonce = req.Nonce
+	}
+
+	// 更新EIP-1559费率字段
+	if req.MaxPriorityFeePerGas != nil {
+		userTx.MaxPriorityFeePerGas = req.MaxPriorityFeePerGas
+	}
+	if req.MaxFeePerGas != nil {
+		userTx.MaxFeePerGas = req.MaxFeePerGas
+	}
+
+	// 更新代币交易相关字段
+	if req.TransactionType != nil {
+		userTx.TransactionType = *req.TransactionType
+	}
+	if req.ContractOperationType != nil {
+		userTx.ContractOperationType = *req.ContractOperationType
+	}
+	if req.TokenContractAddress != nil {
+		userTx.TokenContractAddress = *req.TokenContractAddress
+	}
+	if req.AllowanceAddress != nil {
+		userTx.AllowanceAddress = *req.AllowanceAddress
+	}
+
+	// 更新BTC特有字段
+	if req.BTCVersion != nil {
+		userTx.BTCVersion = req.BTCVersion
+	}
+	if req.BTCLockTime != nil {
+		userTx.BTCLockTime = req.BTCLockTime
+	}
+	if len(req.BTCTxIn) > 0 {
+		if b, err := json.Marshal(req.BTCTxIn); err == nil {
+			s := string(b)
+			userTx.BTCTxInJSON = &s
+		}
+	}
+	if len(req.BTCTxOut) > 0 {
+		if b, err := json.Marshal(req.BTCTxOut); err == nil {
+			s := string(b)
+			userTx.BTCTxOutJSON = &s
+		}
+	}
+
+	// 更新状态相关字段
 	if req.Status != nil {
 		userTx.Status = *req.Status
 	}
@@ -166,9 +313,6 @@ func (s *userTransactionService) UpdateTransaction(ctx context.Context, id uint,
 	}
 	if req.ErrorMsg != nil {
 		userTx.ErrorMsg = req.ErrorMsg
-	}
-	if req.Remark != nil {
-		userTx.Remark = *req.Remark
 	}
 
 	// 保存更新
@@ -643,7 +787,7 @@ func (s *userTransactionService) updateTransactionStatus(ctx context.Context, id
 }
 
 // GetUserTransactionStats 获取用户交易统计
-func (s *userTransactionService) GetUserTransactionStats(ctx context.Context, userID uint64) (*dto.UserTransactionStatsResponse, error) {
+func (s *userTransactionService) GetUserTransactionStats(ctx context.Context, userID uint64, chain string) (*dto.UserTransactionStatsResponse, error) {
 	// 获取各种状态的交易数量
 	statuses := []string{"draft", "unsigned", "in_progress", "packed", "confirmed", "failed"}
 
@@ -655,7 +799,19 @@ func (s *userTransactionService) GetUserTransactionStats(ctx context.Context, us
 			continue
 		}
 
-		count := int64(len(transactions))
+		// 如果指定了链类型，过滤出对应链的交易
+		var filteredTransactions []*models.UserTransaction
+		if chain != "" {
+			for _, tx := range transactions {
+				if strings.EqualFold(tx.Chain, chain) {
+					filteredTransactions = append(filteredTransactions, tx)
+				}
+			}
+		} else {
+			filteredTransactions = transactions
+		}
+
+		count := int64(len(filteredTransactions))
 		stats.TotalTransactions += count
 
 		switch status {
@@ -717,6 +873,12 @@ func (s *userTransactionService) convertToResponse(userTx *models.UserTransactio
 		V: userTx.V,
 		R: userTx.R,
 		S: userTx.S,
+
+		// BTC特有字段
+		BTCVersion:   userTx.BTCVersion,
+		BTCLockTime:  userTx.BTCLockTime,
+		BTCTxInJSON:  userTx.BTCTxInJSON,
+		BTCTxOutJSON: userTx.BTCTxOutJSON,
 	}
 }
 

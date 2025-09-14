@@ -60,6 +60,12 @@ type UserTransaction struct {
 	TokenContractAddress  string `json:"token_contract_address" gorm:"type:varchar(120);comment:代币合约地址"`
 	AllowanceAddress      string `json:"allowance_address" gorm:"type:varchar(120);comment:授权地址（代币持有者地址）"`
 
+	// BTC特有字段
+	BTCVersion   *int32  `json:"btc_version" gorm:"comment:BTC原始交易Version"`
+	BTCLockTime  *uint32 `json:"btc_lock_time" gorm:"comment:BTC原始交易LockTime"`
+	BTCTxInJSON  *string `json:"btc_tx_in_json" gorm:"type:longtext;comment:BTC TxIn数组(JSON)"`
+	BTCTxOutJSON *string `json:"btc_tx_out_json" gorm:"type:longtext;comment:BTC TxOut数组(JSON)"`
+
 	// 代币信息字段（非数据库字段，仅用于API响应）
 	TokenName     string `json:"token_name,omitempty" gorm:"-"`     // 代币全名（非数据库字段）
 	TokenDecimals *uint8 `json:"token_decimals,omitempty" gorm:"-"` // 代币精度（非数据库字段）

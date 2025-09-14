@@ -24,10 +24,60 @@ type CreateUserTransactionRequest struct {
 	ContractOperationType string `json:"contract_operation_type" binding:"omitempty" validate:"omitempty,oneof=transfer approve transferFrom balanceOf"`
 	TokenContractAddress  string `json:"token_contract_address" binding:"omitempty" validate:"omitempty"`
 	AllowanceAddress      string `json:"allowance_address" binding:"omitempty" validate:"omitempty"`
+
+	// BTC特有字段（可选）
+	BTCVersion  *int32     `json:"btc_version" validate:"omitempty"`
+	BTCLockTime *uint32    `json:"btc_lock_time" validate:"omitempty"`
+	BTCTxIn     []BTCTxIn  `json:"btc_tx_in" validate:"omitempty,dive"`
+	BTCTxOut    []BTCTxOut `json:"btc_tx_out" validate:"omitempty,dive"`
+}
+
+// BTCTxIn 输入
+type BTCTxIn struct {
+	TxID      string `json:"txid"`
+	Vout      uint32 `json:"vout"`
+	ScriptSig string `json:"script_sig,omitempty"`
+	Sequence  uint32 `json:"sequence,omitempty"`
+}
+
+// BTCTxOut 输出
+type BTCTxOut struct {
+	ValueSatoshi uint64 `json:"value_satoshi"`
+	ScriptPubKey string `json:"script_pub_key,omitempty"`
+	Address      string `json:"address,omitempty"`
 }
 
 // UpdateUserTransactionRequest 更新用户交易请求
 type UpdateUserTransactionRequest struct {
+	// 基础字段更新
+	FromAddress *string `json:"from_address" validate:"omitempty"`
+	ToAddress   *string `json:"to_address" validate:"omitempty"`
+	Amount      *string `json:"amount" validate:"omitempty"`
+	Fee         *string `json:"fee" validate:"omitempty"`
+	Remark      *string `json:"remark" validate:"omitempty,max=500"`
+
+	// ETH相关字段
+	GasLimit *uint   `json:"gas_limit" validate:"omitempty,min=1"`
+	GasPrice *string `json:"gas_price" validate:"omitempty"`
+	Nonce    *uint64 `json:"nonce" validate:"omitempty,min=0"`
+
+	// EIP-1559费率字段
+	MaxPriorityFeePerGas *string `json:"max_priority_fee_per_gas" validate:"omitempty"`
+	MaxFeePerGas         *string `json:"max_fee_per_gas" validate:"omitempty"`
+
+	// 代币交易相关字段
+	TransactionType       *string `json:"transaction_type" validate:"omitempty,oneof=coin token"`
+	ContractOperationType *string `json:"contract_operation_type" validate:"omitempty,oneof=transfer approve transferFrom balanceOf"`
+	TokenContractAddress  *string `json:"token_contract_address" validate:"omitempty"`
+	AllowanceAddress      *string `json:"allowance_address" validate:"omitempty"`
+
+	// BTC特有字段
+	BTCVersion  *int32     `json:"btc_version" validate:"omitempty"`
+	BTCLockTime *uint32    `json:"btc_lock_time" validate:"omitempty"`
+	BTCTxIn     []BTCTxIn  `json:"btc_tx_in" validate:"omitempty,dive"`
+	BTCTxOut    []BTCTxOut `json:"btc_tx_out" validate:"omitempty,dive"`
+
+	// 状态相关字段
 	Status        *string `json:"status" validate:"omitempty,oneof=draft unsigned in_progress packed confirmed failed"`
 	TxHash        *string `json:"tx_hash" validate:"omitempty"`
 	UnsignedTx    *string `json:"unsigned_tx" validate:"omitempty"`
@@ -35,7 +85,6 @@ type UpdateUserTransactionRequest struct {
 	BlockHeight   *uint64 `json:"block_height" validate:"omitempty"`
 	Confirmations *uint   `json:"confirmations" validate:"omitempty"`
 	ErrorMsg      *string `json:"error_msg" validate:"omitempty"`
-	Remark        *string `json:"remark" validate:"omitempty,max=500"`
 }
 
 // UserTransactionResponse 用户交易响应
@@ -81,6 +130,12 @@ type UserTransactionResponse struct {
 	V *string `json:"v,omitempty"`
 	R *string `json:"r,omitempty"`
 	S *string `json:"s,omitempty"`
+
+	// BTC特有字段
+	BTCVersion   *int32  `json:"btc_version,omitempty"`
+	BTCLockTime  *uint32 `json:"btc_lock_time,omitempty"`
+	BTCTxInJSON  *string `json:"btc_tx_in_json,omitempty"`
+	BTCTxOutJSON *string `json:"btc_tx_out_json,omitempty"`
 }
 
 // UserTransactionListResponse 用户交易列表响应

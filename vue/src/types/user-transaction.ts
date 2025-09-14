@@ -40,6 +40,27 @@ export interface UserTransaction {
   v?: string
   r?: string
   s?: string
+  
+  // BTC特有字段
+  btc_version?: number
+  btc_lock_time?: number
+  btc_tx_in_json?: string
+  btc_tx_out_json?: string
+}
+
+// BTC交易输入
+export interface BTCTxIn {
+  txid: string
+  vout: number
+  script_sig?: string
+  sequence?: number
+}
+
+// BTC交易输出
+export interface BTCTxOut {
+  value_satoshi: number
+  script_pub_key?: string
+  address?: string
 }
 
 // 创建用户交易请求
@@ -60,10 +81,45 @@ export interface CreateUserTransactionRequest {
   contract_operation_type?: string
   token_contract_address?: string
   allowance_address?: string // 授权地址（代币持有者地址）
+  
+  // BTC特有字段
+  btc_version?: number
+  btc_lock_time?: number
+  btc_tx_in?: BTCTxIn[]
+  btc_tx_out?: BTCTxOut[]
 }
 
 // 更新用户交易请求
 export interface UpdateUserTransactionRequest {
+  // 基础字段更新
+  from_address?: string
+  to_address?: string
+  amount?: string
+  fee?: string
+  remark?: string
+
+  // ETH相关字段
+  gas_limit?: number
+  gas_price?: string
+  nonce?: number
+
+  // EIP-1559费率字段
+  max_priority_fee_per_gas?: string
+  max_fee_per_gas?: string
+
+  // 代币交易相关字段
+  transaction_type?: string
+  contract_operation_type?: string
+  token_contract_address?: string
+  allowance_address?: string
+
+  // BTC特有字段
+  btc_version?: number
+  btc_lock_time?: number
+  btc_tx_in?: BTCTxIn[]
+  btc_tx_out?: BTCTxOut[]
+
+  // 状态相关字段
   status?: string
   tx_hash?: string
   unsigned_tx?: string
@@ -71,7 +127,6 @@ export interface UpdateUserTransactionRequest {
   block_height?: number
   confirmations?: number
   error_msg?: string
-  remark?: string
 }
 
 // 用户交易列表响应

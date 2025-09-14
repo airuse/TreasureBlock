@@ -1516,7 +1516,8 @@ const loadTransactions = async () => {
     const response = await getUserTransactions({
       page: currentPage.value,
       page_size: pageSize.value,
-      status: selectedStatus.value
+      status: selectedStatus.value,
+      chain: 'eth' // 只加载ETH链的交易
     })
     
     if (response.success) {
@@ -1532,7 +1533,7 @@ const loadTransactions = async () => {
 // 加载交易统计
 const loadTransactionStats = async () => {
   try {
-    const response = await getUserTransactionStats()
+    const response = await getUserTransactionStats({ chain: 'eth' })
     
     if (response.success) {
       const stats = response.data

@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // KeyInfo 私钥信息（支持多地址）
@@ -61,6 +62,7 @@ func (km *KeyManager) LoadKeys() error {
 	var newFormat map[string]*KeyInfo
 	if err := json.Unmarshal(data, &newFormat); err == nil && newFormat != nil {
 		km.keys = newFormat
+		fmt.Printf("DEBUG: 加载了 %d 个新格式私钥\n", len(km.keys))
 		return nil
 	}
 
@@ -85,17 +87,25 @@ func (km *KeyManager) LoadKeys() error {
 				existing.Addresses = append(existing.Addresses, v.Address)
 			}
 		} else {
+			// 处理旧格式的时间戳
+			createdAt := v.CreatedAt
+			if _, err := time.Parse("2006-01-02 15:04:05", v.CreatedAt); err != nil {
+				// 如果不是标准格式，使用当前时间
+				createdAt = time.Now().Format("2006-01-02 15:04:05")
+			}
+
 			grouped[keyID] = &KeyInfo{
 				KeyID:        keyID,
 				Addresses:    []string{v.Address},
 				EncryptedKey: v.EncryptedKey,
 				ChainType:    v.ChainType,
-				CreatedAt:    v.CreatedAt,
+				CreatedAt:    createdAt,
 				Description:  v.Description,
 			}
 		}
 	}
 	km.keys = grouped
+	fmt.Printf("DEBUG: 加载了 %d 个旧格式私钥\n", len(km.keys))
 	// 保存为新格式
 	return km.SaveKeys()
 }
@@ -104,6 +114,7 @@ func (km *KeyManager) LoadKeys() error {
 func (km *KeyManager) SaveKeys() error {
 	// 确保目录存在
 	dir := filepath.Dir(km.keysFile)
+	fmt.Printf("DEBUG: 保存私钥到目录: %s\n", dir)
 	if err := os.MkdirAll(dir, 0700); err != nil {
 		return fmt.Errorf("创建目录失败: %w", err)
 	}
@@ -137,8 +148,10 @@ func (km *KeyManager) AddKeyWithAddresses(addresses []string, privateKey, chainT
 
 	// 生成KeyID
 	keyID := sha256Hex(encryptedKey)
+	fmt.Printf("DEBUG: 添加私钥，KeyID: %s, 地址数量: %d\n", keyID[:8]+"...", len(addresses))
 
 	if existing, ok := km.keys[keyID]; ok {
+		fmt.Printf("DEBUG: 私钥已存在，合并地址\n")
 		existing.Description = description
 		for _, addr := range addresses {
 			if !contains(existing.Addresses, addr) {
@@ -146,12 +159,13 @@ func (km *KeyManager) AddKeyWithAddresses(addresses []string, privateKey, chainT
 			}
 		}
 	} else {
+		fmt.Printf("DEBUG: 创建新私钥记录\n")
 		keyInfo := &KeyInfo{
 			KeyID:        keyID,
 			Addresses:    unique(addresses),
 			EncryptedKey: encryptedKey,
 			ChainType:    chainType,
-			CreatedAt:    fmt.Sprintf("%d", os.Getpid()), // 简化时间戳
+			CreatedAt:    time.Now().Format("2006-01-02 15:04:05"),
 			Description:  description,
 		}
 		km.keys[keyID] = keyInfo
@@ -187,6 +201,7 @@ func (km *KeyManager) ListKeys() []*KeyInfo {
 	for _, key := range km.keys {
 		keys = append(keys, key)
 	}
+	fmt.Printf("DEBUG: ListKeys 返回了 %d 个私钥\n", len(keys))
 	return keys
 }
 
@@ -242,6 +257,16 @@ func (km *KeyManager) AddAlias(newAddress, existingAddress string) error {
 		return fmt.Errorf("保存私钥失败: %w", err)
 	}
 	return nil
+}
+
+// FindByAddress 根据地址查找KeyInfo（公共方法）
+func (km *KeyManager) FindByAddress(address string) *KeyInfo {
+	return km.findByAddress(address)
+}
+
+// GetCryptoManager 获取CryptoManager（公共方法）
+func (km *KeyManager) GetCryptoManager() *CryptoManager {
+	return km.cryptoManager
 }
 
 // 辅助函数

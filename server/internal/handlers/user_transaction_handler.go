@@ -196,15 +196,18 @@ func (h *UserTransactionHandler) GetUserTransactions(c *gin.Context) {
 		return
 	}
 
-	// 如果指定了链类型，使用链类型查询
+	// 根据是否指定链类型选择不同的查询方法
+	var response *dto.UserTransactionListResponse
+	var err error
+
 	if chain != "" {
-		// TODO: 实现按链类型查询的逻辑
-		utils.ErrorResponse(c, http.StatusNotImplemented, "功能未实现", "按链类型查询暂未实现")
-		return
+		// 按链类型查询
+		response, err = h.userTxService.GetUserTransactionsByChain(c.Request.Context(), uint64(userID.(uint)), chain, page, pageSize, status)
+	} else {
+		// 查询所有链的交易
+		response, err = h.userTxService.GetUserTransactions(c.Request.Context(), uint64(userID.(uint)), page, pageSize, status)
 	}
 
-	// 获取交易列表
-	response, err := h.userTxService.GetUserTransactions(c.Request.Context(), uint64(userID.(uint)), page, pageSize, status)
 	if err != nil {
 		utils.ErrorResponse(c, http.StatusInternalServerError, "获取交易列表失败", err.Error())
 		return
@@ -235,6 +238,12 @@ func (h *UserTransactionHandler) UpdateTransaction(c *gin.Context) {
 		return
 	}
 
+	// 验证更新请求的字段
+	if err := h.validateUpdateTransactionFields(&req); err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "参数验证失败", err.Error())
+		return
+	}
+
 	// 更新交易
 	response, err := h.userTxService.UpdateTransaction(c.Request.Context(), uint(id), uint64(userID.(uint)), &req)
 	if err != nil {
@@ -243,6 +252,62 @@ func (h *UserTransactionHandler) UpdateTransaction(c *gin.Context) {
 	}
 
 	utils.SuccessResponse(c, http.StatusOK, "更新交易成功", response)
+}
+
+// validateUpdateTransactionFields 验证更新交易字段
+func (h *UserTransactionHandler) validateUpdateTransactionFields(req *dto.UpdateUserTransactionRequest) error {
+	// 验证金额格式（如果提供了金额）
+	if req.Amount != nil {
+		if err := h.validateAmountFormat(*req.Amount); err != nil {
+			return fmt.Errorf("金额格式错误: %v", err)
+		}
+	}
+
+	// 验证手续费格式（如果提供了手续费）
+	if req.Fee != nil {
+		if err := h.validateAmountFormat(*req.Fee); err != nil {
+			return fmt.Errorf("手续费格式错误: %v", err)
+		}
+	}
+
+	// 验证代币交易相关字段
+	if req.TransactionType != nil && *req.TransactionType == "token" {
+		if req.ContractOperationType != nil {
+			validOps := []string{"transfer", "approve", "transferFrom", "balanceOf"}
+			isValid := false
+			for _, op := range validOps {
+				if *req.ContractOperationType == op {
+					isValid = true
+					break
+				}
+			}
+			if !isValid {
+				return fmt.Errorf("不支持的合约操作类型: %s", *req.ContractOperationType)
+			}
+		}
+	}
+
+	// 验证BTC交易相关字段
+	if len(req.BTCTxIn) > 0 {
+		for i, txIn := range req.BTCTxIn {
+			if txIn.TxID == "" {
+				return fmt.Errorf("BTC TxIn[%d] 缺少 txid", i)
+			}
+		}
+	}
+
+	if len(req.BTCTxOut) > 0 {
+		for i, txOut := range req.BTCTxOut {
+			if txOut.Address == "" {
+				return fmt.Errorf("BTC TxOut[%d] 缺少 address", i)
+			}
+			if txOut.ValueSatoshi == 0 {
+				return fmt.Errorf("BTC TxOut[%d] 金额不能为0", i)
+			}
+		}
+	}
+
+	return nil
 }
 
 // DeleteTransaction 删除用户交易
@@ -370,8 +435,11 @@ func (h *UserTransactionHandler) GetUserTransactionStats(c *gin.Context) {
 		return
 	}
 
+	// 获取链类型参数（可选）
+	chain := c.Query("chain")
+
 	// 获取统计信息
-	response, err := h.userTxService.GetUserTransactionStats(c.Request.Context(), uint64(userID.(uint)))
+	response, err := h.userTxService.GetUserTransactionStats(c.Request.Context(), uint64(userID.(uint)), chain)
 	if err != nil {
 		utils.ErrorResponse(c, http.StatusInternalServerError, "获取统计信息失败", err.Error())
 		return

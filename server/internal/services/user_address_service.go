@@ -598,6 +598,8 @@ func (s *userAddressService) getBTCBalanceFromUTXO(address string) (uint64, stri
 		height = 0
 	}
 
+	fmt.Printf("获取到的安全高度是: %d\n", height)
+
 	// 拉取地址UTXO并入库（作为余额的结构化来源）
 	if s.btcUtxoService != nil {
 		addrUtxos, err := btcFailover.GetAddressUTXOs(ctx, address)
@@ -616,6 +618,12 @@ func (s *userAddressService) getBTCBalanceFromUTXO(address string) (uint64, stri
 					}
 				}
 
+				// 仅保留已确认的UTXO（过滤交易池中的未确认输出）
+				// 若区块高度为0或缺失，视为未确认，跳过
+				if u.Status.BlockHeight <= 0 {
+					continue
+				}
+
 				var scriptHex, scriptType string
 				if tx != nil {
 					// 保护性检查索引
@@ -630,6 +638,9 @@ func (s *userAddressService) getBTCBalanceFromUTXO(address string) (uint64, stri
 					continue
 				}
 
+				// 备注：coinbase成熟度判断依赖交易输入信息，当前REST结构未提供Vin，保持默认false
+				isCoinbase := false
+
 				out := &models.BTCUTXO{
 					Chain:        "btc",
 					TxID:         u.TxID,
@@ -638,7 +649,7 @@ func (s *userAddressService) getBTCBalanceFromUTXO(address string) (uint64, stri
 					Address:      address,
 					ScriptPubKey: scriptHex,
 					ScriptType:   scriptType,
-					IsCoinbase:   false,
+					IsCoinbase:   isCoinbase,
 					ValueSatoshi: u.Value,
 				}
 				// 如果没有高度，使用前面计算的安全高度

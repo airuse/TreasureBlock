@@ -20,6 +20,31 @@ type TransactionData struct {
 	// EIP-1559费率字段
 	MaxPriorityFeePerGas string `json:"maxPriorityFeePerGas,omitempty"` // 最大优先费用（Gwei）
 	MaxFeePerGas         string `json:"maxFeePerGas,omitempty"`         // 最大费用（Gwei）
+
+	// BTC 特定字段
+	Address string `json:"address,omitempty"` // BTC发送地址（用于地址匹配）
+	MsgTx   *MsgTx `json:"MsgTx,omitempty"`   // BTC交易结构
+}
+
+// MsgTx BTC交易结构
+type MsgTx struct {
+	Version  int32   `json:"Version"`  // 交易版本
+	TxIn     []TxIn  `json:"TxIn"`     // 交易输入
+	TxOut    []TxOut `json:"TxOut"`    // 交易输出
+	LockTime uint32  `json:"LockTime"` // 锁定时间
+}
+
+// TxIn BTC交易输入
+type TxIn struct {
+	Txid     string `json:"txid"`     // 前一个交易的哈希
+	Vout     int    `json:"vout"`     // 前一个交易的输出索引
+	Sequence uint32 `json:"sequence"` // 序列号
+}
+
+// TxOut BTC交易输出
+type TxOut struct {
+	ValueSatoshi int64  `json:"value_satoshi"` // 输出金额（satoshi）
+	Address      string `json:"address"`       // 输出地址
 }
 
 // AccessListItem 访问列表项
@@ -48,14 +73,40 @@ func ParseQRCodeData(qrData string) (*TransactionData, error) {
 	if transaction.ID == 0 {
 		return nil, &ValidationError{Field: "id", Message: "交易ID不能为空"}
 	}
-	if transaction.ChainID == "" {
-		return nil, &ValidationError{Field: "chainId", Message: "链ID不能为空"}
+	if transaction.Type == "" {
+		return nil, &ValidationError{Field: "type", Message: "链类型不能为空"}
 	}
-	if transaction.From == "" {
-		return nil, &ValidationError{Field: "from", Message: "发送地址不能为空"}
-	}
-	if transaction.To == "" {
-		return nil, &ValidationError{Field: "to", Message: "接收地址不能为空"}
+
+	// 根据链类型进行不同的验证
+	if transaction.IsBTC() {
+		// BTC交易验证
+		if transaction.Address == "" {
+			return nil, &ValidationError{Field: "address", Message: "BTC发送地址不能为空"}
+		}
+		if transaction.MsgTx == nil {
+			return nil, &ValidationError{Field: "MsgTx", Message: "BTC交易结构不能为空"}
+		}
+		if len(transaction.MsgTx.TxIn) == 0 {
+			return nil, &ValidationError{Field: "TxIn", Message: "BTC交易输入不能为空"}
+		}
+		if len(transaction.MsgTx.TxOut) == 0 {
+			return nil, &ValidationError{Field: "TxOut", Message: "BTC交易输出不能为空"}
+		}
+		// 设置From字段为Address字段的值，用于兼容现有代码
+		transaction.From = transaction.Address
+	} else if transaction.IsETH() {
+		// ETH交易验证
+		if transaction.ChainID == "" {
+			return nil, &ValidationError{Field: "chainId", Message: "链ID不能为空"}
+		}
+		if transaction.From == "" {
+			return nil, &ValidationError{Field: "from", Message: "发送地址不能为空"}
+		}
+		if transaction.To == "" {
+			return nil, &ValidationError{Field: "to", Message: "接收地址不能为空"}
+		}
+	} else {
+		return nil, &ValidationError{Field: "type", Message: "不支持的链类型"}
 	}
 
 	return &transaction, nil
@@ -87,13 +138,13 @@ func (t *TransactionData) IsETH() bool {
 
 // IsBTC 判断是否为BTC交易
 func (t *TransactionData) IsBTC() bool {
-	return t.Type == "btc" || t.ChainID == "btc"
+	return t.Type == "btc"
 }
 
 // GetChainName 获取链名称
 func (t *TransactionData) GetChainName() string {
-	switch t.ChainID {
-	case "1", "eth":
+	switch t.Type {
+	case "eth":
 		return "Ethereum"
 	case "btc":
 		return "Bitcoin"

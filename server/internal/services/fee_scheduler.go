@@ -621,7 +621,6 @@ func (fs *FeeScheduler) getBTCMempoolFeeRates(ctx context.Context) ([]float64, e
 		}
 	}
 
-	fs.logger.Infof("从Mempool获取到%d笔交易的费率数据", len(feeRates))
 	return feeRates, nil
 }
 
@@ -639,9 +638,6 @@ func (fs *FeeScheduler) calculateBTCFeeRatesFromMempool(feeRates []float64) (*BT
 	slowRate := fs.calculateBTCPercentileFloat(feeRates, 20)
 	normalRate := fs.calculateBTCPercentileFloat(feeRates, 50)
 	fastRate := fs.calculateBTCPercentileFloat(feeRates, 80)
-
-	fs.logger.Infof("基于Mempool计算BTC费率: 慢速=%.1f sat/vB，普通=%.1f sat/vB，快速=%.1f sat/vB",
-		slowRate, normalRate, fastRate)
 
 	return &BTCFeeRates{
 		Slow:   fmt.Sprintf("%.1f", slowRate),

@@ -68,7 +68,7 @@ export function getUserTransactions(params: GetUserTransactionsRequest): Promise
 /**
  * 获取用户交易统计
  */
-export function getUserTransactionStats(): Promise<ApiResponse<UserTransactionStatsResponse>> {
+export function getUserTransactionStats(params?: { chain?: string }): Promise<ApiResponse<UserTransactionStatsResponse>> {
   if (__USE_MOCK__) {
     console.log('🔧 使用Mock数据 - getUserTransactionStats')
     return handleMockGetUserTransactionStats()
@@ -76,7 +76,8 @@ export function getUserTransactionStats(): Promise<ApiResponse<UserTransactionSt
   
   return request({
     url: '/api/user/transactions/stats',
-    method: 'GET'
+    method: 'GET',
+    params
   })
 }
 

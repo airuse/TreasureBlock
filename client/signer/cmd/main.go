@@ -10,7 +10,9 @@ import (
 	"fmt"
 	"os"
 	"os/exec"
+	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 
 	"github.com/skip2/go-qrcode"
@@ -129,6 +131,18 @@ func selectChainType() string {
 	default:
 		fmt.Println("❌ 无效选择")
 		return ""
+	}
+}
+
+// 获取网络名称
+func getNetworkName(networkType string) string {
+	switch networkType {
+	case "mainnet":
+		return "主网"
+	case "testnet":
+		return "测试网"
+	default:
+		return "未知网络"
 	}
 }
 
@@ -316,12 +330,93 @@ func handlePrivateKeyImport(cryptoManager *crypto.CryptoManager) {
 		return
 	}
 
-	// 创建私钥管理器
-	keyManager := crypto.NewKeyManager(cryptoManager)
-	if err := keyManager.LoadKeys(); err != nil {
-		fmt.Printf("❌ 加载私钥失败: %v\n", err)
-		return
+	// 根据链类型自动派生地址并保存
+	if chainType == "eth" {
+		// 创建私钥管理器
+		keyManager := crypto.NewKeyManager(cryptoManager)
+		if err := keyManager.LoadKeys(); err != nil {
+			fmt.Printf("❌ 加载私钥失败: %v\n", err)
+			return
+		}
+
+		// 获取私钥
+		fmt.Print("请输入私钥 (十六进制格式，不带0x前缀): ")
+		var privateKey string
+		fmt.Scanln(&privateKey)
+
+		// 验证私钥格式
+		if len(privateKey) != 64 {
+			fmt.Println("❌ 私钥格式错误，应该是64位十六进制字符")
+			return
+		}
+
+		// 获取描述
+		fmt.Print("请输入描述 (可选): ")
+		var description string
+		fmt.Scanln(&description)
+
+		// 获取加密密码（隐藏输入）
+		password, err := utils.ReadPassword("请输入加密密码: ")
+		if err != nil {
+			fmt.Println("读取密码失败:", err)
+			return
+		}
+		lower, checksum, err := crypto.DeriveETHAddresses(privateKey)
+		if err != nil {
+			fmt.Printf("❌ 生成ETH地址失败: %v\n", err)
+			return
+		}
+		if err := keyManager.AddKey(lower, privateKey, chainType, description, password); err != nil {
+			fmt.Printf("❌ 添加私钥失败: %v\n", err)
+			return
+		}
+		if err := keyManager.AddAlias(checksum, lower); err != nil {
+			fmt.Printf("⚠️  添加校验地址别名失败: %v\n", err)
+		}
+		fmt.Println("✅ 私钥导入成功 (ETH)")
+		fmt.Printf("地址: %s\n", lower)
+		fmt.Printf("校验地址: %s\n", checksum)
+	} else if chainType == "btc" {
+		// BTC私钥管理菜单
+		keyManager := crypto.NewKeyManager(cryptoManager)
+		if err := keyManager.LoadKeys(); err != nil {
+			fmt.Printf("❌ 加载私钥失败: %v\n", err)
+			return
+		}
+		handleBTCKeyManagement(keyManager)
 	}
+}
+
+// 处理BTC私钥管理
+func handleBTCKeyManagement(keyManager *crypto.KeyManager) {
+	for {
+		fmt.Println("\n=== BTC私钥管理 ===")
+		fmt.Println("1. 导入私钥")
+		fmt.Println("2. 导入脚本")
+		fmt.Println("3. 返回主菜单")
+		fmt.Print("请选择操作: ")
+
+		var choice string
+		fmt.Scanln(&choice)
+
+		switch choice {
+		case "1":
+			handleBTCPrivateKeyImport(keyManager)
+			return
+		case "2":
+			handleBTCScriptImport(keyManager)
+			return
+		case "3":
+			return
+		default:
+			fmt.Println("❌ 无效选择，请重新输入")
+		}
+	}
+}
+
+// 处理BTC私钥导入
+func handleBTCPrivateKeyImport(keyManager *crypto.KeyManager) {
+	fmt.Println("\n=== BTC私钥导入 ===")
 
 	// 获取私钥
 	fmt.Print("请输入私钥 (十六进制格式，不带0x前缀): ")
@@ -346,47 +441,361 @@ func handlePrivateKeyImport(cryptoManager *crypto.CryptoManager) {
 		return
 	}
 
-	// 根据链类型自动派生地址并保存
-	if chainType == "eth" {
-		lower, checksum, err := crypto.DeriveETHAddresses(privateKey)
-		if err != nil {
-			fmt.Printf("❌ 生成ETH地址失败: %v\n", err)
-			return
-		}
-		if err := keyManager.AddKey(lower, privateKey, chainType, description, password); err != nil {
-			fmt.Printf("❌ 添加私钥失败: %v\n", err)
-			return
-		}
-		if err := keyManager.AddAlias(checksum, lower); err != nil {
-			fmt.Printf("⚠️  添加校验地址别名失败: %v\n", err)
-		}
-		fmt.Println("✅ 私钥导入成功 (ETH)")
-		fmt.Printf("地址: %s\n", lower)
-		fmt.Printf("校验地址: %s\n", checksum)
-	} else if chainType == "btc" {
-		wpkh, wsh, p2pkh, p2sh, err := crypto.DeriveBTCAddresses(privateKey)
-		if err != nil {
-			fmt.Printf("❌ 生成BTC地址失败: %v\n", err)
-			return
-		}
-		if err := keyManager.AddKey(wpkh, privateKey, chainType, description, password); err != nil {
-			fmt.Printf("❌ 添加私钥失败: %v\n", err)
-			return
-		}
-		for _, alias := range []string{wsh, p2pkh, p2sh} {
-			if err := keyManager.AddAlias(alias, wpkh); err != nil {
+	// 生成主网和测试网的所有地址类型
+	mainnetAddrs, err := crypto.DeriveAllBTCAddresses(privateKey, "mainnet")
+	if err != nil {
+		fmt.Printf("❌ 生成主网地址失败: %v\n", err)
+		return
+	}
+
+	testnetAddrs, err := crypto.DeriveAllBTCAddresses(privateKey, "testnet")
+	if err != nil {
+		fmt.Printf("❌ 生成测试网地址失败: %v\n", err)
+		return
+	}
+
+	// 使用P2WPKH作为主地址
+	mainAddress := mainnetAddrs.P2WPKH
+	if err := keyManager.AddKey(mainAddress, privateKey, "btc", description, password); err != nil {
+		fmt.Printf("❌ 添加私钥失败: %v\n", err)
+		return
+	}
+
+	// 添加所有地址别名
+	allAddresses := []string{
+		mainnetAddrs.P2PKH, mainnetAddrs.P2WPKH, mainnetAddrs.P2WSH, mainnetAddrs.P2SH,
+		testnetAddrs.P2PKH, testnetAddrs.P2WPKH, testnetAddrs.P2WSH, testnetAddrs.P2SH,
+	}
+
+	for _, addr := range allAddresses {
+		if addr != mainAddress {
+			if err := keyManager.AddAlias(addr, mainAddress); err != nil {
 				fmt.Printf("⚠️  添加地址别名失败: %v\n", err)
 			}
 		}
-		fmt.Println("✅ 私钥导入成功 (BTC)")
-		fmt.Printf("P2WPKH: %s\n", wpkh)
-		fmt.Printf("P2WSH: %s\n", wsh)
-		fmt.Printf("P2PKH: %s\n", p2pkh)
-		fmt.Printf("P2SH-P2WPKH: %s\n", p2sh)
 	}
 
-	fmt.Printf("链类型: %s\n", chainType)
+	fmt.Println("✅ 私钥导入成功 (BTC)")
+	fmt.Println("\n=== 主网地址 ===")
+	fmt.Printf("P2PKH:  %s\n", mainnetAddrs.P2PKH)
+	fmt.Printf("P2WPKH: %s\n", mainnetAddrs.P2WPKH)
+	fmt.Printf("P2WSH:  %s\n", mainnetAddrs.P2WSH)
+	fmt.Printf("P2SH:   %s\n", mainnetAddrs.P2SH)
+	fmt.Println("\n=== 测试网地址 ===")
+	fmt.Printf("P2PKH:  %s\n", testnetAddrs.P2PKH)
+	fmt.Printf("P2WPKH: %s\n", testnetAddrs.P2WPKH)
+	fmt.Printf("P2WSH:  %s\n", testnetAddrs.P2WSH)
+	fmt.Printf("P2SH:   %s\n", testnetAddrs.P2SH)
+}
+
+// 处理BTC脚本导入
+func handleBTCScriptImport(keyManager *crypto.KeyManager) {
+	fmt.Println("\n=== BTC脚本导入 ===")
+
+	// 选择脚本类型
+	fmt.Println("请选择脚本类型:")
+	fmt.Println("1. P2SH (Pay-to-Script-Hash)")
+	fmt.Println("2. P2WSH (Pay-to-Witness-Script-Hash)")
+	fmt.Println("3. P2TR (Pay-to-Taproot)")
+	fmt.Print("请选择 (1-3): ")
+
+	var scriptType string
+	fmt.Scanln(&scriptType)
+
+	switch scriptType {
+	case "1":
+		handleP2SHScriptImport(keyManager)
+	case "2":
+		handleP2WSHScriptImport(keyManager)
+	case "3":
+		handleP2TRScriptImport(keyManager)
+	default:
+		fmt.Println("❌ 无效选择")
+		return
+	}
+}
+
+// 处理P2SH脚本导入
+func handleP2SHScriptImport(keyManager *crypto.KeyManager) {
+	fmt.Println("\n=== P2SH脚本导入 ===")
+
+	// 显示脚本模板
+	showP2SHScriptTemplates()
+
+	// 获取脚本选择
+	fmt.Print("请选择脚本模板 (1-5) 或输入自定义脚本: ")
+	var scriptChoice string
+	fmt.Scanln(&scriptChoice)
+
+	var customScript string
+	switch scriptChoice {
+	case "1":
+		customScript = "<pubkey> OP_CHECKSIG"
+		fmt.Println("✅ 选择模板: 简单P2PK脚本")
+	case "2":
+		customScript = "OP_2 <pubkey> <pubkey> <pubkey> OP_3 OP_CHECKMULTISIG"
+		fmt.Println("✅ 选择模板: 2-of-3多签脚本")
+	case "3":
+		customScript = "OP_IF <pubkey> OP_CHECKSIG OP_ELSE 500000 OP_CHECKLOCKTIMEVERIFY OP_DROP <pubkey> OP_CHECKSIG OP_ENDIF"
+		fmt.Println("✅ 选择模板: 时间锁脚本")
+	case "4":
+		customScript = "OP_IF <pubkey> OP_CHECKSIG OP_ELSE 1000 OP_CHECKSEQUENCEVERIFY OP_DROP <pubkey> OP_CHECKSIG OP_ENDIF"
+		fmt.Println("✅ 选择模板: 序列锁脚本")
+	case "5":
+		customScript = "OP_DUP OP_HASH160 <pubkeyhash> OP_EQUALVERIFY OP_CHECKSIG"
+		fmt.Println("✅ 选择模板: P2PKH脚本")
+	default:
+		customScript = scriptChoice
+		fmt.Println("✅ 使用自定义脚本")
+	}
+
+	// 选择参与脚本的私钥
+	selectedKeys := selectPrivateKeysForScript(keyManager)
+	if len(selectedKeys) == 0 {
+		fmt.Println("❌ 未选择任何私钥")
+		return
+	}
+
+	// 生成脚本地址
+	handleScriptGeneration(keyManager, customScript, selectedKeys, "p2sh")
+}
+
+// 处理P2WSH脚本导入
+func handleP2WSHScriptImport(keyManager *crypto.KeyManager) {
+	fmt.Println("\n=== P2WSH脚本导入 ===")
+
+	// 显示脚本模板
+	showP2WSHScriptTemplates()
+
+	// 获取脚本选择
+	fmt.Print("请选择脚本模板 (1-5) 或输入自定义脚本: ")
+	var scriptChoice string
+	fmt.Scanln(&scriptChoice)
+
+	var customScript string
+	switch scriptChoice {
+	case "1":
+		customScript = "<pubkey> OP_CHECKSIG"
+		fmt.Println("✅ 选择模板: 简单P2PK脚本")
+	case "2":
+		customScript = "OP_2 <pubkey> <pubkey> <pubkey> OP_3 OP_CHECKMULTISIG"
+		fmt.Println("✅ 选择模板: 2-of-3多签脚本")
+	case "3":
+		customScript = "OP_IF <pubkey> OP_CHECKSIG OP_ELSE 500000 OP_CHECKLOCKTIMEVERIFY OP_DROP <pubkey> OP_CHECKSIG OP_ENDIF"
+		fmt.Println("✅ 选择模板: 时间锁脚本")
+	case "4":
+		customScript = "OP_IF <pubkey> OP_CHECKSIG OP_ELSE 1000 OP_CHECKSEQUENCEVERIFY OP_DROP <pubkey> OP_CHECKSIG OP_ENDIF"
+		fmt.Println("✅ 选择模板: 序列锁脚本")
+	case "5":
+		customScript = "OP_DUP OP_HASH160 <pubkeyhash> OP_EQUALVERIFY OP_CHECKSIG"
+		fmt.Println("✅ 选择模板: P2PKH脚本")
+	default:
+		customScript = scriptChoice
+		fmt.Println("✅ 使用自定义脚本")
+	}
+
+	// 选择参与脚本的私钥
+	selectedKeys := selectPrivateKeysForScript(keyManager)
+	if len(selectedKeys) == 0 {
+		fmt.Println("❌ 未选择任何私钥")
+		return
+	}
+
+	// 生成脚本地址
+	handleScriptGeneration(keyManager, customScript, selectedKeys, "p2wsh")
+}
+
+// 处理P2TR脚本导入
+func handleP2TRScriptImport(keyManager *crypto.KeyManager) {
+	fmt.Println("\n=== P2TR脚本导入 ===")
+	fmt.Println("⚠️  P2TR功能开发中...")
+}
+
+// 处理BTC自定义脚本导入
+func handleBTCCustomScriptImport(keyManager *crypto.KeyManager, privateKey, chainType, description, password, networkType string) {
+	fmt.Println("\n=== BTC自定义脚本导入 ===")
+
+	// 显示脚本模板
+	showScriptTemplates()
+
+	// 获取脚本选择
+	fmt.Print("请选择脚本模板 (1-5) 或输入自定义脚本: ")
+	var scriptChoice string
+	fmt.Scanln(&scriptChoice)
+
+	var customScript string
+	switch scriptChoice {
+	case "1":
+		customScript = "<pubkey> OP_CHECKSIG"
+		fmt.Println("✅ 选择模板: 简单P2PK脚本")
+	case "2":
+		customScript = "OP_2 <pubkey> <pubkey> <pubkey> OP_3 OP_CHECKMULTISIG"
+		fmt.Println("✅ 选择模板: 2-of-3多签脚本")
+	case "3":
+		customScript = "OP_IF <pubkey> OP_CHECKSIG OP_ELSE 500000 OP_CHECKLOCKTIMEVERIFY OP_DROP <pubkey> OP_CHECKSIG OP_ENDIF"
+		fmt.Println("✅ 选择模板: 时间锁脚本")
+	case "4":
+		customScript = "OP_IF <pubkey> OP_CHECKSIG OP_ELSE 1000 OP_CHECKSEQUENCEVERIFY OP_DROP <pubkey> OP_CHECKSIG OP_ENDIF"
+		fmt.Println("✅ 选择模板: 序列锁脚本")
+	case "5":
+		customScript = "OP_DUP OP_HASH160 <pubkeyhash> OP_EQUALVERIFY OP_CHECKSIG"
+		fmt.Println("✅ 选择模板: P2PKH脚本")
+	default:
+		customScript = scriptChoice
+		fmt.Println("✅ 使用自定义脚本")
+	}
+
+	// 生成自定义地址
+	p2sh, p2wsh, err := crypto.DeriveCustomBTCAddresses(privateKey, customScript, networkType)
+	if err != nil {
+		fmt.Printf("❌ 生成自定义地址失败: %v\n", err)
+		return
+	}
+
+	// 保存私钥（使用P2SH地址作为主地址）
+	if err := keyManager.AddKey(p2sh, privateKey, chainType, description, password); err != nil {
+		fmt.Printf("❌ 添加私钥失败: %v\n", err)
+		return
+	}
+
+	// 添加地址别名
+	if err := keyManager.AddAlias(p2wsh, p2sh); err != nil {
+		fmt.Printf("⚠️  添加地址别名失败: %v\n", err)
+	}
+
+	fmt.Println("✅ 自定义脚本导入成功")
+	fmt.Printf("网络: %s\n", getNetworkName(networkType))
+	fmt.Printf("P2SH地址: %s\n", p2sh)
+	fmt.Printf("P2WSH地址: %s\n", p2wsh)
+	fmt.Printf("脚本: %s\n", customScript)
 	fmt.Printf("描述: %s\n", description)
+}
+
+// 显示P2SH脚本模板
+func showP2SHScriptTemplates() {
+	fmt.Println("\n=== P2SH脚本模板 ===")
+	fmt.Println("1. 简单P2PK脚本: <pubkey> OP_CHECKSIG")
+	fmt.Println("2. 2-of-3多签脚本: OP_2 <pubkey> <pubkey> <pubkey> OP_3 OP_CHECKMULTISIG")
+	fmt.Println("3. 时间锁脚本: OP_IF <pubkey> OP_CHECKSIG OP_ELSE 500000 OP_CHECKLOCKTIMEVERIFY OP_DROP <pubkey> OP_CHECKSIG OP_ENDIF")
+	fmt.Println("4. 序列锁脚本: OP_IF <pubkey> OP_CHECKSIG OP_ELSE 1000 OP_CHECKSEQUENCEVERIFY OP_DROP <pubkey> OP_CHECKSIG OP_ENDIF")
+	fmt.Println("5. P2PKH脚本: OP_DUP OP_HASH160 <pubkeyhash> OP_EQUALVERIFY OP_CHECKSIG")
+	fmt.Println("==================")
+	fmt.Println("💡 提示:")
+	fmt.Println("- 使用 <pubkey> 占位符会自动替换为选择的公钥")
+	fmt.Println("- 使用 <pubkeyhash> 占位符会自动替换为选择的公钥哈希")
+	fmt.Println("- 支持所有标准比特币操作码")
+	fmt.Println("- 也可以直接输入自定义脚本")
+}
+
+// 显示P2WSH脚本模板
+func showP2WSHScriptTemplates() {
+	fmt.Println("\n=== P2WSH脚本模板 ===")
+	fmt.Println("1. 简单P2PK脚本: <pubkey> OP_CHECKSIG")
+	fmt.Println("2. 2-of-3多签脚本: OP_2 <pubkey> <pubkey> <pubkey> OP_3 OP_CHECKMULTISIG")
+	fmt.Println("3. 时间锁脚本: OP_IF <pubkey> OP_CHECKSIG OP_ELSE 500000 OP_CHECKLOCKTIMEVERIFY OP_DROP <pubkey> OP_CHECKSIG OP_ENDIF")
+	fmt.Println("4. 序列锁脚本: OP_IF <pubkey> OP_CHECKSIG OP_ELSE 1000 OP_CHECKSEQUENCEVERIFY OP_DROP <pubkey> OP_CHECKSIG OP_ENDIF")
+	fmt.Println("5. P2PKH脚本: OP_DUP OP_HASH160 <pubkeyhash> OP_EQUALVERIFY OP_CHECKSIG")
+	fmt.Println("==================")
+	fmt.Println("💡 提示:")
+	fmt.Println("- 使用 <pubkey> 占位符会自动替换为选择的公钥")
+	fmt.Println("- 使用 <pubkeyhash> 占位符会自动替换为选择的公钥哈希")
+	fmt.Println("- 支持所有标准比特币操作码")
+	fmt.Println("- 也可以直接输入自定义脚本")
+}
+
+// 选择参与脚本的私钥
+func selectPrivateKeysForScript(keyManager *crypto.KeyManager) []*crypto.KeyInfo {
+	keys := keyManager.ListKeys()
+	if len(keys) == 0 {
+		fmt.Println("❌ 没有可用的私钥，请先导入私钥")
+		return nil
+	}
+
+	fmt.Printf("\n=== 选择参与脚本的私钥 ===\n")
+	fmt.Printf("当前有 %d 个私钥:\n", len(keys))
+
+	for i, key := range keys {
+		fmt.Printf("%d. [%s] (%s) - %s\n", i+1, formatAddresses(key.Addresses), key.ChainType, key.Description)
+	}
+
+	fmt.Print("请选择私钥编号 (用逗号分隔，如: 1,3,5): ")
+	var selection string
+	fmt.Scanln(&selection)
+
+	// 解析选择
+	selectedIndices := make([]int, 0)
+	parts := strings.Split(selection, ",")
+	for _, part := range parts {
+		part = strings.TrimSpace(part)
+		if idx, err := strconv.Atoi(part); err == nil && idx >= 1 && idx <= len(keys) {
+			selectedIndices = append(selectedIndices, idx-1)
+		}
+	}
+
+	if len(selectedIndices) == 0 {
+		fmt.Println("❌ 未选择任何私钥")
+		return nil
+	}
+
+	// 返回选中的私钥
+	selectedKeys := make([]*crypto.KeyInfo, 0, len(selectedIndices))
+	for _, idx := range selectedIndices {
+		selectedKeys = append(selectedKeys, keys[idx])
+	}
+
+	fmt.Printf("✅ 已选择 %d 个私钥\n", len(selectedKeys))
+	return selectedKeys
+}
+
+// 处理脚本生成
+func handleScriptGeneration(keyManager *crypto.KeyManager, customScript string, selectedKeys []*crypto.KeyInfo, scriptType string) {
+	fmt.Println("\n=== 生成脚本地址 ===")
+
+	// 获取描述
+	fmt.Print("请输入脚本描述 (可选): ")
+	var description string
+	fmt.Scanln(&description)
+
+	// 生成主网和测试网地址
+	mainnetAddr, testnetAddr, err := crypto.GenerateScriptAddresses(customScript, selectedKeys, scriptType)
+	if err != nil {
+		fmt.Printf("❌ 生成脚本地址失败: %v\n", err)
+		return
+	}
+
+	// 保存脚本地址（使用主网地址作为主地址）
+	if err := keyManager.AddKey(mainnetAddr, "", "btc", description, ""); err != nil {
+		fmt.Printf("❌ 添加脚本地址失败: %v\n", err)
+		return
+	}
+
+	// 添加测试网地址别名
+	if err := keyManager.AddAlias(testnetAddr, mainnetAddr); err != nil {
+		fmt.Printf("⚠️  添加地址别名失败: %v\n", err)
+	}
+
+	fmt.Println("✅ 脚本地址生成成功")
+	fmt.Printf("脚本类型: %s\n", strings.ToUpper(scriptType))
+	fmt.Printf("脚本内容: %s\n", customScript)
+	fmt.Printf("主网地址: %s\n", mainnetAddr)
+	fmt.Printf("测试网地址: %s\n", testnetAddr)
+	fmt.Printf("描述: %s\n", description)
+}
+
+// 显示脚本模板
+func showScriptTemplates() {
+	fmt.Println("\n=== 脚本模板 ===")
+	fmt.Println("1. 简单P2PK脚本: <pubkey> OP_CHECKSIG")
+	fmt.Println("2. 2-of-3多签脚本: OP_2 <pubkey> <pubkey> <pubkey> OP_3 OP_CHECKMULTISIG")
+	fmt.Println("3. 时间锁脚本: OP_IF <pubkey> OP_CHECKSIG OP_ELSE 500000 OP_CHECKLOCKTIMEVERIFY OP_DROP <pubkey> OP_CHECKSIG OP_ENDIF")
+	fmt.Println("4. 序列锁脚本: OP_IF <pubkey> OP_CHECKSIG OP_ELSE 1000 OP_CHECKSEQUENCEVERIFY OP_DROP <pubkey> OP_CHECKSIG OP_ENDIF")
+	fmt.Println("5. P2PKH脚本: OP_DUP OP_HASH160 <pubkeyhash> OP_EQUALVERIFY OP_CHECKSIG")
+	fmt.Println("==================")
+	fmt.Println("💡 提示:")
+	fmt.Println("- 使用 <pubkey> 占位符会自动替换为你的公钥")
+	fmt.Println("- 使用 <pubkeyhash> 占位符会自动替换为你的公钥哈希")
+	fmt.Println("- 支持所有标准比特币操作码")
+	fmt.Println("- 也可以直接输入自定义脚本")
 }
 
 // 处理密钥管理
@@ -399,6 +808,11 @@ func handleKeyManagement(cryptoManager *crypto.CryptoManager) {
 		fmt.Printf("❌ 加载私钥失败: %v\n", err)
 		return
 	}
+
+	// 显示私钥文件路径
+	homeDir, _ := os.UserHomeDir()
+	keysFile := filepath.Join(homeDir, ".blockchain-signer", "keys.json")
+	fmt.Printf("DEBUG: 私钥文件路径: %s\n", keysFile)
 
 	for {
 		showKeyManagementMenu()
@@ -449,18 +863,92 @@ func listKeys(keyManager *crypto.KeyManager) {
 	fmt.Println("\n=== 私钥列表 ===")
 
 	keys := keyManager.ListKeys()
+	fmt.Printf("DEBUG: 从 ListKeys 获取到 %d 个私钥\n", len(keys))
+
 	if len(keys) == 0 {
 		fmt.Println("暂无私钥")
 		return
 	}
 
 	for i, key := range keys {
-		fmt.Printf("%d. 地址: %s\n", i+1, formatAddresses(key.Addresses))
-		fmt.Printf("   链类型: %s\n", key.ChainType)
+		fmt.Printf("%d. 私钥ID: %s\n", i+1, key.KeyID[:8]+"...")
+		fmt.Printf("   链类型: %s\n", strings.ToUpper(key.ChainType))
 		fmt.Printf("   描述: %s\n", key.Description)
 		fmt.Printf("   创建时间: %s\n", key.CreatedAt)
-		fmt.Println("   ---")
+		fmt.Printf("   地址数量: %d\n", len(key.Addresses))
+
+		// 详细显示每个地址
+		fmt.Println("   地址详情:")
+		for j, addr := range key.Addresses {
+			addrType := getAddressType(addr, key.ChainType)
+			fmt.Printf("     %d. %s (%s)\n", j+1, addr, addrType)
+		}
+
+		fmt.Println("   " + strings.Repeat("-", 60))
 	}
+}
+
+// 获取地址类型
+func getAddressType(address, chainType string) string {
+	if chainType == "eth" {
+		if len(address) == 42 && address[:2] == "0x" {
+			return "ETH地址"
+		}
+		return "未知ETH地址"
+	} else if chainType == "btc" {
+		// 检查长度范围
+		if len(address) < 26 || len(address) > 62 {
+			return "无效BTC地址"
+		}
+
+		// P2PKH (1开头，26-35位)
+		if address[0] == '1' && len(address) >= 26 && len(address) <= 35 {
+			return "P2PKH"
+		}
+
+		// P2SH (3开头，26-35位)
+		if address[0] == '3' && len(address) >= 26 && len(address) <= 35 {
+			return "P2SH"
+		}
+
+		// P2WPKH (bc1q开头，42位)
+		if len(address) == 42 && address[:4] == "bc1q" {
+			return "P2WPKH"
+		}
+
+		// P2WSH (bc1q开头，62位)
+		if len(address) == 62 && address[:4] == "bc1q" {
+			return "P2WSH"
+		}
+
+		// 测试网 P2PKH (m或n开头，26-35位)
+		if (address[0] == 'm' || address[0] == 'n') && len(address) >= 26 && len(address) <= 35 {
+			return "P2PKH(测试网)"
+		}
+
+		// 测试网 P2SH (2开头，26-35位)
+		if address[0] == '2' && len(address) >= 26 && len(address) <= 35 {
+			return "P2SH(测试网)"
+		}
+
+		// 测试网 P2WPKH (tb1q开头，42位)
+		if len(address) == 42 && address[:5] == "tb1q" {
+			return "P2WPKH(测试网)"
+		}
+
+		// 测试网 P2WSH (tb1q开头，62位)
+		if len(address) == 62 && address[:5] == "tb1q" {
+			return "P2WSH(测试网)"
+		}
+
+		// 脚本地址占位符
+		if address == "script_mainnet_address" || address == "script_testnet_address" {
+			return "脚本地址(占位符)"
+		}
+
+		return "未知BTC地址"
+	}
+	return "未知地址类型"
 }
 
 // 按链类型列出私钥
@@ -479,11 +967,13 @@ func listKeysByChain(keyManager *crypto.KeyManager, chainType string) {
 	}
 
 	for i, key := range keys {
-		fmt.Printf("%d. 地址: %s\n", i+1, formatAddresses(key.Addresses))
-		fmt.Printf("   链类型: %s\n", key.ChainType)
+		fmt.Printf("%d. 私钥ID: %s\n", i+1, key.KeyID[:8]+"...")
+		fmt.Printf("   地址: %s\n", formatAddresses(key.Addresses))
+		fmt.Printf("   链类型: %s\n", strings.ToUpper(key.ChainType))
 		fmt.Printf("   描述: %s\n", key.Description)
 		fmt.Printf("   创建时间: %s\n", key.CreatedAt)
-		fmt.Println("   ---")
+		fmt.Printf("   地址数量: %d\n", len(key.Addresses))
+		fmt.Println("   " + strings.Repeat("-", 50))
 	}
 }
 
