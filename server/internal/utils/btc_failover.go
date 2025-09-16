@@ -298,8 +298,11 @@ func (m *BTCFailoverManager) GetAddressUTXOs(ctx context.Context, address string
 
 // BTCTx 简化的交易响应（esplora风格）
 type BTCTx struct {
-	TxID string `json:"txid"`
-	Vout []struct {
+	TxID          string `json:"txid"`
+	Confirmations int    `json:"confirmations"`
+	BlockHeight   int    `json:"blockheight"`
+	Status        string `json:"status"`
+	Vout          []struct {
 		ScriptPubKey     string `json:"scriptpubkey"`
 		ScriptPubKeyType string `json:"scriptpubkey_type"`
 		ScriptPubKeyAddr string `json:"scriptpubkey_address"`
@@ -339,21 +342,245 @@ func (m *BTCFailoverManager) GetTransaction(ctx context.Context, txid string) (*
 			lastErr = fmt.Errorf("REST API返回错误: %d", resp.StatusCode)
 			continue
 		}
-		var tx BTCTx
-		if err := json.Unmarshal(body, &tx); err != nil {
+		// 使用map来解析，以便处理Status字段的不同类型
+		var txData map[string]interface{}
+		if err := json.Unmarshal(body, &txData); err != nil {
 			lastErr = err
 			continue
 		}
-		// 某些实现不包含 n 字段，补齐索引
-		for i := range tx.Vout {
-			if tx.Vout[i].N == 0 {
-				tx.Vout[i].N = i
+		// 构建BTCTx结构
+		tx := &BTCTx{
+			TxID: txid,
+		}
+
+		// 处理Status字段和相关的确认信息
+		if statusObj, ok := txData["status"].(map[string]interface{}); ok {
+			// 从status对象中提取信息
+			if confirmed, ok := statusObj["confirmed"].(bool); ok {
+				if confirmed {
+					tx.Status = "confirmed"
+					// 从status对象中提取区块高度
+					if blockHeight, ok := statusObj["block_height"].(float64); ok {
+						tx.BlockHeight = int(blockHeight)
+						// 计算确认数：当前区块高度 - 交易所在区块高度 + 1
+						if currentHeight, err := m.GetLatestBlockHeight(ctx); err == nil {
+							tx.Confirmations = int(currentHeight) - tx.BlockHeight + 1
+							if tx.Confirmations < 0 {
+								tx.Confirmations = 0
+							}
+						} else {
+							// 如果无法获取当前区块高度，设置为1
+							tx.Confirmations = 1
+						}
+					} else {
+						tx.Confirmations = 1
+					}
+				} else {
+					tx.Status = "pending"
+					tx.Confirmations = 0
+				}
+			} else {
+				tx.Status = "unknown"
+				tx.Confirmations = 0
+			}
+		} else if status, ok := txData["status"].(string); ok {
+			// 如果status是字符串
+			tx.Status = status
+			if status == "confirmed" {
+				tx.Confirmations = 1
+			} else {
+				tx.Confirmations = 0
+			}
+		} else {
+			// 检查是否有直接的confirmations字段
+			if confirmations, ok := txData["confirmations"].(float64); ok {
+				tx.Confirmations = int(confirmations)
+			}
+			// 检查是否有直接的blockheight字段
+			if blockHeight, ok := txData["blockheight"].(float64); ok {
+				tx.BlockHeight = int(blockHeight)
+			}
+			tx.Status = "unknown"
+		}
+
+		// 处理Vout字段
+		if voutArray, ok := txData["vout"].([]interface{}); ok {
+			for i, voutItem := range voutArray {
+				if voutMap, ok := voutItem.(map[string]interface{}); ok {
+					vout := struct {
+						ScriptPubKey     string `json:"scriptpubkey"`
+						ScriptPubKeyType string `json:"scriptpubkey_type"`
+						ScriptPubKeyAddr string `json:"scriptpubkey_address"`
+						Value            int64  `json:"value"`
+						N                int    `json:"n"`
+					}{}
+
+					if scriptPubKey, ok := voutMap["scriptpubkey"].(string); ok {
+						vout.ScriptPubKey = scriptPubKey
+					}
+					if scriptPubKeyType, ok := voutMap["scriptpubkey_type"].(string); ok {
+						vout.ScriptPubKeyType = scriptPubKeyType
+					}
+					if scriptPubKeyAddr, ok := voutMap["scriptpubkey_address"].(string); ok {
+						vout.ScriptPubKeyAddr = scriptPubKeyAddr
+					}
+					if value, ok := voutMap["value"].(float64); ok {
+						vout.Value = int64(value)
+					}
+					if n, ok := voutMap["n"].(float64); ok {
+						vout.N = int(n)
+					} else {
+						vout.N = i // 如果没有n字段，使用索引
+					}
+
+					tx.Vout = append(tx.Vout, vout)
+				}
 			}
 		}
-		tx.TxID = txid
-		return &tx, nil
+
+		return tx, nil
 	}
 	return nil, fmt.Errorf("获取交易详情失败: %w", lastErr)
+}
+
+// GetTransactionStatus 获取交易状态信息
+func (m *BTCFailoverManager) GetTransactionStatus(ctx context.Context, txid string) (*BTCTx, error) {
+	// 首先尝试使用JSON-RPC获取交易状态信息
+	if len(m.rpcURLs) > 0 {
+		txInfo, err := m.getTransactionStatusFromRPC(ctx, txid)
+		if err == nil {
+			return txInfo, nil
+		}
+		// 如果RPC失败，继续尝试REST API
+	}
+
+	// 使用REST API获取交易信息
+	txInfo, err := m.GetTransaction(ctx, txid)
+	if err != nil {
+		return nil, fmt.Errorf("获取交易状态失败: %w", err)
+	}
+
+	// 尝试从REST API获取更多状态信息
+	// 大多数REST API不直接提供确认数，需要从区块信息推断
+	if txInfo.Confirmations == 0 {
+		// 尝试获取最新区块高度来计算确认数
+		latestHeight, err := m.GetLatestBlockHeight(ctx)
+		if err == nil && txInfo.BlockHeight > 0 {
+			confirmations := latestHeight - uint64(txInfo.BlockHeight)
+			if confirmations > 0 {
+				txInfo.Confirmations = int(confirmations)
+			}
+		}
+	}
+
+	return txInfo, nil
+}
+
+// getTransactionStatusFromRPC 使用JSON-RPC获取交易状态
+func (m *BTCFailoverManager) getTransactionStatusFromRPC(ctx context.Context, txid string) (*BTCTx, error) {
+	var lastErr error
+	deadline := time.Now().Add(m.timeout)
+
+	for time.Now().Before(deadline) {
+		url := m.nextRPC()
+		txInfo, err := m.getTransactionFromRPC(ctx, url, txid)
+		if err == nil {
+			return txInfo, nil
+		}
+		lastErr = err
+	}
+
+	return nil, fmt.Errorf("所有JSON-RPC都获取交易状态失败: %w", lastErr)
+}
+
+// getTransactionFromRPC 从指定RPC URL获取交易信息
+func (m *BTCFailoverManager) getTransactionFromRPC(ctx context.Context, baseURL string, txid string) (*BTCTx, error) {
+	// 使用JSON-RPC格式
+	payload := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"method":  "gettransaction",
+		"params":  []interface{}{txid},
+		"id":      1,
+	}
+
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return nil, fmt.Errorf("序列化请求失败: %w", err)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", baseURL, strings.NewReader(string(jsonData)))
+	if err != nil {
+		return nil, fmt.Errorf("创建请求失败: %w", err)
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+	client := &http.Client{Timeout: m.timeout}
+	resp, err := client.Do(req)
+	if err != nil {
+		return nil, fmt.Errorf("HTTP请求失败: %w", err)
+	}
+	defer resp.Body.Close()
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return nil, fmt.Errorf("读取响应失败: %w", err)
+	}
+
+	if resp.StatusCode != http.StatusOK {
+		return nil, fmt.Errorf("HTTP错误: %d", resp.StatusCode)
+	}
+
+	var rpcResp struct {
+		JSONRPC string `json:"jsonrpc"`
+		Result  struct {
+			TxID          string      `json:"txid"`
+			Confirmations int         `json:"confirmations"`
+			BlockHeight   int         `json:"blockheight"`
+			Status        interface{} `json:"status"`
+		} `json:"result"`
+		Error *struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+
+	if err := json.Unmarshal(body, &rpcResp); err != nil {
+		return nil, fmt.Errorf("解析响应失败: %w", err)
+	}
+
+	if rpcResp.Error != nil {
+		return nil, fmt.Errorf("RPC错误: %s (代码: %d)", rpcResp.Error.Message, rpcResp.Error.Code)
+	}
+
+	// 处理Status字段，可能是字符串或对象
+	var statusStr string
+	switch v := rpcResp.Result.Status.(type) {
+	case string:
+		statusStr = v
+	case map[string]interface{}:
+		// 如果是对象，尝试提取状态信息
+		if confirmed, ok := v["confirmed"].(bool); ok {
+			if confirmed {
+				statusStr = "confirmed"
+			} else {
+				statusStr = "pending"
+			}
+		} else {
+			statusStr = "unknown"
+		}
+	default:
+		statusStr = "unknown"
+	}
+
+	// 转换为BTCTx格式
+	tx := &BTCTx{
+		TxID:          rpcResp.Result.TxID,
+		Confirmations: rpcResp.Result.Confirmations,
+		BlockHeight:   rpcResp.Result.BlockHeight,
+		Status:        statusStr,
+	}
+
+	return tx, nil
 }
 
 // ScanUTXOsByAddress 使用 JSON-RPC scantxoutset 扫描指定地址的UTXO
@@ -665,7 +892,6 @@ func (m *BTCFailoverManager) getMempoolTransactionsFromURL(ctx context.Context, 
 		"params":  []interface{}{true}, // true表示返回详细交易信息
 		"id":      1,
 	}
-	fmt.Printf("从JSON-RPC %s获取Mempool交易\n", baseURL)
 
 	jsonData, err := json.Marshal(payload)
 	if err != nil {
@@ -767,4 +993,79 @@ func (m *BTCFailoverManager) getMempoolTransactionsFromURL(ctx context.Context, 
 	}
 
 	return transactions, nil
+}
+
+// SendRawTransaction 故障转移发送原始交易
+func (m *BTCFailoverManager) SendRawTransaction(ctx context.Context, rawTx string) (string, error) {
+	var lastErr error
+	deadline := time.Now().Add(m.timeout)
+
+	for time.Now().Before(deadline) {
+		url := m.nextRPC()
+		txHash, err := m.sendRawTransactionFromURL(ctx, url, rawTx)
+		if err == nil {
+			return txHash, nil
+		}
+		lastErr = err
+	}
+
+	return "", fmt.Errorf("所有JSON-RPC都发送交易失败: %w", lastErr)
+}
+
+// sendRawTransactionFromURL 从指定URL发送原始交易
+func (m *BTCFailoverManager) sendRawTransactionFromURL(ctx context.Context, baseURL string, rawTx string) (string, error) {
+	// 使用JSON-RPC格式
+	payload := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"method":  "sendrawtransaction",
+		"params":  []interface{}{rawTx},
+		"id":      1,
+	}
+
+	jsonData, err := json.Marshal(payload)
+	if err != nil {
+		return "", err
+	}
+
+	req, err := http.NewRequestWithContext(ctx, "POST", baseURL, strings.NewReader(string(jsonData)))
+	if err != nil {
+		return "", err
+	}
+
+	req.Header.Set("Content-Type", "application/json")
+
+	client := &http.Client{Timeout: m.timeout}
+	resp, err := client.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+
+	if resp.StatusCode != http.StatusOK {
+		return "", fmt.Errorf("API返回错误: %d", resp.StatusCode)
+	}
+
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+
+	// 解析JSON-RPC响应
+	var rpcResp struct {
+		Result string `json:"result"`
+		Error  *struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+
+	if err := json.Unmarshal(body, &rpcResp); err != nil {
+		return "", err
+	}
+
+	if rpcResp.Error != nil {
+		return "", fmt.Errorf("RPC错误: %s", rpcResp.Error.Message)
+	}
+
+	return rpcResp.Result, nil
 }

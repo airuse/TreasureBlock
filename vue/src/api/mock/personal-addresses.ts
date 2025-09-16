@@ -165,3 +165,53 @@ export const handleMockGetAuthorizedAddresses = (data: any): Promise<any> => {
     }, 300)
   })
 }
+
+/**
+ * 模拟获取用户所有在途交易地址接口
+ */
+export const handleMockGetUserAddressesByPending = (chain: string): Promise<any> => {
+  return new Promise((resolve) => {
+    setTimeout(() => {
+      // 模拟在途交易地址数据
+      const mockPendingAddresses = [
+        {
+          id: 1,
+          address: "1A1zP1eP5QGefi2DMPTfTL5SLmv7DivfNa",
+          amount: "100000000", // 1 BTC in satoshi
+          fee: "510", // 手续费
+          status: "in_progress",
+          created_at: "2025-01-16 10:30:00",
+          updated_at: "2025-01-16 10:30:00"
+        },
+        {
+          id: 2,
+          address: "1BvBMSEYstWetqTFn5Au4m4GFg7xJaNVN2",
+          amount: "50000000", // 0.5 BTC in satoshi
+          fee: "510", // 手续费
+          status: "packed",
+          created_at: "2025-01-16 09:15:30",
+          updated_at: "2025-01-16 09:15:30"
+        },
+        {
+          id: 3,
+          address: "1PMycacnJaSqwwJqSqjqjqjqjqjqjqjqjqj",
+          amount: "25000000", // 0.25 BTC in satoshi
+          fee: "510", // 手续费
+          status: "in_progress",
+          created_at: "2025-01-16 08:45:15",
+          updated_at: "2025-01-16 08:45:15"
+        }
+      ]
+
+      // 根据链类型过滤数据
+      const filteredAddresses = chain === 'btc' ? mockPendingAddresses : []
+
+      resolve({
+        success: true,
+        message: "获取在途交易地址成功",
+        data: filteredAddresses,
+        timestamp: Date.now()
+      })
+    }, 300)
+  })
+}

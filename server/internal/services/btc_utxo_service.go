@@ -14,6 +14,7 @@ type BTCUTXOService interface {
 	GetSpent(ctx context.Context, chain string, txID string) ([]*models.BTCUTXO, error)
 	GetUTXOCountByAddress(ctx context.Context, chain string, address string) (int64, error)
 	GetUTXOsByAddress(ctx context.Context, chain string, address string) ([]*models.BTCUTXO, error)
+	GetUTXOsByAddressExcludingPending(ctx context.Context, chain string, address string) ([]*models.BTCUTXO, error)
 }
 
 type btcUtxoService struct {
@@ -75,4 +76,14 @@ func (s *btcUtxoService) GetUTXOsByAddress(ctx context.Context, chain string, ad
 		return nil, fmt.Errorf("chain cannot be empty")
 	}
 	return s.repo.GetUTXOsByAddress(ctx, chain, address)
+}
+
+func (s *btcUtxoService) GetUTXOsByAddressExcludingPending(ctx context.Context, chain string, address string) ([]*models.BTCUTXO, error) {
+	if address == "" {
+		return nil, fmt.Errorf("address cannot be empty")
+	}
+	if chain == "" {
+		return nil, fmt.Errorf("chain cannot be empty")
+	}
+	return s.repo.GetUTXOsByAddressExcludingPending(ctx, chain, address)
 }

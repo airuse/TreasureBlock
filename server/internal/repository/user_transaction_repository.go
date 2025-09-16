@@ -19,6 +19,8 @@ type UserTransactionRepository interface {
 	GetStatsByUserID(ctx context.Context, userID uint64) (*models.UserTransaction, error)
 	GetByStatus(ctx context.Context, userID uint64, status string) ([]*models.UserTransaction, error)
 	GetByChain(ctx context.Context, userID uint64, chain string, page, pageSize int) ([]*models.UserTransaction, int64, error)
+	GetByChainExcludingPending(ctx context.Context, chain string) ([]*models.UserTransaction, error)
+	GetByUserIDExcludingPending(ctx context.Context, userID uint) ([]*models.UserTransaction, error)
 }
 
 // userTransactionRepository 用户交易仓储实现
@@ -130,4 +132,20 @@ func (r *userTransactionRepository) GetByChain(ctx context.Context, userID uint6
 	}
 
 	return transactions, total, nil
+}
+
+// GetByChainExcludingPending 根据链类型获取用户交易，排除被pending交易使用的
+func (r *userTransactionRepository) GetByChainExcludingPending(ctx context.Context, chain string) ([]*models.UserTransaction, error) {
+	var txs []*models.UserTransaction
+	q := r.db.WithContext(ctx).Model(&models.UserTransaction{}).Where("chain = ? AND status IN (?, ?)", chain, "in_progress", "packed")
+	err := q.Find(&txs).Error
+	return txs, err
+}
+
+// GetByUserIDExcludingPending 根据用户ID获取用户交易，排除被pending交易使用的
+func (r *userTransactionRepository) GetByUserIDExcludingPending(ctx context.Context, userID uint) ([]*models.UserTransaction, error) {
+	var txs []*models.UserTransaction
+	q := r.db.WithContext(ctx).Model(&models.UserTransaction{}).Where("user_id = ? AND status IN (?, ?)", userID, "in_progress", "packed")
+	err := q.Find(&txs).Error
+	return txs, err
 }

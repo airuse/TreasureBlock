@@ -28,10 +28,11 @@ type TransactionData struct {
 
 // MsgTx BTC交易结构
 type MsgTx struct {
-	Version  int32   `json:"Version"`  // 交易版本
-	TxIn     []TxIn  `json:"TxIn"`     // 交易输入
-	TxOut    []TxOut `json:"TxOut"`    // 交易输出
-	LockTime uint32  `json:"LockTime"` // 锁定时间
+	Version  int32     `json:"Version"`            // 交易版本
+	TxIn     []TxIn    `json:"TxIn"`               // 交易输入
+	TxOut    []TxOut   `json:"TxOut"`              // 交易输出
+	LockTime uint32    `json:"LockTime"`           // 锁定时间
+	PrevOuts []PrevOut `json:"PrevOuts,omitempty"` // 前置输出（用于segwit签名）
 }
 
 // TxIn BTC交易输入
@@ -39,6 +40,14 @@ type TxIn struct {
 	Txid     string `json:"txid"`     // 前一个交易的哈希
 	Vout     int    `json:"vout"`     // 前一个交易的输出索引
 	Sequence uint32 `json:"sequence"` // 序列号
+}
+
+// PrevOut 前置输出（供segwit签名使用）
+type PrevOut struct {
+	Txid            string `json:"txid"`
+	Vout            int    `json:"vout"`
+	ValueSatoshi    int64  `json:"value_satoshi"`
+	ScriptPubKeyHex string `json:"script_pubkey_hex"`
 }
 
 // TxOut BTC交易输出
@@ -118,9 +127,7 @@ type ValidationError struct {
 	Message string
 }
 
-func (e *ValidationError) Error() string {
-	return e.Message
-}
+func (e *ValidationError) Error() string { return e.Message }
 
 // ToJSON 将交易数据转换为JSON字符串
 func (t *TransactionData) ToJSON() (string, error) {
@@ -137,9 +144,7 @@ func (t *TransactionData) IsETH() bool {
 }
 
 // IsBTC 判断是否为BTC交易
-func (t *TransactionData) IsBTC() bool {
-	return t.Type == "btc"
-}
+func (t *TransactionData) IsBTC() bool { return t.Type == "btc" }
 
 // GetChainName 获取链名称
 func (t *TransactionData) GetChainName() string {

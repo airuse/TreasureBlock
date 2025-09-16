@@ -1,12 +1,15 @@
 package utils
 
 import (
+	"bufio"
+	"crypto/rand"
 	"crypto/sha256"
 	"fmt"
 	"os"
 	"os/exec"
 	"runtime"
 	"strings"
+	"unicode"
 
 	"golang.org/x/term"
 )
@@ -126,4 +129,46 @@ func ReadPassword(prompt string) (string, error) {
 		return "", fmt.Errorf("读取密码失败: %w", err)
 	}
 	return string(pwd), nil
+}
+
+// GenerateID 生成唯一ID
+func GenerateID() string {
+	b := make([]byte, 16)
+	rand.Read(b)
+	return fmt.Sprintf("%x", b)
+}
+
+// ReplaceAll 替换字符串中的所有匹配项
+func ReplaceAll(s, old, new string) string {
+	return strings.ReplaceAll(s, old, new)
+}
+
+// ReadLine 读取一整行（包含空格）
+func ReadLine(prompt string) (string, error) {
+	if strings.TrimSpace(prompt) != "" {
+		fmt.Print(prompt)
+	}
+	reader := bufio.NewReader(os.Stdin)
+	line, err := reader.ReadString('\n')
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimRight(line, "\r\n"), nil
+}
+
+// IsHexString 判断是否为十六进制字符串（可带0x前缀）
+func IsHexString(s string) bool {
+	s = strings.TrimSpace(s)
+	if strings.HasPrefix(s, "0x") || strings.HasPrefix(s, "0X") {
+		s = s[2:]
+	}
+	if len(s) == 0 || len(s)%2 != 0 {
+		return false
+	}
+	for _, r := range s {
+		if !unicode.IsDigit(r) && (r < 'a' || r > 'f') && (r < 'A' || r > 'F') {
+			return false
+		}
+	}
+	return true
 }

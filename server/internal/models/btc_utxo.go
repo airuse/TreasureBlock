@@ -30,6 +30,7 @@ type BTCUTXO struct {
 	Ctime     time.Time      `json:"ctime" gorm:"type:timestamp;not null;default:CURRENT_TIMESTAMP;column:ctime;index;comment:入库时间"`
 	Mtime     time.Time      `json:"mtime" gorm:"type:timestamp;not null;default:CURRENT_TIMESTAMP;column:mtime;comment:更改时间"`
 	DeletedAt gorm.DeletedAt `json:"deleted_at,omitempty" gorm:"index"`
+	Status    string         `json:"status" gorm:"-"` // 状态0:未花费1:已花费
 }
 
 func (BTCUTXO) TableName() string {

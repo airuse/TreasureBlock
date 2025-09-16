@@ -17,6 +17,7 @@ type BTCUTXORepository interface {
 	GetSpent(ctx context.Context, chain string, txID string) ([]*models.BTCUTXO, error)
 	GetUTXOCountByAddress(ctx context.Context, chain string, address string) (int64, error)
 	GetUTXOsByAddress(ctx context.Context, chain string, address string) ([]*models.BTCUTXO, error)
+	GetUTXOsByAddressExcludingPending(ctx context.Context, chain string, address string) ([]*models.BTCUTXO, error)
 }
 
 type btcUTXORepository struct {
@@ -114,5 +115,29 @@ func (r *btcUTXORepository) GetUTXOsByAddress(ctx context.Context, chain string,
 		Where("chain = ? AND address = ? AND (spent_tx_id = '' OR spent_tx_id IS NULL)", chain, address).
 		Order("block_height DESC, value_satoshi DESC").
 		Find(&utxos).Error
+	return utxos, err
+}
+
+// GetUTXOsByAddressExcludingPending 获取指定地址的UTXO，排除被pending交易使用的UTXO
+func (r *btcUTXORepository) GetUTXOsByAddressExcludingPending(ctx context.Context, chain string, address string) ([]*models.BTCUTXO, error) {
+	var utxos []*models.BTCUTXO
+
+	// 构建子查询：获取被状态为in_progress或packed的BTC交易使用的UTXO
+	subQuery := r.db.WithContext(ctx).
+		Table("user_transactions").
+		Select("JSON_UNQUOTE(JSON_EXTRACT(btc_tx_in_json, CONCAT('$[', numbers.n, '].txid'))) as txid, JSON_UNQUOTE(JSON_EXTRACT(btc_tx_in_json, CONCAT('$[', numbers.n, '].vout'))) as vout").
+		Joins("CROSS JOIN (SELECT 0 as n UNION SELECT 1 UNION SELECT 2 UNION SELECT 3 UNION SELECT 4 UNION SELECT 5 UNION SELECT 6 UNION SELECT 7 UNION SELECT 8 UNION SELECT 9) numbers").
+		Where("chain = ? AND status IN (?, ?) AND btc_tx_in_json IS NOT NULL AND btc_tx_in_json != ''", chain, "in_progress", "packed").
+		Where("JSON_UNQUOTE(JSON_EXTRACT(btc_tx_in_json, CONCAT('$[', numbers.n, '].txid'))) IS NOT NULL").
+		Where("JSON_UNQUOTE(JSON_EXTRACT(btc_tx_in_json, CONCAT('$[', numbers.n, '].vout'))) IS NOT NULL")
+
+	// 主查询：获取UTXO，但排除被pending交易使用的
+	// 使用NOT EXISTS子查询来排除匹配的UTXO
+	err := r.db.WithContext(ctx).
+		Where("chain = ? AND address = ? AND (spent_tx_id = '' OR spent_tx_id IS NULL)", chain, address).
+		Where("NOT EXISTS (SELECT 1 FROM (?) AS pending_utxos WHERE pending_utxos.txid = btc_utxos.tx_id AND pending_utxos.vout = btc_utxos.vout_index)", subQuery).
+		Order("block_height DESC, value_satoshi DESC").
+		Find(&utxos).Error
+
 	return utxos, err
 }

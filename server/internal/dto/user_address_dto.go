@@ -43,3 +43,13 @@ type UserAddressResponse struct {
 	CreatedAt           string                       `json:"created_at"`
 	UpdatedAt           string                       `json:"updated_at"`
 }
+
+type UserAddressPendingResponse struct {
+	ID        uint   `json:"id"`
+	Address   string `json:"address"`
+	Amount    string `json:"amount"`
+	Status    string `json:"status"`
+	Fee       string `json:"fee"`
+	CreatedAt string `json:"created_at"`
+	UpdatedAt string `json:"updated_at"`
+}

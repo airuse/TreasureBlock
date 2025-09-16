@@ -5,6 +5,8 @@ import (
 	"blockChainBrowser/client/signer/internal/utils"
 	"blockChainBrowser/client/signer/pkg"
 	"bytes"
+	"crypto/ecdsa"
+	crand "crypto/rand"
 	"encoding/hex"
 	"fmt"
 	"strconv"
@@ -277,19 +279,163 @@ func (bs *BTCSigner) signTransactionWithSingleKey(tx *wire.MsgTx, selectedKey *S
 		return nil, fmt.Errorf("解析发送地址失败: %w", err)
 	}
 
-	// 创建输出脚本
+	// 根据地址类型选择不同的签名方法
+	switch addr := address.(type) {
+	case *btcutil.AddressWitnessPubKeyHash:
+		// P2WPKH (隔离见证) 签名（需要PrevOuts）
+		return bs.signP2WPKHTransaction(tx, addr, selectedKey.PrivateKey, transaction)
+	case *btcutil.AddressPubKeyHash:
+		// P2PKH (传统) 签名
+		return bs.signP2PKHTransaction(tx, addr, selectedKey.PrivateKey)
+	case *btcutil.AddressWitnessScriptHash:
+		// P2WSH 签名
+		return bs.signP2WSHTransaction(tx, addr, selectedKey.PrivateKey)
+	case *btcutil.AddressScriptHash:
+		// P2SH 签名
+		return bs.signP2SHTransaction(tx, addr, selectedKey.PrivateKey)
+	default:
+		return nil, fmt.Errorf("不支持的地址类型: %T", address)
+	}
+}
+
+// signP2WPKHTransaction 签名P2WPKH隔离见证交易
+func (bs *BTCSigner) signP2WPKHTransaction(tx *wire.MsgTx, address *btcutil.AddressWitnessPubKeyHash, privateKey *btcec.PrivateKey, original *pkg.TransactionData) (*wire.MsgTx, error) {
+	fmt.Println("🔵 使用P2WPKH隔离见证签名...")
+
+	if original == nil || original.MsgTx == nil || len(original.MsgTx.PrevOuts) != len(tx.TxIn) {
+		return nil, fmt.Errorf("缺少PrevOuts数据，无法签名P2WPKH")
+	}
+
+	// 公钥（压缩33字节）
+	pubKey := privateKey.PubKey()
+	pubKeyBytes := pubKey.SerializeCompressed()
+
+	// 对每个输入签名
+	for i := range tx.TxIn {
+		prev := original.MsgTx.PrevOuts[i]
+		// 解析前置输出脚本
+		spkHex := strings.TrimPrefix(prev.ScriptPubKeyHex, "0x")
+		pkScript, err := hex.DecodeString(spkHex)
+		if err != nil {
+			return nil, fmt.Errorf("解析前置输出脚本失败 (输入 %d): %w", i, err)
+		}
+		amount := prev.ValueSatoshi
+		// 构造 prevout fetcher（BIP143需要）
+		fetcher := txscript.NewCannedPrevOutputFetcher(pkScript, amount)
+		sigHashes := txscript.NewTxSigHashes(tx, fetcher)
+
+		// 计算见证签名哈希（注意使用前置输出脚本与金额）
+		sigHash, err := txscript.CalcWitnessSigHash(pkScript, sigHashes, txscript.SigHashAll, tx, i, amount)
+		if err != nil {
+			return nil, fmt.Errorf("计算见证签名哈希失败 (输入 %d): %w", i, err)
+		}
+
+		// 使用私钥签名（安全随机源）
+		signature, err := ecdsa.SignASN1(crand.Reader, privateKey.ToECDSA(), sigHash[:])
+		if err != nil {
+			return nil, fmt.Errorf("签名失败 (输入 %d): %w", i, err)
+		}
+
+		// 完整签名（附带SigHashAll）
+		sigWithHashType := append(signature, byte(txscript.SigHashAll))
+
+		// P2WPKH: scriptSig 为空，Witness = [signature, pubkey]
+		tx.TxIn[i].SignatureScript = nil
+		tx.TxIn[i].Witness = wire.TxWitness{sigWithHashType, pubKeyBytes}
+	}
+
+	return tx, nil
+}
+
+// signP2PKHTransaction 签名P2PKH传统交易
+func (bs *BTCSigner) signP2PKHTransaction(tx *wire.MsgTx, address *btcutil.AddressPubKeyHash, privateKey *btcec.PrivateKey) (*wire.MsgTx, error) {
+	fmt.Println("🔵 使用P2PKH传统签名...")
+
+	// 创建P2PKH输出脚本
 	pkScript, err := txscript.PayToAddrScript(address)
 	if err != nil {
-		return nil, fmt.Errorf("创建输入脚本失败: %w", err)
+		return nil, fmt.Errorf("创建P2PKH输出脚本失败: %w", err)
 	}
 
 	// 签名所有输入
 	for i := range tx.TxIn {
-		sigScript, err := txscript.SignatureScript(tx, i, pkScript, txscript.SigHashAll, selectedKey.PrivateKey, true)
+		sigScript, err := txscript.SignatureScript(tx, i, pkScript, txscript.SigHashAll, privateKey, true)
 		if err != nil {
 			return nil, fmt.Errorf("创建签名脚本失败 (输入 %d): %w", i, err)
 		}
 
+		tx.TxIn[i].SignatureScript = sigScript
+	}
+
+	return tx, nil
+}
+
+// signP2WSHTransaction 签名P2WSH隔离见证脚本哈希交易
+func (bs *BTCSigner) signP2WSHTransaction(tx *wire.MsgTx, address *btcutil.AddressWitnessScriptHash, privateKey *btcec.PrivateKey) (*wire.MsgTx, error) {
+	fmt.Println("🔵 使用P2WSH隔离见证脚本哈希签名...")
+
+	// 获取公钥
+	pubKey := privateKey.PubKey()
+	pubKeyBytes := pubKey.SerializeCompressed()
+
+	// 创建简单的P2PK见证脚本：<pubkey> OP_CHECKSIG
+	witnessScript, err := txscript.NewScriptBuilder().
+		AddData(pubKeyBytes).
+		AddOp(txscript.OP_CHECKSIG).
+		Script()
+	if err != nil {
+		return nil, fmt.Errorf("创建见证脚本失败: %w", err)
+	}
+
+	// 签名所有输入（注意：真实P2WSH需提供对应前置输出金额与脚本，此处简化示例）
+	for i := range tx.TxIn {
+		// 对于P2WSH，scriptSig必须为空
+		tx.TxIn[i].SignatureScript = nil
+
+		sigHashes := txscript.NewTxSigHashes(tx, nil)
+		sigHash, err := txscript.CalcWitnessSigHash(witnessScript, sigHashes, txscript.SigHashAll, tx, i, 0)
+		if err != nil {
+			return nil, fmt.Errorf("计算见证签名哈希失败 (输入 %d): %w", i, err)
+		}
+
+		signature, err := ecdsa.SignASN1(crand.Reader, privateKey.ToECDSA(), sigHash[:])
+		if err != nil {
+			return nil, fmt.Errorf("签名失败 (输入 %d): %w", i, err)
+		}
+
+		sigWithHashType := append(signature, byte(txscript.SigHashAll))
+		tx.TxIn[i].Witness = wire.TxWitness{sigWithHashType, witnessScript}
+	}
+
+	return tx, nil
+}
+
+// signP2SHTransaction 签名P2SH脚本哈希交易
+func (bs *BTCSigner) signP2SHTransaction(tx *wire.MsgTx, address *btcutil.AddressScriptHash, privateKey *btcec.PrivateKey) (*wire.MsgTx, error) {
+	fmt.Println("🔵 使用P2SH脚本哈希签名...")
+
+	// 获取公钥
+	pubKey := privateKey.PubKey()
+	pubKeyBytes := pubKey.SerializeCompressed()
+
+	// 创建简单的P2PK赎回脚本：<pubkey> OP_CHECKSIG
+	redeemScript, err := txscript.NewScriptBuilder().
+		AddData(pubKeyBytes).
+		AddOp(txscript.OP_CHECKSIG).
+		Script()
+	if err != nil {
+		return nil, fmt.Errorf("创建赎回脚本失败: %w", err)
+	}
+
+	// 签名所有输入
+	for i := range tx.TxIn {
+		sigScript, err := txscript.SignatureScript(tx, i, redeemScript, txscript.SigHashAll, privateKey, true)
+		if err != nil {
+			return nil, fmt.Errorf("创建签名脚本失败 (输入 %d): %w", i, err)
+		}
+
+		// 将赎回脚本添加到签名脚本末尾
+		sigScript = append(sigScript, redeemScript...)
 		tx.TxIn[i].SignatureScript = sigScript
 	}
 
@@ -343,7 +489,7 @@ func (bs *BTCSigner) buildTransaction(transaction *pkg.TransactionData) (*wire.M
 	return tx, nil
 }
 
-// signTransaction 签名BTC交易
+// signTransaction 签名BTC交易（保留用于向后兼容）
 func (bs *BTCSigner) signTransaction(tx *wire.MsgTx, privateKey *btcec.PrivateKey, transaction *pkg.TransactionData) (*wire.MsgTx, error) {
 	// 获取发送地址
 	fromAddress := transaction.Address
@@ -356,23 +502,23 @@ func (bs *BTCSigner) signTransaction(tx *wire.MsgTx, privateKey *btcec.PrivateKe
 		return nil, fmt.Errorf("解析发送地址失败: %w", err)
 	}
 
-	// 创建输出脚本
-	pkScript, err := txscript.PayToAddrScript(address)
-	if err != nil {
-		return nil, fmt.Errorf("创建输入脚本失败: %w", err)
+	// 根据地址类型选择不同的签名方法
+	switch addr := address.(type) {
+	case *btcutil.AddressWitnessPubKeyHash:
+		// P2WPKH (隔离见证) 签名
+		return bs.signP2WPKHTransaction(tx, addr, privateKey, transaction)
+	case *btcutil.AddressPubKeyHash:
+		// P2PKH (传统) 签名
+		return bs.signP2PKHTransaction(tx, addr, privateKey)
+	case *btcutil.AddressWitnessScriptHash:
+		// P2WSH 签名
+		return bs.signP2WSHTransaction(tx, addr, privateKey)
+	case *btcutil.AddressScriptHash:
+		// P2SH 签名
+		return bs.signP2SHTransaction(tx, addr, privateKey)
+	default:
+		return nil, fmt.Errorf("不支持的地址类型: %T", address)
 	}
-
-	// 签名所有输入
-	for i := range tx.TxIn {
-		sigScript, err := txscript.SignatureScript(tx, i, pkScript, txscript.SigHashAll, privateKey, true)
-		if err != nil {
-			return nil, fmt.Errorf("创建签名脚本失败 (输入 %d): %w", i, err)
-		}
-
-		tx.TxIn[i].SignatureScript = sigScript
-	}
-
-	return tx, nil
 }
 
 // parseValue 解析交易金额

@@ -2,10 +2,13 @@ package services
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
 	"strconv"
 	"strings"
 	"time"
 
+	"blockChainBrowser/server/internal/dto"
 	"blockChainBrowser/server/internal/interfaces"
 	"blockChainBrowser/server/internal/models"
 	"blockChainBrowser/server/internal/repository"
@@ -16,20 +19,22 @@ import (
 
 // TransactionStatusScheduler 交易状态调度器
 type TransactionStatusScheduler struct {
-	userTxRepo repository.UserTransactionRepository
-	logger     *logrus.Logger
-	rpcManager *utils.RPCClientManager
-	baseCfgSvc BaseConfigService
-	wsHandler  interfaces.WebSocketBroadcaster // WebSocket广播接口
+	userTxRepo  repository.UserTransactionRepository
+	btcUtxoRepo repository.BTCUTXORepository
+	logger      *logrus.Logger
+	rpcManager  *utils.RPCClientManager
+	baseCfgSvc  BaseConfigService
+	wsHandler   interfaces.WebSocketBroadcaster // WebSocket广播接口
 }
 
 // NewTransactionStatusScheduler 创建交易状态调度器
-func NewTransactionStatusScheduler() *TransactionStatusScheduler {
+func NewTransactionStatusScheduler(userTxRepo repository.UserTransactionRepository, btcUtxoRepo repository.BTCUTXORepository) *TransactionStatusScheduler {
 	return &TransactionStatusScheduler{
-		userTxRepo: repository.NewUserTransactionRepository(),
-		logger:     logrus.New(),
-		rpcManager: utils.NewRPCClientManager(),
-		baseCfgSvc: NewBaseConfigService(repository.NewBaseConfigRepository()),
+		userTxRepo:  userTxRepo,
+		btcUtxoRepo: btcUtxoRepo,
+		logger:      logrus.New(),
+		rpcManager:  utils.NewRPCClientManager(),
+		baseCfgSvc:  NewBaseConfigService(repository.NewBaseConfigRepository()),
 	}
 }
 
@@ -90,7 +95,7 @@ func (s *TransactionStatusScheduler) updateTransactionStatus(ctx context.Context
 		s.logger.Errorf("查询交易状态失败: ID=%d, TxHash=%s, Error=%v", tx.ID, *tx.TxHash, err)
 		return
 	}
-
+	fmt.Printf("用rpc获取交易信息: %+v\n", txStatus)
 	// 根据查询结果更新状态
 	oldStatus := tx.Status
 	needUpdate := false
@@ -107,10 +112,8 @@ func (s *TransactionStatusScheduler) updateTransactionStatus(ctx context.Context
 		if txStatus.BlockHeight > 0 {
 			tx.BlockHeight = &txStatus.BlockHeight
 		}
-		if txStatus.Confirmations > 0 {
-			confirmations := uint(txStatus.Confirmations)
-			tx.Confirmations = &confirmations
-		}
+		confirmations := uint(txStatus.Confirmations)
+		tx.Confirmations = &confirmations
 		desired := "confirmed"
 		if threshold > 0 && txStatus.Confirmations < threshold {
 			desired = "packed"
@@ -135,6 +138,11 @@ func (s *TransactionStatusScheduler) updateTransactionStatus(ctx context.Context
 		} else {
 			s.logger.Infof("交易状态已更新: ID=%d, 从 %s 到 %s", tx.ID, oldStatus, tx.Status)
 
+			if tx.Chain == "btc" && tx.Status == "confirmed" {
+				// 更新utxo表数据，把未花费的输出改为已经花费的输出
+				fmt.Printf("更新utxo表数据，把未花费的输出改为已经花费的输出: tx:%s blockHeight:%d \n", *tx.TxHash, *tx.BlockHeight)
+				s.markBTCInputsAsSpent(ctx, tx)
+			}
 			// 广播状态更新事件
 			s.broadcastTransactionStatusUpdate(tx)
 		}
@@ -176,6 +184,49 @@ func (s *TransactionStatusScheduler) broadcastTransactionStatusUpdate(tx *models
 
 	// 通过接口调用WebSocket广播方法
 	s.wsHandler.BroadcastTransactionStatusUpdate(tx.Chain, statusUpdateData)
+}
+
+// markBTCInputsAsSpent 标记BTC交易的输入为已花费
+func (s *TransactionStatusScheduler) markBTCInputsAsSpent(ctx context.Context, tx *models.UserTransaction) {
+	// 检查是否有BTC交易输入数据
+	if tx.BTCTxInJSON == nil || *tx.BTCTxInJSON == "" {
+		s.logger.Warnf("BTC交易 %s 没有输入数据，跳过UTXO标记", *tx.TxHash)
+		return
+	}
+
+	// 解析BTC交易输入数据
+	var btcTxIns []dto.BTCTxIn
+	if err := json.Unmarshal([]byte(*tx.BTCTxInJSON), &btcTxIns); err != nil {
+		s.logger.Errorf("解析BTC交易输入数据失败: %v", err)
+		return
+	}
+
+	// 标记每个输入为已花费
+	for vinIndex, txIn := range btcTxIns {
+		if txIn.TxID == "" {
+			continue // 跳过空的输入
+		}
+
+		// 调用MarkSpent方法标记UTXO为已花费
+		// 参数：chain, prevTxID, voutIndex, spentTxID, vinIndex, spentHeight
+		err := s.btcUtxoRepo.MarkSpent(
+			ctx,
+			tx.Chain,         // chain
+			txIn.TxID,        // prevTxID (被花费的UTXO的交易ID)
+			txIn.Vout,        // voutIndex (被花费的UTXO的输出索引)
+			*tx.TxHash,       // spentTxID (当前交易ID)
+			uint32(vinIndex), // vinIndex (当前交易中的输入索引)
+			*tx.BlockHeight,  // spentHeight (花费发生时的区块高度)
+		)
+
+		if err != nil {
+			s.logger.Errorf("标记UTXO为已花费失败: prevTxID=%s, voutIndex=%d, spentTxID=%s, vinIndex=%d, error=%v",
+				txIn.TxID, txIn.Vout, *tx.TxHash, vinIndex, err)
+		} else {
+			s.logger.Infof("成功标记UTXO为已花费: prevTxID=%s, voutIndex=%d, spentTxID=%s, vinIndex=%d",
+				txIn.TxID, txIn.Vout, *tx.TxHash, vinIndex)
+		}
+	}
 }
 
 // Stop 停止调度器

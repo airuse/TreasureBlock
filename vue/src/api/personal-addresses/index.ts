@@ -6,7 +6,8 @@ import {
   handleMockUpdatePersonalAddress, 
   handleMockDeletePersonalAddress,
   handleMockGetAddressTransactions,
-  handleMockGetAuthorizedAddresses
+  handleMockGetAuthorizedAddresses,
+  handleMockGetUserAddressesByPending
 } from '../mock/personal-addresses'
 import type { 
   PersonalAddressItem, 
@@ -15,7 +16,8 @@ import type {
   UpdatePersonalAddressRequest,
   GetAuthorizedAddressesRequest,
   AuthorizedAddressesResponse,
-  BTCUTXO
+  BTCUTXO,
+  UserAddressPendingItem
 } from '@/types/personal-address'
 import type { AddressTransactionsResponse } from '@/types/transaction'
 import type { ApiResponse } from '../types'
@@ -171,5 +173,21 @@ export function getAddressUTXOs(address: string): Promise<ApiResponse<BTCUTXO[]>
     url: '/api/user/addresses/utxos',
     method: 'GET',
     params: { address }
+  })
+}
+
+/**
+ * 获取用户所有在途交易地址
+ */
+export function getUserAddressesByPending(chain: string): Promise<ApiResponse<UserAddressPendingItem[]>> {
+  if (__USE_MOCK__) {
+    console.log('🔧 使用Mock数据 - getUserAddressesByPending')
+    return handleMockGetUserAddressesByPending(chain)
+  }
+  
+  return request({
+    url: '/api/user/addresses/pending',
+    method: 'GET',
+    params: { chain }
   })
 }

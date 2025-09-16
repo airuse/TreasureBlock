@@ -114,6 +114,18 @@ export interface BTCUTXO {
   spent_vin_index?: number
   spent_height?: number
   spent_at?: string
+  status?: string // 新增状态字段：spent表示刚被打包但未达到安全高度
   ctime: string
   mtime: string
+}
+
+ // 在途交易地址类型定义
+export interface UserAddressPendingItem {
+  id: number
+  address: string
+  amount: string
+  fee: string
+  status: string
+  created_at: string
+  updated_at: string
 }

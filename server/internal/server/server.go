@@ -70,6 +70,7 @@ func New() *Server {
 	coinConfigService := services.NewCoinConfigService(coinConfigRepo)
 	contractService := services.NewContractService(contractRepo, coinConfigRepo)
 	btcUTXOService := services.NewBTCUTXOService(btcUTXORepo)
+	userTxRepo := repository.NewUserTransactionRepository()
 	// 权限服务依赖
 	roleRepo := repository.NewRoleRepository(database.GetDB())
 	permissionRepo := repository.NewPermissionRepository(database.GetDB())
@@ -82,7 +83,7 @@ func New() *Server {
 		config.AppConfig.Security.JWTSecret,
 		config.AppConfig.Security.JWTExpiration,
 	)
-	userAddressService := services.NewUserAddressService(userAddressRepo, blockRepo, contractRepo, contractCallService, btcUTXOService, baseConfigRepo)
+	userAddressService := services.NewUserAddressService(userAddressRepo, blockRepo, contractRepo, contractCallService, btcUTXOService, baseConfigRepo, userTxRepo)
 	statsService := services.NewStatsService(statsRepo)
 
 	// 创建收益相关服务
@@ -125,7 +126,7 @@ func New() *Server {
 	wsHandler.Start()
 
 	// 创建并启动交易状态调度器
-	transactionStatusScheduler := services.NewTransactionStatusScheduler()
+	transactionStatusScheduler := services.NewTransactionStatusScheduler(userTxRepo, btcUTXORepo)
 	transactionStatusScheduler.SetWebSocketHandler(wsHandler)
 	go transactionStatusScheduler.Start(context.Background())
 

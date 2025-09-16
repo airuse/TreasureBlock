@@ -7,6 +7,7 @@ import (
 	"blockChainBrowser/server/internal/repository"
 	"blockChainBrowser/server/internal/utils"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"math/big"
@@ -31,6 +32,7 @@ type UserAddressService interface {
 	GetAddressesByAuthorizedAddress(authorizedAddr string) ([]dto.UserAddressResponse, error)
 	RefreshAddressBalances(userID uint, addressID uint) (*dto.UserAddressResponse, error)
 	GetAddressUTXOs(userID uint, address string) ([]*models.BTCUTXO, error)
+	GetUserAddressesByPending(userID uint, chain string) ([]dto.UserAddressPendingResponse, error)
 }
 
 // userAddressService 用户地址服务实现
@@ -42,10 +44,11 @@ type userAddressService struct {
 	contractCall    ContractCallService
 	btcUtxoService  BTCUTXOService
 	baseConfigRepo  repository.BaseConfigRepository
+	userTxRepo      repository.UserTransactionRepository
 }
 
 // NewUserAddressService 创建用户地址服务
-func NewUserAddressService(userAddressRepo repository.UserAddressRepository, blockRepo repository.BlockRepository, contractRepo repository.ContractRepository, contractCall ContractCallService, btcUtxoService BTCUTXOService, baseConfigRepo repository.BaseConfigRepository) UserAddressService {
+func NewUserAddressService(userAddressRepo repository.UserAddressRepository, blockRepo repository.BlockRepository, contractRepo repository.ContractRepository, contractCall ContractCallService, btcUtxoService BTCUTXOService, baseConfigRepo repository.BaseConfigRepository, userTxRepo repository.UserTransactionRepository) UserAddressService {
 	return &userAddressService{
 		userAddressRepo: userAddressRepo,
 		blockRepo:       blockRepo,
@@ -54,6 +57,7 @@ func NewUserAddressService(userAddressRepo repository.UserAddressRepository, blo
 		contractCall:    contractCall,
 		btcUtxoService:  btcUtxoService,
 		baseConfigRepo:  baseConfigRepo,
+		userTxRepo:      userTxRepo,
 	}
 }
 
@@ -156,6 +160,42 @@ func (s *userAddressService) GetUserAddresses(userID uint, chain string) ([]dto.
 	return responses, nil
 }
 
+// GetUserAddressesByPending 获取用户所有在途交易地址
+func (s *userAddressService) GetUserAddressesByPending(userID uint, chain string) ([]dto.UserAddressPendingResponse, error) {
+	ctx := context.Background()
+
+	// 获取用户在途交易
+	userTxs, err := s.userTxRepo.GetByUserIDExcludingPending(ctx, userID)
+	if err != nil {
+		return nil, fmt.Errorf("获取用户交易失败: %w", err)
+	}
+
+	// 过滤指定链的交易
+	var filteredTxs []*models.UserTransaction
+	for _, tx := range userTxs {
+		if strings.EqualFold(tx.Chain, chain) {
+			filteredTxs = append(filteredTxs, tx)
+		}
+	}
+
+	// 转换为响应格式
+	var responses []dto.UserAddressPendingResponse
+	for _, tx := range filteredTxs {
+		response := dto.UserAddressPendingResponse{
+			ID:        tx.ID,
+			Address:   tx.FromAddress,
+			Amount:    tx.Amount,
+			Status:    tx.Status,
+			Fee:       tx.Fee,
+			CreatedAt: tx.CreatedAt.Format("2006-01-02 15:04:05"),
+			UpdatedAt: tx.UpdatedAt.Format("2006-01-02 15:04:05"),
+		}
+		responses = append(responses, response)
+	}
+
+	return responses, nil
+}
+
 // UpdateAddress 更新用户地址
 func (s *userAddressService) UpdateAddress(userID uint, addressID uint, req *dto.UpdateUserAddressRequest) (*dto.UserAddressResponse, error) {
 	// 获取地址
@@ -248,19 +288,6 @@ func (s *userAddressService) GetAddressByID(userID uint, addressID uint) (*dto.U
 	}
 
 	return s.convertToResponse(address), nil
-}
-
-// isValidAddress 验证地址格式
-func (s *userAddressService) isValidAddress(address string) bool {
-	// 简单的以太坊地址验证
-	if !strings.HasPrefix(address, "0x") {
-		return false
-	}
-	if len(address) != 42 {
-		return false
-	}
-	// 可以添加更多验证逻辑
-	return true
 }
 
 // convertToResponse 转换为响应DTO
@@ -758,6 +785,45 @@ func (s *userAddressService) GetAddressUTXOs(userID uint, address string) ([]*mo
 	utxos, err := s.btcUtxoService.GetUTXOsByAddress(ctx, "btc", address)
 	if err != nil {
 		return nil, fmt.Errorf("获取UTXO列表失败: %w", err)
+	}
+
+	txs, err := s.userTxRepo.GetByChainExcludingPending(ctx, "btc")
+	if err != nil {
+		return nil, fmt.Errorf("获取pending交易失败: %w", err)
+	}
+
+	for _, tx := range txs {
+		if tx.BTCTxInJSON == nil || *tx.BTCTxInJSON == "" {
+			continue
+		}
+
+		// 解析BTCTxInJSON数组
+		var txInArray []map[string]interface{}
+		err := json.Unmarshal([]byte(*tx.BTCTxInJSON), &txInArray)
+		if err != nil {
+			return nil, fmt.Errorf("解析BTCTxInJSON失败: %w", err)
+		}
+
+		// 遍历每个输入
+		for vinIndex, txIn := range txInArray {
+			txid, ok1 := txIn["txid"].(string)
+			vout, ok2 := txIn["vout"].(float64) // JSON数字默认解析为float64
+			if !ok1 || !ok2 {
+				continue
+			}
+
+			// 查找匹配的UTXO并标记为已花费
+			for _, utxo := range utxos {
+				if utxo.TxID == txid && utxo.VoutIndex == uint32(vout) {
+					utxo.SpentTxID = *tx.TxHash
+					vinIndexUint32 := uint32(vinIndex)
+					utxo.SpentVinIndex = &vinIndexUint32
+					utxo.SpentHeight = tx.BlockHeight
+					utxo.SpentAt = &tx.CreatedAt
+					utxo.Status = "spent"
+				}
+			}
+		}
 	}
 
 	return utxos, nil

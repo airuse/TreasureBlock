@@ -319,3 +319,43 @@ func (h *UserAddressHandler) GetAddressUTXOs(c *gin.Context) {
 
 	utils.SuccessResponse(c, http.StatusOK, "获取UTXO列表成功", utxos)
 }
+
+// GetUserAddressesByPending 获取用户所有在途交易地址
+// @Summary 获取用户所有在途交易地址
+// @Description 获取指定用户和链的所有在途交易地址信息
+// @Tags 用户地址
+// @Accept json
+// @Produce json
+// @Param chain query string true "链类型" Enums(btc,eth)
+// @Success 200 {object} utils.Response{data=[]dto.UserAddressPendingResponse} "成功"
+// @Failure 400 {object} utils.Response "请求参数错误"
+// @Failure 401 {object} utils.Response "未授权"
+// @Failure 500 {object} utils.Response "服务器错误"
+// @Router /api/user/addresses/pending [get]
+func (h *UserAddressHandler) GetUserAddressesByPending(c *gin.Context) {
+	userID := c.GetUint("user_id")
+	if userID == 0 {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "未授权")
+		return
+	}
+
+	chain := c.Query("chain")
+	if chain == "" {
+		utils.ErrorResponse(c, http.StatusBadRequest, "链类型参数不能为空")
+		return
+	}
+
+	// 验证链类型
+	if chain != "btc" && chain != "eth" {
+		utils.ErrorResponse(c, http.StatusBadRequest, "不支持的链类型")
+		return
+	}
+
+	addresses, err := h.userAddressService.GetUserAddressesByPending(userID, chain)
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusInternalServerError, "获取在途交易地址失败: "+err.Error())
+		return
+	}
+
+	utils.SuccessResponse(c, http.StatusOK, "获取在途交易地址成功", addresses)
+}

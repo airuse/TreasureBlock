@@ -58,14 +58,26 @@
         </div>
 
         <!-- 地址概览 -->
-        <div v-else class="grid grid-cols-1 md:grid-cols-3 gap-6">
+        <div v-else class="grid grid-cols-1 md:grid-cols-6 gap-6">
           <div class="text-center">
             <div class="text-2xl font-bold text-blue-600">{{ addressCount }}</div>
             <div class="text-sm text-gray-500">管理地址</div>
           </div>
           <div class="text-center">
-            <div class="text-2xl font-bold text-green-600">{{ totalBalance }}</div>
-            <div class="text-sm text-gray-500">总余额 (聪)</div>
+            <div class="text-2xl font-bold text-green-600">{{ formatBtcBalance(totalAvailableBalance.toString()) }}</div>
+            <div class="text-sm text-gray-500">可用余额 (BTC)</div>
+          </div>
+          <div class="text-center">
+            <div class="text-2xl font-bold text-orange-600">{{ formatBtcBalance(totalPendingAmount.toString()) }}</div>
+            <div class="text-sm text-gray-500">在途金额 (BTC)</div>
+          </div>
+          <div class="text-center">
+            <div class="text-2xl font-bold text-gray-600">{{ formatBtcBalance(totalBalance.toString()) }}</div>
+            <div class="text-sm text-gray-500">总余额 (BTC)</div>
+          </div>
+          <div class="text-center">
+            <div class="text-2xl font-bold text-red-600">{{ totalPendingTransactions }}</div>
+            <div class="text-sm text-gray-500">在途交易数</div>
           </div>
           <div class="text-center">
             <div class="text-2xl font-bold text-purple-600">{{ totalUtxos }}</div>
@@ -86,7 +98,9 @@
               <tr>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">地址</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">标签</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">余额 (BTC)</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">总余额 (BTC)</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">可用余额 (BTC)</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">在途金额 (BTC)</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">UTXO数量</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">状态</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
@@ -121,7 +135,27 @@
                   </div>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
-                  {{ formatBtcBalance(address.balance || '0') }}
+                  <span class="text-gray-600 font-semibold">
+                    {{ formatBtcBalance(address.balance || '0') }}
+                  </span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                  <span class="text-green-600 font-semibold">
+                    {{ formatBtcBalance(getAddressAvailableBalance(address).toString()) }}
+                  </span>
+                </td>
+                <td class="px-6 py-4 whitespace-nowrap text-sm font-medium text-gray-900">
+                  <div class="flex items-center space-x-2">
+                    <span :class="getAddressPendingAmount(address.address) > 0 ? 'text-orange-600 font-semibold' : 'text-gray-500'">
+                      {{ formatBtcBalance(getAddressPendingAmount(address.address).toString()) }}
+                    </span>
+                    <span v-if="getAddressPendingAmount(address.address) > 0" class="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                      在途
+                    </span>
+                    <span v-if="getAddressPendingTransactionsCount(address.address) > 1" class="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
+                      {{ getAddressPendingTransactionsCount(address.address) }}笔
+                    </span>
+                  </div>
                 </td>
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                   <span class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
@@ -338,13 +372,15 @@ import {
   getPersonalAddresses, 
   updatePersonalAddress, 
   deletePersonalAddress, 
-  refreshPersonalAddressBalance 
+  refreshPersonalAddressBalance,
+  getUserAddressesByPending
 } from '@/api/personal-addresses'
 import type { 
   PersonalAddressItem, 
   PersonalAddressDetail, 
   CreatePersonalAddressRequest, 
-  UpdatePersonalAddressRequest 
+  UpdatePersonalAddressRequest,
+  UserAddressPendingItem
 } from '@/types/personal-address'
 
 // 初始化路由
@@ -387,6 +423,9 @@ const editingAddress = ref<PersonalAddressDetail>({
 // 地址列表
 const addressesList = ref<PersonalAddressItem[]>([])
 
+// 在途交易地址列表
+const pendingAddresses = ref<UserAddressPendingItem[]>([])
+
 // 计算属性
 const addressCount = computed(() => addressesList.value.length)
 
@@ -394,12 +433,57 @@ const totalBalance = computed(() => {
   return addressesList.value.reduce((sum, addr) => {
     const balance = parseFloat(addr.balance || '0')
     return sum + balance
-  }, 0).toFixed(0)
+  }, 0)
 })
 
 const totalUtxos = computed(() => {
   return addressesList.value.reduce((sum, addr) => sum + (addr.utxo_count || 0), 0)
 })
+
+// 计算在途金额（包含手续费）
+const totalPendingAmount = computed(() => {
+  return pendingAddresses.value.reduce((sum, addr) => {
+    const amount = parseFloat(addr.amount || '0')
+    const fee = parseFloat(addr.fee || '0')
+    return sum + amount + fee
+  }, 0)
+})
+
+// 计算总在途交易数量
+const totalPendingTransactions = computed(() => {
+  return pendingAddresses.value.length
+})
+
+// 计算总可用余额（总余额 - 在途金额）
+const totalAvailableBalance = computed(() => {
+  const total = addressesList.value.reduce((sum, addr) => {
+    const balance = parseFloat(addr.balance || '0')
+    return sum + balance
+  }, 0)
+  return Math.max(0, total - totalPendingAmount.value)
+})
+
+// 获取地址的在途金额（累加同一地址的所有在途交易，包含手续费）
+const getAddressPendingAmount = (address: string) => {
+  const pendingList = pendingAddresses.value.filter(addr => addr.address === address)
+  return pendingList.reduce((sum, addr) => {
+    const amount = parseFloat(addr.amount || '0')
+    const fee = parseFloat(addr.fee || '0')
+    return sum + amount + fee
+  }, 0)
+}
+
+// 获取地址的在途交易数量
+const getAddressPendingTransactionsCount = (address: string) => {
+  return pendingAddresses.value.filter(addr => addr.address === address).length
+}
+
+// 获取地址的可用余额（总余额 - 在途金额）
+const getAddressAvailableBalance = (addressItem: PersonalAddressItem) => {
+  const totalBalance = parseFloat(addressItem.balance || '0')
+  const pendingAmount = getAddressPendingAmount(addressItem.address)
+  return Math.max(0, totalBalance - pendingAmount) // 确保不为负数
+}
 
 // 计算属性
 const canAddAddress = computed(() => {
@@ -469,6 +553,20 @@ const loadAddresses = async () => {
     showError('获取地址列表失败')
   } finally {
     loading.value = false
+  }
+}
+
+// 加载在途交易地址
+const loadPendingAddresses = async () => {
+  try {
+    const response = await getUserAddressesByPending("btc")
+    if (response.success) {
+      pendingAddresses.value = response.data || []
+    } else {
+      console.warn('获取在途交易地址失败:', response.message)
+    }
+  } catch (error) {
+    console.error('加载在途交易地址失败:', error)
   }
 }
 
@@ -589,7 +687,10 @@ const viewUTXOs = (address: PersonalAddressItem) => {
   })
 }
 
-onMounted(() => {
-  loadAddresses()
+onMounted(async () => {
+  await Promise.all([
+    loadAddresses(),
+    loadPendingAddresses()
+  ])
 })
 </script>

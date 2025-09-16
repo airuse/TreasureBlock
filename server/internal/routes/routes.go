@@ -103,6 +103,7 @@ func SetupRoutes(
 			addresses.GET("/authorized", userAddressHandler.GetAuthorizedAddresses)   // 根据发送地址查询授权关系
 			addresses.POST("/:id/refresh-balance", userAddressHandler.RefreshBalance) // 刷新余额
 			addresses.GET("/utxos", userAddressHandler.GetAddressUTXOs)               // 获取地址UTXO列表
+			addresses.GET("/pending", userAddressHandler.GetUserAddressesByPending)   // 获取用户所有在途交易地址
 		}
 
 		// 用户交易管理

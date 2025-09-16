@@ -239,13 +239,13 @@ func parseSignedEthTx(input string) (*types.Transaction, error) {
 
 // sendBtcTransaction 发送比特币交易
 func (m *RPCClientManager) sendBtcTransaction(ctx context.Context, req *SendTransactionRequest) (*SendTransactionResponse, error) {
-	// 获取BTC客户端
-	client, exists := m.btcClients["btc"]
+	// 获取BTC故障转移管理器
+	fo, exists := m.btcFailovers["btc"]
 	if !exists {
 		// 尝试其他可能的键名
-		for key, cli := range m.btcClients {
+		for key, f := range m.btcFailovers {
 			if strings.Contains(strings.ToLower(key), "btc") {
-				client = cli
+				fo = f
 				exists = true
 				break
 			}
@@ -255,13 +255,13 @@ func (m *RPCClientManager) sendBtcTransaction(ctx context.Context, req *SendTran
 	if !exists {
 		return &SendTransactionResponse{
 			Success:   false,
-			Message:   "BTC RPC客户端未配置或连接失败",
+			Message:   "BTC RPC故障转移未初始化",
 			ErrorCode: "RPC_CLIENT_NOT_AVAILABLE",
 		}, nil
 	}
 
-	// 发送原始交易
-	txHash, err := client.SendRawTransaction(ctx, req.SignedTx)
+	// 发送原始交易（故障转移）
+	txHash, err := fo.SendRawTransaction(ctx, req.SignedTx)
 	if err != nil {
 		m.logger.Errorf("发送BTC交易失败: %v", err)
 		return &SendTransactionResponse{
@@ -441,11 +441,13 @@ func (m *RPCClientManager) getEthTransactionStatus(ctx context.Context, txHash s
 
 // getBtcTransactionStatus 获取BTC交易状态
 func (m *RPCClientManager) getBtcTransactionStatus(ctx context.Context, txHash string) (*TransactionStatus, error) {
-	client, exists := m.btcClients["btc"]
+	// 获取BTC故障转移管理器
+	fo, exists := m.btcFailovers["btc"]
 	if !exists {
-		for key, cli := range m.btcClients {
+		// 尝试其他可能的键名
+		for key, f := range m.btcFailovers {
 			if strings.Contains(strings.ToLower(key), "btc") {
-				client = cli
+				fo = f
 				exists = true
 				break
 			}
@@ -453,11 +455,11 @@ func (m *RPCClientManager) getBtcTransactionStatus(ctx context.Context, txHash s
 	}
 
 	if !exists {
-		return nil, fmt.Errorf("BTC RPC客户端未配置")
+		return nil, fmt.Errorf("BTC RPC故障转移未初始化")
 	}
 
-	// 获取交易信息
-	txInfo, err := client.GetTransaction(ctx, txHash)
+	// 获取交易状态信息（故障转移）
+	txInfo, err := fo.GetTransactionStatus(ctx, txHash)
 	if err != nil {
 		return nil, fmt.Errorf("获取交易信息失败: %w", err)
 	}
@@ -467,132 +469,19 @@ func (m *RPCClientManager) getBtcTransactionStatus(ctx context.Context, txHash s
 	}
 
 	// 解析交易信息
-	if txInfo["confirmations"] != nil {
-		confirmations, ok := txInfo["confirmations"].(float64)
-		if ok && confirmations > 0 {
-			status.Status = "confirmed"
-			status.Confirmations = uint64(confirmations)
-		} else {
-			status.Status = "pending"
-			status.Confirmations = 0
-		}
+	if txInfo.Confirmations >= 0 {
+		status.Status = "confirmed"
+		status.Confirmations = uint64(txInfo.Confirmations)
 	} else {
 		status.Status = "pending"
 		status.Confirmations = 0
 	}
 
-	if txInfo["blockheight"] != nil {
-		blockHeight, ok := txInfo["blockheight"].(float64)
-		if ok {
-			status.BlockHeight = uint64(blockHeight)
-		}
+	if txInfo.BlockHeight > 0 {
+		status.BlockHeight = uint64(txInfo.BlockHeight)
 	}
 
 	return status, nil
-}
-
-// GetTransaction 获取交易信息（BTC）
-func (c *BitcoinRPCClient) GetTransaction(ctx context.Context, txHash string) (map[string]interface{}, error) {
-	request := BitcoinRPCRequest{
-		JSONRPC: "1.0",
-		ID:      "1",
-		Method:  "gettransaction",
-		Params:  []interface{}{txHash},
-	}
-
-	response, err := c.callRPC(ctx, request)
-	if err != nil {
-		return nil, err
-	}
-
-	if response.Error != nil {
-		return nil, fmt.Errorf("RPC错误: %s (代码: %d)", response.Error.Message, response.Error.Code)
-	}
-
-	result, ok := response.Result.(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("无效的响应格式")
-	}
-
-	return result, nil
-}
-
-// GetBlockCount 获取最新区块高度（BTC）
-func (c *BitcoinRPCClient) GetBlockCount(ctx context.Context) (uint64, error) {
-	request := BitcoinRPCRequest{
-		JSONRPC: "1.0",
-		ID:      "1",
-		Method:  "getblockcount",
-		Params:  []interface{}{},
-	}
-
-	response, err := c.callRPC(ctx, request)
-	if err != nil {
-		return 0, err
-	}
-
-	if response.Error != nil {
-		return 0, fmt.Errorf("RPC错误: %s (代码: %d)", response.Error.Message, response.Error.Code)
-	}
-
-	count, ok := response.Result.(float64)
-	if !ok {
-		return 0, fmt.Errorf("无效的响应格式")
-	}
-
-	return uint64(count), nil
-}
-
-// GetBlockHash 获取区块哈希（BTC）
-func (c *BitcoinRPCClient) GetBlockHash(ctx context.Context, blockNumber uint64) (string, error) {
-	request := BitcoinRPCRequest{
-		JSONRPC: "1.0",
-		ID:      "1",
-		Method:  "getblockhash",
-		Params:  []interface{}{blockNumber},
-	}
-
-	response, err := c.callRPC(ctx, request)
-	if err != nil {
-		return "", err
-	}
-
-	if response.Error != nil {
-		return "", fmt.Errorf("RPC错误: %s (代码: %d)", response.Error.Message, response.Error.Code)
-	}
-
-	hash, ok := response.Result.(string)
-	if !ok {
-		return "", fmt.Errorf("无效的响应格式")
-	}
-
-	return hash, nil
-}
-
-// GetBlock 获取区块详情（BTC）
-func (c *BitcoinRPCClient) GetBlock(ctx context.Context, blockHash string) (map[string]interface{}, error) {
-	request := BitcoinRPCRequest{
-		JSONRPC: "1.0",
-		ID:      "1",
-		Method:  "getblock",
-		Params:  []interface{}{blockHash, 2}, // 2表示返回完整交易数据
-	}
-
-	response, err := c.callRPC(ctx, request)
-	if err != nil {
-		return nil, err
-	}
-
-	if response.Error != nil {
-		return nil, fmt.Errorf("RPC错误: %s (代码: %d)", response.Error.Message, response.Error.Code)
-	}
-
-	result, ok := response.Result.(map[string]interface{})
-	if !ok {
-		return nil, fmt.Errorf("无效的响应格式")
-	}
-
-	return result, nil
 }
 
 // GetBlockNumber 获取最新区块号
@@ -842,21 +731,6 @@ func (m *RPCClientManager) CallContract(ctx context.Context, from, to string, va
 	}
 
 	return fo.CallContract(ctx, msg, blockNumber)
-}
-
-// GetBTCClient 获取BTC客户端
-func (m *RPCClientManager) GetBTCClient(chain string) (*BitcoinRPCClient, bool) {
-	client, exists := m.btcClients[chain]
-	if !exists {
-		for key, cli := range m.btcClients {
-			if strings.Contains(strings.ToLower(key), "btc") {
-				client = cli
-				exists = true
-				break
-			}
-		}
-	}
-	return client, exists
 }
 
 // GetBTCFailover 获取BTC故障转移管理器

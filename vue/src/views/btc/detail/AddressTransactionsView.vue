@@ -54,7 +54,7 @@
         </div>
         
         <!-- 统计信息 -->
-        <div class="grid grid-cols-1 md:grid-cols-4 gap-6">
+        <div class="grid grid-cols-1 md:grid-cols-5 gap-6">
           <div class="text-center p-4 bg-green-50 rounded-lg border border-green-200">
             <div class="text-3xl font-bold text-green-600">{{ totalUTXOs }}</div>
             <div class="text-sm text-green-700 font-medium">总UTXO数</div>
@@ -70,6 +70,10 @@
           <div class="text-center p-4 bg-orange-50 rounded-lg border border-orange-200">
             <div class="text-3xl font-bold text-orange-600">{{ coinbaseCount }}</div>
             <div class="text-sm text-orange-700 font-medium">Coinbase UTXO</div>
+          </div>
+          <div class="text-center p-4 bg-yellow-50 rounded-lg border border-yellow-200">
+            <div class="text-3xl font-bold text-yellow-600">{{ pendingSpentCount }}</div>
+            <div class="text-sm text-yellow-700 font-medium">打包中 UTXO</div>
           </div>
         </div>
       </div>
@@ -112,6 +116,19 @@
                 <option value="pubkey">PubKey</option>
                 <option value="multisig">MultiSig</option>
                 <option value="nonstandard">Non-Standard</option>
+              </select>
+            </div>
+            <div class="flex items-center space-x-2">
+              <label class="text-sm font-medium text-gray-700">状态:</label>
+              <select
+                v-model="statusFilter"
+                @change="filterUTXOs"
+                class="px-3 py-2 border border-gray-300 rounded-md text-sm focus:outline-none focus:ring-2 focus:ring-orange-500"
+              >
+                <option value="">全部</option>
+                <option value="unspent">未花费</option>
+                <option value="spent">打包中</option>
+                <option value="confirmed_spent">已确认花费</option>
               </select>
             </div>
           </div>
@@ -234,6 +251,14 @@
                       <span class="text-gray-500 text-xs">花费时间:</span>
                       <span class="ml-2 font-mono text-xs text-gray-900">{{ formatDateTime(utxo.spent_at) }}</span>
                     </div>
+                    <div v-if="utxo.status === 'spent'" class="mt-2 p-2 bg-orange-50 border border-orange-200 rounded text-xs text-orange-700">
+                      <div class="flex items-center">
+                        <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 19.5c-.77.833.192 2.5 1.732 2.5z" />
+                        </svg>
+                        此UTXO刚被打包，尚未达到安全确认高度，请谨慎使用
+                      </div>
+                    </div>
                   </div>
                 </div>
 
@@ -293,6 +318,7 @@ const loading = ref(false)
 const utxos = ref<BTCUTXO[]>([])
 const sortBy = ref('value_desc')
 const scriptTypeFilter = ref('')
+const statusFilter = ref('')
 
 // 从路由参数获取地址
 const address = computed(() => route.query.address as string || '')
@@ -313,12 +339,32 @@ const coinbaseCount = computed(() => {
   return utxos.value.filter(utxo => utxo.is_coinbase).length
 })
 
+const pendingSpentCount = computed(() => {
+  return utxos.value.filter(utxo => utxo.status === 'spent').length
+})
+
 const filteredUTXOs = computed(() => {
   let filtered = [...utxos.value]
   
   // 按脚本类型过滤
   if (scriptTypeFilter.value) {
     filtered = filtered.filter(utxo => utxo.script_type === scriptTypeFilter.value)
+  }
+  
+  // 按状态过滤
+  if (statusFilter.value) {
+    filtered = filtered.filter(utxo => {
+      switch (statusFilter.value) {
+        case 'unspent':
+          return !utxo.spent_tx_id && utxo.status !== 'spent'
+        case 'spent':
+          return utxo.status === 'spent'
+        case 'confirmed_spent':
+          return utxo.spent_tx_id && utxo.status !== 'spent'
+        default:
+          return true
+      }
+    })
   }
   
   // 排序
@@ -454,18 +500,24 @@ const formatScriptType = (scriptType: string) => {
 
 // 获取UTXO状态样式
 const getUTXOStatusClass = (utxo: BTCUTXO) => {
-  if (utxo.spent_tx_id) {
-    return 'bg-red-100 text-red-800'
+  if (utxo.status === 'spent') {
+    return 'bg-orange-100 text-orange-800' // 刚被打包但未达到安全高度
   }
-  return 'bg-green-100 text-green-800'
+  if (utxo.spent_tx_id) {
+    return 'bg-red-100 text-red-800' // 已确认花费
+  }
+  return 'bg-green-100 text-green-800' // 未花费
 }
 
 // 获取UTXO状态文本
 const getUTXOStatusText = (utxo: BTCUTXO) => {
-  if (utxo.spent_tx_id) {
-    return '已花费'
+  if (utxo.status === 'spent') {
+    return '打包中' // 刚被打包但未达到安全高度
   }
-  return '未花费'
+  if (utxo.spent_tx_id) {
+    return '已花费' // 已确认花费
+  }
+  return '未花费' // 未花费
 }
 
 // 监听路由参数变化

@@ -202,8 +202,15 @@
                     导出交易
                   </button>
                   <button
+                    v-if="tx.status === 'unsigned'"
+                    @click="openImportSignatureModal(tx)"
+                    class="text-teal-600 hover:text-teal-900"
+                  >
+                    导入签名
+                  </button>
+                  <button
                     v-if="tx.status === 'in_progress'"
-                    @click="sendTransaction(tx)"
+                    @click="sendTransactionToChain(tx.id)"
                     class="text-green-600 hover:text-green-900"
                   >
                     发送交易
@@ -286,6 +293,14 @@
                 已选 {{ numInputs }} 个 | 输入总额：{{ toBtc(selectedInputsTotalSats).toFixed(8) }} BTC
               </div>
             </div>
+            <div class="text-xs text-orange-600 bg-orange-50 border border-orange-200 rounded p-2">
+              <div class="flex items-center">
+                <svg class="w-4 h-4 mr-1" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-2.5L13.732 4c-.77-.833-1.732-.833-2.5 0L4.268 19.5c-.77.833.192 2.5 1.732 2.5z" />
+                </svg>
+                状态为"打包中"的UTXO不可选择，因为它们正在被其他交易使用
+              </div>
+            </div>
             <div class="overflow-x-auto overflow-y-auto max-h-48 border border-gray-200 rounded-md">
               <table class="min-w-full divide-y divide-gray-200">
                 <thead class="bg-gray-50">
@@ -308,13 +323,20 @@
                         </span>
                       </button>
                     </th>
+                    <th class="px-4 py-2 text-left text-xs font-medium text-gray-500">状态</th>
                     <th class="px-4 py-2 text-left text-xs font-medium text-gray-500">Coinbase</th>
                   </tr>
                 </thead>
                 <tbody class="bg-white divide-y divide-gray-200">
-                  <tr v-for="u in sortedUtxos" :key="u.id" class="hover:bg-gray-50">
+                  <tr v-for="u in sortedUtxos" :key="u.id" class="hover:bg-gray-50" :class="{ 'opacity-50 bg-gray-100': u.status === 'spent' }">
                     <td class="px-4 py-2">
-                      <input type="checkbox" :checked="selectedUtxoIds.has(u.id)" @change="toggleUtxo(u)" />
+                      <input 
+                        type="checkbox" 
+                        :checked="selectedUtxoIds.has(u.id)" 
+                        :disabled="u.status === 'spent'"
+                        @change="toggleUtxo(u)" 
+                        :class="{ 'cursor-not-allowed': u.status === 'spent' }"
+                      />
                     </td>
                     <td class="px-4 py-2 text-xs font-mono">
                       {{ u.tx_id.substring(0, 10) }}...{{ u.tx_id.substring(u.tx_id.length - 8) }}:{{ u.vout_index }}
@@ -323,10 +345,21 @@
                       {{ toBtc(u.value_satoshi).toFixed(8) }}
                     </td>
                     <td class="px-4 py-2 text-sm">{{ u.block_height }}</td>
+                    <td class="px-4 py-2 text-sm">
+                      <span v-if="u.status === 'spent'" class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-orange-100 text-orange-800">
+                        打包中
+                      </span>
+                      <span v-else-if="u.spent_tx_id" class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-red-100 text-red-800">
+                        已花费
+                      </span>
+                      <span v-else class="inline-flex items-center px-2 py-1 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        可用
+                      </span>
+                    </td>
                     <td class="px-4 py-2 text-sm">{{ u.is_coinbase ? '是' : '否' }}</td>
                   </tr>
                   <tr v-if="utxos.length === 0">
-                    <td colspan="5" class="px-4 py-6 text-center text-sm text-gray-500">暂无UTXO</td>
+                    <td colspan="6" class="px-4 py-6 text-center text-sm text-gray-500">暂无UTXO</td>
                   </tr>
                 </tbody>
               </table>
@@ -344,7 +377,7 @@
                 <button @click="addOutput" class="text-sm text-orange-600 hover:text-orange-700">+ 添加输出</button>
               </div>
             </div>
-            <div class="space-y-3 max-h-64 overflow-y-auto">
+            <div class="space-y-3 min-h-40 max-h-64 overflow-y-auto">
               <div v-for="(out, idx) in createForm.outputs" :key="idx" class="grid grid-cols-1 md:grid-cols-10 gap-3 items-center">
                 <div class="md:col-span-6 relative">
                   <input
@@ -358,7 +391,7 @@
                   />
                   <div
                     v-if="showSuggestIndex === idx && addressSuggestions(out.toAddress).length > 0"
-                    class="absolute z-20 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-lg max-h-56 overflow-auto"
+                    class="absolute z-50 mt-1 w-full bg-white border border-gray-200 rounded-md shadow-lg max-h-56 overflow-auto"
                   >
                     <div
                       v-for="addr in addressSuggestions(out.toAddress)"
@@ -644,6 +677,132 @@
       </div>
     </div>
     </teleport>
+
+    <!-- 导入签名模态框 -->
+    <teleport to="body">
+    <div v-if="showImportSignatureModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-[1000]">
+      <div class="bg-white rounded-lg shadow-xl max-w-4xl w-full mx-4">
+        <div class="px-6 py-4 border-b border-gray-200">
+          <h3 class="text-lg font-medium text-gray-900">导入签名数据</h3>
+        </div>
+        
+        <div class="px-6 py-4">
+          <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+            <!-- 左侧：交易基本信息 -->
+            <div class="space-y-4">
+              <h4 class="text-md font-medium text-gray-900">交易信息</h4>
+              
+              <!-- 显示选中交易的详细信息 -->
+              <div v-if="selectedImportTransaction" class="bg-gray-50 rounded-lg p-4 space-y-3">
+                <div class="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <span class="text-gray-500">交易ID:</span>
+                    <span class="font-mono">{{ selectedImportTransaction.id }}</span>
+                  </div>
+                  <div>
+                    <span class="text-gray-500">状态:</span>
+                    <span :class="getStatusClass(selectedImportTransaction.status)" class="inline-flex px-2 py-1 text-xs font-semibold rounded-full">
+                      {{ getStatusText(selectedImportTransaction.status) }}
+                    </span>
+                  </div>
+                  <div>
+                    <span class="text-gray-500">链类型:</span>
+                    <span class="font-medium">{{ selectedImportTransaction.chain.toUpperCase() }}</span>
+                  </div>
+                  <div>
+                    <span class="text-gray-500">币种:</span>
+                    <span class="font-medium">{{ selectedImportTransaction.symbol }}</span>
+                  </div>
+                  <div class="col-span-2">
+                    <span class="text-gray-500">发送地址:</span>
+                    <code class="ml-2 text-xs font-mono bg-gray-200 px-2 py-1 rounded">{{ selectedImportTransaction.from_address }}</code>
+                  </div>
+                  <div class="col-span-2">
+                    <span class="text-gray-500">接收地址:</span>
+                    <code class="ml-2 text-xs font-mono bg-gray-200 px-2 py-1 rounded">{{ selectedImportTransaction.to_address }}</code>
+                  </div>
+                  <div>
+                    <span class="text-gray-500">金额:</span>
+                    <span class="font-medium">{{ formatBtcAmount(selectedImportTransaction.amount) }} {{ selectedImportTransaction.symbol }}</span>
+                  </div>
+                  <div>
+                    <span class="text-gray-500">费率:</span>
+                    <span class="font-medium">{{ getTransactionFeeRate(selectedImportTransaction) }} sat/vB</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+            
+            <!-- 右侧：签名数据输入 -->
+            <div class="space-y-4">
+              <h4 class="text-md font-medium text-gray-900">签名数据</h4>
+              
+              <!-- 签名数据 -->
+              <div>
+                <label class="block text-sm font-medium text-gray-700 mb-1">签名JSON数据</label>
+                <textarea
+                  v-model="importSignature"
+                  rows="8"
+                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-orange-500 font-mono text-sm"
+                  placeholder='请粘贴从离线程序导出的签名数据，例如：
+{"id":72,"signer":"0200000001ee8503075eb27aca508cda579dba06b6173dd6c22d6c95544ccdde158048a26e000000006a47304402204c9d4a2aba2ae1be503f48c80176a099b877c2f2fc16b1d418b9bf7173f0722402206168d4b535ec6ff6cd8ceba50fd02ea8b3653827699b68d3b64c535be10e4baf01210232d7aba6ebc83b114d91a228add5f0ad3ff65cae831af35a0ed273bac21349beffffffff02a0860100000000001976a914474aeb78ace0adea1bea973cffd1140cf9459f3788ac4d920000000000001976a914c338f892f9479e0e6bb1b78378f24b7f662cd80f88ac00000000"}'
+                ></textarea>
+              </div>
+              
+              <!-- 操作提示 -->
+              <div class="bg-orange-50 border border-orange-200 rounded-md p-3">
+                <div class="flex">
+                  <div class="flex-shrink-0">
+                    <svg class="h-5 w-5 text-orange-400" fill="currentColor" viewBox="0 0 20 20">
+                      <path fill-rule="evenodd" d="M18 10a8 8 0 11-16 0 8 8 0 0116 0zm-7-4a1 1 0 11-2 0 1 1 0 012 0zM9 9a1 1 0 000 2v3a1 1 0 001 1h1a1 1 0 100-2v-3a1 1 0 00-1-1H9z" clip-rule="evenodd" />
+                    </svg>
+                  </div>
+                  <div class="ml-3">
+                    <p class="text-sm text-orange-800">
+                      支持导入签名数据：完整的签名交易字符串或包含id和signer字段的JSON格式。导入后可以选择发送上链。
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+        
+        <div class="px-6 py-4 border-t border-gray-200 flex justify-between">
+          <button
+            @click="closeImportSignatureModal"
+            class="px-4 py-2 border border-gray-300 text-gray-700 rounded-md hover:bg-gray-50"
+          >
+            取消
+          </button>
+          <div class="flex space-x-3">
+            <button
+              @click="importSignatureOnly"
+              :disabled="!importSignature.trim() || !selectedImportTransaction || isImporting"
+              class="px-4 py-2 bg-gray-600 text-white rounded-md hover:bg-gray-700 disabled:opacity-50 flex items-center"
+            >
+              <svg v-if="isImporting" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              {{ isImporting ? '导入中...' : '仅导入签名' }}
+            </button>
+            <button
+              @click="importAndSendTransaction"
+              :disabled="!importSignature.trim() || !selectedImportTransaction || isImporting || isSending"
+              class="px-4 py-2 bg-orange-600 text-white rounded-md hover:bg-orange-700 disabled:opacity-50 flex items-center"
+            >
+              <svg v-if="isSending" class="animate-spin -ml-1 mr-2 h-4 w-4 text-white" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24">
+                <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle>
+                <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path>
+              </svg>
+              {{ isSending ? '发送中...' : '导入并发送上链' }}
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+    </teleport>
   </div>
 </template>
 
@@ -661,7 +820,9 @@ import {
   updateUserTransaction,
   getUserTransactionById,
   getUserTransactionStats,
-  exportTransaction 
+  exportTransaction,
+  importSignature as importSignatureAPI,
+  sendTransaction as sendTransactionAPI
 } from '@/api/user-transactions'
 import type { 
   UserTransaction, 
@@ -693,6 +854,13 @@ const exportManualFeeRate = ref(2.5)
 const showExportQRModal = ref(false)
 const exportQRCodeDataURL = ref<string>('')
 const exportQRTransaction = ref<UserTransaction | null>(null)
+
+// 导入签名相关状态
+const showImportSignatureModal = ref(false)
+const selectedImportTransaction = ref<UserTransaction | null>(null)
+const importSignature = ref('')
+const isImporting = ref(false)
+const isSending = ref(false)
 
 // 新建交易表单（UTXO模型）
 const createForm = ref<{
@@ -946,9 +1114,172 @@ const handleExportTransaction = async (tx: UserTransaction) => {
 }
 
 // 发送交易
-const sendTransaction = (tx: UserTransaction) => {
-  // TODO: 实现发送交易功能
-  console.log('发送交易:', tx)
+const sendTransactionToChain = async (txId: number) => {
+  try {
+    const response = await sendTransactionAPI(txId)
+    return response
+  } catch (error) {
+    console.error('发送交易失败:', error)
+    throw error
+  }
+}
+
+// 打开导入签名模态框
+const openImportSignatureModal = (tx: UserTransaction) => {
+  selectedImportTransaction.value = tx
+  importSignature.value = ''
+  showImportSignatureModal.value = true
+}
+
+// 关闭导入签名模态框
+const closeImportSignatureModal = () => {
+  showImportSignatureModal.value = false
+  selectedImportTransaction.value = null
+  importSignature.value = ''
+  isImporting.value = false
+  isSending.value = false
+}
+
+// 仅导入签名
+const importSignatureOnly = async () => {
+  if (!selectedImportTransaction.value || !importSignature.value.trim()) return
+  
+  try {
+    isImporting.value = true
+    
+    // 解析签名数据
+    const signatureData = parseSignatureData(importSignature.value)
+    if (!signatureData) {
+      alert('签名数据格式错误，请检查数据格式')
+      return
+    }
+    
+    // 验证ID是否匹配
+    if (signatureData.id !== undefined && signatureData.id !== selectedImportTransaction.value.id) {
+      alert(`签名数据ID(${signatureData.id})与所选交易ID(${selectedImportTransaction.value.id})不匹配`)
+      return
+    }
+    
+    // 调用导入签名API
+    const response = await importSignatureAPI(selectedImportTransaction.value.id, { 
+      id: selectedImportTransaction.value.id, 
+      signed_tx: signatureData.signedTx,
+      v: signatureData.v,
+      r: signatureData.r,
+      s: signatureData.s
+    })
+    
+    if ((response as any)?.success) {
+      alert('导入签名成功！')
+      loadTransactions()
+      loadTransactionStats()
+      closeImportSignatureModal()
+    } else {
+      alert('导入签名失败: ' + ((response as any)?.message || '未知错误'))
+    }
+  } catch (error) {
+    console.error('导入签名失败:', error)
+    alert('导入签名失败，请重试')
+  } finally {
+    isImporting.value = false
+  }
+}
+
+// 导入并发送交易
+const importAndSendTransaction = async () => {
+  if (!selectedImportTransaction.value || !importSignature.value.trim()) return
+  
+  try {
+    isSending.value = true
+    
+    // 先导入签名
+    const signatureData = parseSignatureData(importSignature.value)
+    if (!signatureData) {
+      alert('签名数据格式错误，请检查数据格式')
+      return
+    }
+    
+    // 验证ID是否匹配
+    if (signatureData.id !== undefined && signatureData.id !== selectedImportTransaction.value.id) {
+      alert(`签名数据ID(${signatureData.id})与所选交易ID(${selectedImportTransaction.value.id})不匹配`)
+      return
+    }
+    
+    // 导入签名
+    const importResponse = await importSignatureAPI(selectedImportTransaction.value.id, { 
+      id: selectedImportTransaction.value.id, 
+      signed_tx: signatureData.signedTx,
+      v: signatureData.v,
+      r: signatureData.r,
+      s: signatureData.s
+    })
+    
+    if (!(importResponse as any)?.success) {
+      alert('导入签名失败: ' + ((importResponse as any)?.message || '未知错误'))
+      return
+    }
+    
+    // 发送交易上链
+    const sendResponse = await sendTransactionToChain(selectedImportTransaction.value.id)
+    
+    if ((sendResponse as any)?.success) {
+      alert('交易发送成功！')
+      loadTransactions()
+      loadTransactionStats()
+      closeImportSignatureModal()
+    } else {
+      alert('发送交易失败: ' + ((sendResponse as any)?.message || '未知错误'))
+    }
+  } catch (error) {
+    console.error('导入并发送交易失败:', error)
+    alert('导入并发送交易失败，请重试')
+  } finally {
+    isSending.value = false
+  }
+}
+
+// 解析签名数据
+const parseSignatureData = (signatureText: string) => {
+  try {
+    // 尝试解析JSON格式的签名数据
+    const data = JSON.parse(signatureText)
+    
+    // 检查是否包含BTC签名字段
+    if (data.id && data.signer) {
+      return {
+        id: typeof data.id === 'string' ? parseInt(data.id, 10) : data.id,
+        signedTx: data.signer,
+        v: null,
+        r: null,
+        s: null
+      }
+    }
+    
+    // 如果只是签名交易字符串
+    if (typeof data === 'string' || data.signedTx) {
+      return {
+        signedTx: data.signedTx || data,
+        v: null,
+        r: null,
+        s: null
+      }
+    }
+    
+    return null
+  } catch (error) {
+    // 如果不是JSON格式，假设是直接的签名交易字符串
+    if (signatureText.startsWith('0') && signatureText.length > 100) {
+      return {
+        signedTx: signatureText,
+        v: null,
+        r: null,
+        s: null
+      }
+    }
+    
+    console.error('解析签名数据失败:', error)
+    return null
+  }
 }
 
 // 确认导出费率并执行导出
@@ -1106,8 +1437,8 @@ const showExportQRCode = async (tx: UserTransaction, exportData: any) => {
     showExportQRModal.value = true
     exportQRCodeDataURL.value = '' // 重置QR码
     
-    // 构建扫码程序需要的数据结构
-    const qrData = createExportQRData(tx, exportData)
+    // 构建扫码程序需要的数据结构（异步，包含 PrevOuts）
+    const qrData = await buildExportQRData(tx, exportData)
     
     // 生成QR码
     await generateExportQRCode(qrData)
@@ -1117,32 +1448,48 @@ const showExportQRCode = async (tx: UserTransaction, exportData: any) => {
   }
 }
 
-// 创建导出QR码数据
-const createExportQRData = (tx: UserTransaction, exportData: any) => {
+// 创建导出QR码数据（包含 PrevOuts）
+const buildExportQRData = async (tx: UserTransaction, exportData: any) => {
   // 解析BTC交易数据
   let txIn: any[] = []
   let txOut: any[] = []
   
   if (tx.btc_tx_in_json) {
-    try {
-      txIn = JSON.parse(tx.btc_tx_in_json)
-    } catch (e) {
-      console.error('解析TxIn失败:', e)
-    }
+    try { txIn = JSON.parse(tx.btc_tx_in_json) } catch (e) { console.error('解析TxIn失败:', e) }
   }
-  
   if (tx.btc_tx_out_json) {
-    try {
-      txOut = JSON.parse(tx.btc_tx_out_json)
-    } catch (e) {
-      console.error('解析TxOut失败:', e)
-    }
+    try { txOut = JSON.parse(tx.btc_tx_out_json) } catch (e) { console.error('解析TxOut失败:', e) }
   }
-  
+
+  // 准备 PrevOuts：从地址UTXO中按 txid:vout 匹配
+  let prevOuts: Array<{ txid: string; vout: number; value_satoshi: number; script_pubkey_hex: string }> = []
+  try {
+    const utxoRes = await getAddressUTXOs(tx.from_address)
+    if ((utxoRes as any)?.success && (utxoRes as any)?.data) {
+      const addrUtxos = (utxoRes as any).data as any[]
+      prevOuts = txIn.map((input: any) => {
+        const match = addrUtxos.find(u => u.tx_id === input.txid && Number(u.vout_index) === Number(input.vout))
+        return {
+          txid: input.txid,
+          vout: Number(input.vout),
+          value_satoshi: match ? Number(match.value_satoshi || 0) : 0,
+          // 使用后端DTO中的脚本字段：script_pub_key
+          script_pubkey_hex: match && match.script_pub_key ? match.script_pub_key : ''
+        }
+      })
+    } else {
+      // 无法获取UTXO时，仍生成占位PrevOuts，value为0，脚本为空
+      prevOuts = txIn.map((input: any) => ({ txid: input.txid, vout: Number(input.vout), value_satoshi: 0, script_pubkey_hex: '' }))
+    }
+  } catch (e) {
+    console.warn('获取地址UTXO失败，PrevOuts将为空或占位:', e)
+    prevOuts = txIn.map((input: any) => ({ txid: input.txid, vout: Number(input.vout), value_satoshi: 0, script_pubkey_hex: '' }))
+  }
+
   // 构建扫码程序需要的数据结构
   const qrData = {
-    id: tx.id, // 交易ID
-    type: 'btc', // 链类型
+    id: tx.id,
+    type: 'btc',
     address: tx.from_address,
     MsgTx: {
       Version: tx.btc_version || 2,
@@ -1155,10 +1502,10 @@ const createExportQRData = (tx: UserTransaction, exportData: any) => {
         value_satoshi: output.value_satoshi,
         address: output.address
       })),
-      LockTime: tx.btc_lock_time || 0
+      LockTime: tx.btc_lock_time || 0,
+      PrevOuts: prevOuts
     }
   }
-  
   return qrData
 }
 
@@ -1173,7 +1520,7 @@ const generateExportQRCode = async (qrData: any) => {
     
     console.log('准备生成导出QR码:', {
       dataLength: qrDataString.length,
-      dataPreview: qrDataString.substring(0, 100) + '...'
+      dataPreview: qrDataString.substring(0, 1800) + '...'
     })
     
     // 生成QR码配置
@@ -1181,10 +1528,7 @@ const generateExportQRCode = async (qrData: any) => {
       type: 'image/png' as const,
       quality: 1.0,
       margin: 4,
-      color: {
-        dark: '#000000',
-        light: '#FFFFFF'
-      },
+      color: { dark: '#000000', light: '#FFFFFF' },
       width: 1024,
       errorCorrectionLevel: 'H' as const,
       scale: 8
@@ -1194,10 +1538,7 @@ const generateExportQRCode = async (qrData: any) => {
     const qrDataURL = await QRCode.toDataURL(qrDataString, qrOptions)
     exportQRCodeDataURL.value = qrDataURL
     
-    console.log('导出QR码生成完成:', {
-      dataLength: qrDataString.length,
-      qrSize: qrOptions.width
-    })
+    console.log('导出QR码生成完成:', { dataLength: qrDataString.length, qrSize: qrOptions.width })
     
   } catch (error) {
     console.error('生成导出QR码失败:', error)
@@ -1784,6 +2125,11 @@ onUnmounted(() => {
 
 // -------- 新建交易辅助方法（UTXO/输出管理） --------
 const toggleUtxo = (u: BTCUTXO) => {
+  // 如果UTXO状态为spent，不允许选择
+  if (u.status === 'spent') {
+    return
+  }
+  
   const s = new Set(selectedUtxoIds.value)
   if (s.has(u.id)) s.delete(u.id)
   else s.add(u.id)
