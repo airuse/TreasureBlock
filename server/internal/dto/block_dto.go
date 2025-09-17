@@ -17,7 +17,7 @@ type CreateBlockRequest struct {
 	Fee              float64   `json:"fee" validate:"gte=0"`
 	Confirmations    uint64    `json:"confirmations" validate:"gte=0"`
 	IsOrphan         bool      `json:"is_orphan"`
-	Chain            string    `json:"chain" validate:"required,oneof=btc eth"`
+	Chain            string    `json:"chain" validate:"required,oneof=btc eth bsc"`
 	ChainID          int       `json:"chain_id" validate:"required,gt=0"`
 
 	// BTC特有字段

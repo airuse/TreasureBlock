@@ -39,6 +39,7 @@ type ChainType string
 const (
 	ChainTypeETH ChainType = "eth" // 以太坊
 	ChainTypeBTC ChainType = "btc" // 比特币
+	ChainTypeBSC ChainType = "bsc" // BSC链
 )
 
 // ================== 消息结构定义 ==================

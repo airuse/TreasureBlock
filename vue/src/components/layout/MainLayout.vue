@@ -56,6 +56,20 @@
                 </svg>
                 <span>BTC</span>
               </button>
+              <button 
+                @click="switchChain('bsc')" 
+                :class="[
+                  'px-3 py-2 rounded-md text-sm font-medium transition-colors flex items-center space-x-2',
+                  currentChain === 'bsc' 
+                    ? 'bg-yellow-100 text-yellow-700' 
+                    : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                ]"
+              >
+                <svg class="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+                  <path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zm1-13a1 1 0 10-2 0v.092a4.535 4.535 0 00-1.676.662C6.602 6.234 6 7.009 6 8c0 .99.602 1.765 1.324 2.246.48.32 1.054.545 1.676.662v1.941c-.391-.127-.68-.317-.843-.504a1 1 0 10-1.51 1.31c.562.649 1.413 1.076 2.353 1.253V15a1 1 0 102 0v-.092a4.535 4.535 0 001.676-.662C13.398 13.766 14 12.991 14 12c0-.99-.602-1.765-1.324-2.246A4.535 4.535 0 0011 9.092V7.151c.391.127.68.317.843.504a1 1 0 101.511-1.31c-.563-.649-1.413-1.076-2.354-1.253V5z" clip-rule="evenodd"/>
+                </svg>
+                <span>BSC</span>
+              </button>
             </div>
 
             <!-- 认证状态 -->
@@ -286,9 +300,16 @@ const { isConnected } = useWebSocket()
 
 // 菜单项 - 根据当前链动态生成
 const menuItems = computed(() => {
-  const basePath = currentChain.value === 'eth' ? '/eth' : '/btc'
+  const basePath = currentChain.value === 'eth' ? '/eth' : currentChain.value === 'btc' ? '/btc' : '/bsc'
   
   if (currentChain.value === 'eth') {
+    return [
+      { name: '首页', path: basePath },
+      { name: '区块', path: `${basePath}/blocks` },
+      { name: '地址', path: `${basePath}/addresses` },
+      // { name: '统计', path: `${basePath}/statistics` }, // 暂时屏蔽统计页面
+    ]
+  } else if (currentChain.value === 'bsc') {
     return [
       { name: '首页', path: basePath },
       { name: '区块', path: `${basePath}/blocks` },
@@ -307,7 +328,7 @@ const menuItems = computed(() => {
 
 // 个人中心菜单项
 const personalMenuItems = computed(() => {
-  const basePath = currentChain.value === 'eth' ? '/eth' : '/btc'
+  const basePath = currentChain.value === 'eth' ? '/eth' : currentChain.value === 'btc' ? '/btc' : '/bsc'
   return [
     { name: '扫块收益', path: `${basePath}/personal/earnings` },
     { name: '个人地址', path: `${basePath}/personal/addresses` },
@@ -324,18 +345,19 @@ const switchChain = (chain: string) => {
   const currentPage = currentPath.split('/').pop() || ''
   
   // 构建新路径，保持当前页面类型
-  const basePath = chain === 'eth' ? '/eth' : '/btc'
+  const basePath = chain === 'eth' ? '/eth' : chain === 'btc' ? '/btc' : '/bsc'
   let newPath = basePath
   
   // 如果不是首页，添加页面路径
-  if (currentPage && currentPage !== 'eth' && currentPage !== 'btc') {
+  if (currentPage && currentPage !== 'eth' && currentPage !== 'btc' && currentPage !== 'bsc') {
     // 检查目标路由是否存在
     const targetPath = `${basePath}/${currentPage}`
     
     // 定义每种链支持的有效页面
     const validPages = {
       eth: ['blocks', 'addresses', 'settings'], // 暂时屏蔽统计页面
-      btc: ['blocks'] // BTC没有addresses页面，暂时屏蔽统计页面
+      btc: ['blocks'], // BTC没有addresses页面，暂时屏蔽统计页面
+      bsc: ['blocks', 'addresses', 'settings'] // BSC支持地址页面，暂时屏蔽统计页面
     }
     
     // 如果目标页面在当前链中有效，则跳转；否则跳转到首页

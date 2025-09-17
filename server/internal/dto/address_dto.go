@@ -7,7 +7,7 @@ import (
 
 // CreateAddressRequest 创建地址请求DTO
 type CreateAddressRequest struct {
-	Chain string `json:"chain" validate:"required,oneof=btc eth"`
+	Chain string `json:"chain" validate:"required,oneof=btc eth bsc"`
 	Type  uint16 `json:"type" validate:"gte=0"`
 	Nonce string `json:"nonce" validate:"required,min=1"`
 	Hash  string `json:"hash" validate:"required,min=1,max=1024"`

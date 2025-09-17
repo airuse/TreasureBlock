@@ -498,6 +498,8 @@ watch(() => route.query.address, (newAddress) => {
 
 // 组件挂载时加载数据
 onMounted(() => {
+  // 根据当前路径设置链类型
+  selectedChain.value = 'eth'
   if (address.value) {
     loadTransactions()
   }

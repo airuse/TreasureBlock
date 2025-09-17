@@ -92,6 +92,14 @@ blockchain:
         - "https://mempool.space/testnet/api"     # REST API (备用)
       username: "bitcoin"
       password: "bitcoin123"
+    bsc:
+      chain_id: 97
+      name: "Binance Smart Chain Testnet"
+      symbol: "BSC"
+      decimals: 18
+      enabled: true
+      rpc_urls:
+        - "https://bsc-testnet.core.chainstack.com/121b6c75b21bfad0e4bb8c64620ac358"  # JSON-RPC (仅用于获取区块高度)
     eth:
       chain_id: 1       #11155111
       name: "Ethereum"
@@ -99,7 +107,6 @@ blockchain:
       decimals: 18
       enabled: true
       rpc_urls:
-        - "https://alpha-clean-yard.quiknode.pro/7979488c04b1a36bdc4230b23e3eaac3e9c1c1af"
         - "https://newest-ultra-friday.quiknode.pro/7091d98af3809c189285739c3f4141b94f368fff"
         - "https://yolo-smart-tree.quiknode.pro/52836b8f979fca7325258c42925d6c245ca45079"
         - "https://thrilling-summer-frost.quiknode.pro/ca8e71700184f645a7935acf1487acd191e429a1"

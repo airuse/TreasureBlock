@@ -11,13 +11,13 @@ type ContractParseResult struct {
 	ID              uint           `json:"id" gorm:"primaryKey;autoIncrement"`
 	TxHash          string         `json:"tx_hash" gorm:"size:66;index;not null;comment:交易哈希"`
 	ContractAddress string         `json:"contract_address" gorm:"size:66;index;comment:合约地址"`
-	Chain           string         `json:"chain" gorm:"size:16;index;comment:链"`
-	BlockNumber     uint64         `json:"block_number" gorm:"index;comment:区块号"`
+	Chain           string         `json:"chain" gorm:"size:16;index:idx_contract_parse_results_chain_block_from,priority:1;index:idx_contract_parse_results_chain_block_to,priority:1;comment:链"`
+	BlockNumber     uint64         `json:"block_number" gorm:"index:idx_contract_parse_results_chain_block_from,priority:2;index:idx_contract_parse_results_chain_block_to,priority:2;comment:区块号"`
 	LogIndex        uint           `json:"log_index" gorm:"index;comment:日志索引"`
 	EventSignature  string         `json:"event_signature" gorm:"size:66;index;comment:事件签名topics[0]"`
 	EventName       string         `json:"event_name" gorm:"size:64;comment:事件名(可选)"`
-	FromAddress     string         `json:"from_address" gorm:"size:66;index;comment:解析出的from地址"`
-	ToAddress       string         `json:"to_address" gorm:"size:66;index;comment:解析出的to地址"`
+	FromAddress     string         `json:"from_address" gorm:"size:66;index:idx_contract_parse_results_chain_block_from,priority:3;comment:解析出的from地址"`
+	ToAddress       string         `json:"to_address" gorm:"size:66;index:idx_contract_parse_results_chain_block_to,priority:3;comment:解析出的to地址"`
 	OwnerAddress    string         `json:"owner_address" gorm:"size:66;index;comment:解析出的owner地址(Allowance/BalanceOf等)"`
 	SpenderAddress  string         `json:"spender_address" gorm:"size:66;index;comment:解析出的spender地址(Allowance/Approve等)"`
 	AmountWei       string         `json:"amount_wei" gorm:"type:varchar(100);default:'0';comment:解析出的amount(wei)十进制字符串"`

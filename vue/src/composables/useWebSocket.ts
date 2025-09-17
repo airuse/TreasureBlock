@@ -151,7 +151,7 @@ export function useWebSocket(options?: Partial<WebSocketOptions>) {
 }
 
 // 特定链的WebSocket组合式函数
-export function useChainWebSocket(chain: 'eth' | 'btc') {
+export function useChainWebSocket(chain: 'eth' | 'btc' | 'bsc') {
   // 使用全局WebSocket管理器，避免重复创建
   const manager = getWebSocketManager()
   

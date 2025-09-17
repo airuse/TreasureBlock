@@ -96,6 +96,14 @@ func NewRPCClientManager() *RPCClientManager {
 			} else {
 				manager.logger.Errorf("Failed to init ETH failover %s: %v", chainName, err)
 			}
+		case "bsc", "binance":
+			// BSC使用ETH故障转移管理器（因为BSC兼容EVM）
+			if fo, err := NewEthFailoverFromChain(chainName); err == nil {
+				manager.ethFailovers[chainName] = fo
+				manager.logger.Infof("Initialized BSC failover (using ETH client): %s", chainName)
+			} else {
+				manager.logger.Errorf("Failed to init BSC failover %s: %v", chainName, err)
+			}
 		case "btc", "bitcoin":
 			// 使用BTC故障转移管理器
 			if btcFailover, err := NewBTCFailoverFromChain(chainName); err == nil {
@@ -117,6 +125,8 @@ func (m *RPCClientManager) SendTransaction(ctx context.Context, req *SendTransac
 	switch chainName {
 	case "eth", "ethereum":
 		return m.sendEthTransaction(ctx, req)
+	case "bsc", "binance":
+		return m.sendBscTransaction(ctx, req)
 	case "btc", "bitcoin":
 		return m.sendBtcTransaction(ctx, req)
 	default:
@@ -174,6 +184,60 @@ func (m *RPCClientManager) sendEthTransaction(ctx context.Context, req *SendTran
 
 	txHash := tx.Hash().Hex()
 	m.logger.Infof("ETH交易发送成功: %s", txHash)
+
+	return &SendTransactionResponse{
+		Success: true,
+		TxHash:  txHash,
+		Message: "交易发送成功",
+	}, nil
+}
+
+// sendBscTransaction 发送BSC交易
+func (m *RPCClientManager) sendBscTransaction(ctx context.Context, req *SendTransactionRequest) (*SendTransactionResponse, error) {
+	// 获取BSC故障转移管理器
+	fo, exists := m.ethFailovers["bsc"]
+	if !exists {
+		// 尝试其他可能的键名
+		for key, f := range m.ethFailovers {
+			if strings.Contains(strings.ToLower(key), "bsc") || strings.Contains(strings.ToLower(key), "binance") {
+				fo = f
+				exists = true
+				break
+			}
+		}
+	}
+
+	if !exists {
+		return &SendTransactionResponse{
+			Success:   false,
+			Message:   "BSC RPC故障转移未初始化",
+			ErrorCode: "RPC_CLIENT_NOT_AVAILABLE",
+		}, nil
+	}
+
+	// 解析已签名的交易（BSC使用与ETH相同的格式）
+	tx, err := parseSignedEthTx(req.SignedTx)
+	if err != nil {
+		return &SendTransactionResponse{
+			Success:   false,
+			Message:   err.Error(),
+			ErrorCode: "INVALID_SIGNED_TX",
+		}, nil
+	}
+
+	// 发送交易（故障转移）
+	err = fo.SendTransaction(ctx, tx)
+	if err != nil {
+		m.logger.Errorf("发送BSC交易失败: %v", err)
+		return &SendTransactionResponse{
+			Success:   false,
+			Message:   fmt.Sprintf("发送交易失败: %v", err),
+			ErrorCode: "SEND_TX_FAILED",
+		}, nil
+	}
+
+	txHash := tx.Hash().Hex()
+	m.logger.Infof("BSC交易发送成功: %s", txHash)
 
 	return &SendTransactionResponse{
 		Success: true,
@@ -362,6 +426,8 @@ func (m *RPCClientManager) GetTransactionStatus(ctx context.Context, chain, txHa
 	switch chainName {
 	case "eth", "ethereum":
 		return m.getEthTransactionStatus(ctx, txHash)
+	case "bsc", "binance":
+		return m.getBscTransactionStatus(ctx, txHash)
 	case "btc", "bitcoin":
 		return m.getBtcTransactionStatus(ctx, txHash)
 	default:
@@ -395,6 +461,67 @@ func (m *RPCClientManager) getEthTransactionStatus(ctx context.Context, txHash s
 
 	if !exists {
 		return nil, fmt.Errorf("ETH RPC客户端未配置")
+	}
+
+	// 获取交易
+	tx, isPending, err := client.TransactionByHash(ctx, common.HexToHash(txHash))
+	if err != nil {
+		return nil, fmt.Errorf("获取交易失败: %w", err)
+	}
+
+	status := &TransactionStatus{
+		TxHash: txHash,
+		Status: "pending",
+	}
+
+	if isPending {
+		status.Status = "pending"
+		return status, nil
+	}
+
+	// 获取交易收据
+	receipt, err := client.TransactionReceipt(ctx, common.HexToHash(txHash))
+	if err != nil {
+		status.Status = "failed"
+		return status, nil
+	}
+
+	// 获取最新区块高度
+	latestBlock, err := client.BlockNumber(ctx)
+	if err != nil {
+		status.Status = "confirmed"
+		status.BlockHeight = receipt.BlockNumber.Uint64()
+		status.Confirmations = 1
+		return status, nil
+	}
+
+	status.Status = "confirmed"
+	status.BlockHeight = receipt.BlockNumber.Uint64()
+	status.Confirmations = latestBlock - receipt.BlockNumber.Uint64() + 1
+	status.GasUsed = receipt.GasUsed
+	status.GasPrice = tx.GasPrice().String()
+	status.ActualFee = new(big.Int).Mul(tx.GasPrice(), big.NewInt(int64(receipt.GasUsed))).String()
+
+	return status, nil
+}
+
+// getBscTransactionStatus 获取BSC交易状态
+func (m *RPCClientManager) getBscTransactionStatus(ctx context.Context, txHash string) (*TransactionStatus, error) {
+	// 获取BSC故障转移管理器
+	client, exists := m.ethFailovers["bsc"]
+	if !exists {
+		// 尝试其他可能的键名
+		for key, f := range m.ethFailovers {
+			if strings.Contains(strings.ToLower(key), "bsc") || strings.Contains(strings.ToLower(key), "binance") {
+				client = f
+				exists = true
+				break
+			}
+		}
+	}
+
+	if !exists {
+		return nil, fmt.Errorf("BSC RPC客户端未配置")
 	}
 
 	// 获取交易
@@ -491,6 +618,8 @@ func (m *RPCClientManager) GetBlockNumber(ctx context.Context, chain string) (ui
 	switch chainName {
 	case "eth", "ethereum":
 		return m.getETHBlockNumber(ctx)
+	case "bsc", "binance":
+		return m.getBSCBlockNumber(ctx)
 	case "btc", "bitcoin":
 		return m.getBTCBlockNumber(ctx)
 	default:
@@ -515,6 +644,28 @@ func (m *RPCClientManager) getETHBlockNumber(ctx context.Context) (uint64, error
 
 	if !exists {
 		return 0, fmt.Errorf("未找到ETH故障转移管理器")
+	}
+
+	return fo.BlockNumber(ctx)
+}
+
+// getBSCBlockNumber 获取BSC最新区块号
+func (m *RPCClientManager) getBSCBlockNumber(ctx context.Context) (uint64, error) {
+	// 获取BSC故障转移管理器
+	fo, exists := m.ethFailovers["bsc"]
+	if !exists {
+		// 尝试其他可能的键名
+		for key, f := range m.ethFailovers {
+			if strings.Contains(strings.ToLower(key), "bsc") || strings.Contains(strings.ToLower(key), "binance") {
+				fo = f
+				exists = true
+				break
+			}
+		}
+	}
+
+	if !exists {
+		return 0, fmt.Errorf("未找到BSC故障转移管理器")
 	}
 
 	return fo.BlockNumber(ctx)
@@ -549,6 +700,8 @@ func (m *RPCClientManager) GetBlockByNumber(ctx context.Context, chain string, b
 	switch chainName {
 	case "eth", "ethereum":
 		return m.getETHBlockByNumber(ctx, blockNumber)
+	case "bsc", "binance":
+		return m.getBSCBlockByNumber(ctx, blockNumber)
 	case "btc", "bitcoin":
 		return m.getBTCBlockByNumber(ctx, blockNumber)
 	default:
@@ -563,6 +716,8 @@ func (m *RPCClientManager) GetBlockByHash(ctx context.Context, chain string, blo
 	switch chainName {
 	case "eth", "ethereum":
 		return m.getETHBlockByHash(ctx, blockHash)
+	case "bsc", "binance":
+		return m.getBSCBlockByHash(ctx, blockHash)
 	case "btc", "bitcoin":
 		return m.getBTCBlockByHash(ctx, blockHash)
 	default:
@@ -592,6 +747,28 @@ func (m *RPCClientManager) getETHBlockByNumber(ctx context.Context, blockNumber 
 	return fo.BlockByNumber(ctx, blockNumber)
 }
 
+// getBSCBlockByNumber 获取BSC区块
+func (m *RPCClientManager) getBSCBlockByNumber(ctx context.Context, blockNumber *big.Int) (*types.Block, error) {
+	// 获取BSC故障转移管理器
+	fo, exists := m.ethFailovers["bsc"]
+	if !exists {
+		// 尝试其他可能的键名
+		for key, f := range m.ethFailovers {
+			if strings.Contains(strings.ToLower(key), "bsc") || strings.Contains(strings.ToLower(key), "binance") {
+				fo = f
+				exists = true
+				break
+			}
+		}
+	}
+
+	if !exists {
+		return nil, fmt.Errorf("未找到BSC故障转移管理器")
+	}
+
+	return fo.BlockByNumber(ctx, blockNumber)
+}
+
 // getETHBlockByHash 获取ETH区块（通过哈希）
 func (m *RPCClientManager) getETHBlockByHash(ctx context.Context, blockHash string) (*types.Block, error) {
 	// 获取ETH故障转移管理器
@@ -609,6 +786,29 @@ func (m *RPCClientManager) getETHBlockByHash(ctx context.Context, blockHash stri
 
 	if !exists {
 		return nil, fmt.Errorf("未找到ETH故障转移管理器")
+	}
+
+	hash := common.HexToHash(blockHash)
+	return fo.BlockByHash(ctx, hash)
+}
+
+// getBSCBlockByHash 获取BSC区块（通过哈希）
+func (m *RPCClientManager) getBSCBlockByHash(ctx context.Context, blockHash string) (*types.Block, error) {
+	// 获取BSC故障转移管理器
+	fo, exists := m.ethFailovers["bsc"]
+	if !exists {
+		// 尝试其他可能的键名
+		for key, f := range m.ethFailovers {
+			if strings.Contains(strings.ToLower(key), "bsc") || strings.Contains(strings.ToLower(key), "binance") {
+				fo = f
+				exists = true
+				break
+			}
+		}
+	}
+
+	if !exists {
+		return nil, fmt.Errorf("未找到BSC故障转移管理器")
 	}
 
 	hash := common.HexToHash(blockHash)

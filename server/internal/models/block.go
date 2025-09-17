@@ -10,16 +10,16 @@ import (
 type Block struct {
 	ID               uint      `json:"id" gorm:"primaryKey"`
 	Hash             string    `json:"hash" gorm:"type:varchar(255);index;not null"`
-	Height           uint64    `json:"height" gorm:"index;not null"`
+	Height           uint64    `json:"height" gorm:"index:idx_block_verified_chain_height,priority:3;not null"`
 	PreviousHash     string    `json:"previous_hash" gorm:"type:char(66);index"`
-	Timestamp        time.Time `json:"timestamp"`
+	Timestamp        time.Time `json:"timestamp" gorm:"index:idx_block_time_chain_timestamp,priority:2"`
 	Size             uint64    `json:"size"`
 	TransactionCount int       `json:"transaction_count"`
 	TotalAmount      float64   `json:"total_amount"`
 	Fee              float64   `json:"fee"`
 	Confirmations    uint64    `json:"confirmations"`
 	IsOrphan         bool      `json:"is_orphan" gorm:"default:false"`
-	Chain            string    `json:"chain" gorm:"type:varchar(20);index;not null"` // btc, eth
+	Chain            string    `json:"chain" gorm:"type:varchar(20);index:idx_block_time_chain_timestamp,priority:1;index:idx_block_chain_deleted,priority:1;index:idx_block_verified_chain_height,priority:1;index:idx_block_base_fee_chain_height,priority:1;not null"` // btc, eth
 	ChainID          int       `json:"chain_id" gorm:"type:int;index;not null"`
 	// BTC特有字段
 	MerkleRoot string `json:"merkle_root,omitempty" gorm:"type:char(66)"`
@@ -41,18 +41,18 @@ type Block struct {
 	ReceiptsRoot     string `json:"receipts_root,omitempty" gorm:"type:char(66);comment:收据根哈希"`
 
 	// ETH London 升级相关字段
-	BaseFee     string `json:"base_fee,omitempty" gorm:"type:varchar(100);comment:基础费"`       // wei，字符串存储
-	BurnedEth   string `json:"burned_eth,omitempty" gorm:"type:varchar(100);comment:燃烧费"`     // ETH数量字符串
-	MinerTipEth string `json:"miner_tip_eth,omitempty" gorm:"type:varchar(100);comment:款工收益"` // ETH数量字符串
+	BaseFee     string `json:"base_fee,omitempty" gorm:"type:varchar(100);index:idx_block_base_fee_chain_height,priority:2;comment:基础费"` // wei，字符串存储
+	BurnedEth   string `json:"burned_eth,omitempty" gorm:"type:varchar(100);comment:燃烧费"`                                                // ETH数量字符串
+	MinerTipEth string `json:"miner_tip_eth,omitempty" gorm:"type:varchar(100);comment:款工收益"`                                            // ETH数量字符串
 
 	// 验证相关字段
 	VerificationDeadline *time.Time `json:"verification_deadline" gorm:"type:timestamp;column:verification_deadline;comment:最晚验证时间"`
-	IsVerified           uint8      `json:"is_verified" gorm:"type:tinyint(1);not null;default:0;column:is_verified;comment:验证是否通过 0:未验证 1:验证通过 2:验证失败"`
+	IsVerified           uint8      `json:"is_verified" gorm:"type:tinyint(1);not null;default:0;index:idx_block_verified_chain_height,priority:2;column:is_verified;comment:验证是否通过 0:未验证 1:验证通过 2:验证失败"`
 
 	// 通用时间字段
 	CreatedAt time.Time      `json:"created_at"`
 	UpdatedAt time.Time      `json:"updated_at"`
-	DeletedAt gorm.DeletedAt `json:"deleted_at,omitempty" gorm:"index"`
+	DeletedAt gorm.DeletedAt `json:"deleted_at,omitempty" gorm:"index:idx_block_chain_deleted,priority:2"`
 }
 
 // TableName 指定表名

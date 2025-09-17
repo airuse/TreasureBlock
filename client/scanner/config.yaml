@@ -29,7 +29,7 @@ blockchain:
       password: "bitcoin123"  # bitcoind RPC密码
       # BTC链特定的扫描配置
       scan:
-        enabled: true
+        enabled: false
         interval: 3s
         max_retries: 3
         retry_delay: 5s
@@ -48,6 +48,39 @@ blockchain:
         batch_upload: true           # 是否启用批量上传交易（推荐启用）
         batch_size: 2000             # 批量上传大小，默认1000条交易
         batch_timeout: 30s           # 批量上传超时时间
+    bsc:
+      chain_id: 97
+      name: "Binance Smart Chain"
+      symbol: "BSC"
+      decimals: 18
+      enabled: true
+      # rpc_url: "https://bsc-dataseed.binance.org/"
+      explorer_api_urls:
+        - "https://bsc-testnet.core.chainstack.com/121b6c75b21bfad0e4bb8c64620ac358"
+      api_key: ""
+      username: ""
+      password: ""
+      # BSC链特定的扫描配置
+      scan:
+        enabled: true
+        interval: 20ms
+        max_retries: 3
+        retry_delay: 5s
+        confirmations: 6
+        start_block_height: 0
+        auto_start: true
+        save_to_file: false
+        output_dir: "./output/bsc"
+        priority: 2  # 中等优先级
+        max_concurrent: 10
+        block_timeout: 30s
+        rescan_interval: 60s
+        enable_mempool: true
+        mempool_interval: 5s
+        # 批量上传配置（推荐启用以提高性能）
+        batch_upload: false           # 是否启用批量上传交易（推荐启用）
+        batch_size: 2000             # 批量上传大小，默认1000条交易
+        batch_timeout: 30s           # 批量上传超时时间
     eth:
       chain_id: 1
       name: "Ethereum"
@@ -56,7 +89,6 @@ blockchain:
       enabled: true
       # rpc_url: "http://192.168.1.70:8545"
       explorer_api_urls:
-        - "https://ethereum-mainnet.core.chainstack.com/7ba518d6ccef2034775a9184a898fa3c"
         - "https://ethereum-mainnet.core.chainstack.com/f128085e44a144c3a63295011a716628"
         - "https://ethereum-mainnet.core.chainstack.com/7940b16771bdfe19340899e9a975604e"
         - "https://ethereum-mainnet.core.chainstack.com/9f3263672e76b307af91917e8aea47b1"
@@ -66,7 +98,6 @@ blockchain:
         - "https://ethereum-mainnet.core.chainstack.com/f88c0e02c0f9f38c4880701a44fa0133"
         - "https://ethereum-mainnet.core.chainstack.com/92b0739e8f73e3d79e79f13f46f5f8ec"
         - "https://ethereum-mainnet.core.chainstack.com/fa00dae894f9dd1b7b4a530d83a83bd7"
-        - "https://ethereum-mainnet.core.chainstack.com/7ba518d6ccef2034775a9184a898fa3c"
         - "https://ethereum-mainnet.core.chainstack.com/f128085e44a144c3a63295011a716628"
         - "https://ethereum-mainnet.core.chainstack.com/7940b16771bdfe19340899e9a975604e"
         - "https://ethereum-mainnet.core.chainstack.com/9f3263672e76b307af91917e8aea47b1"
@@ -95,7 +126,6 @@ blockchain:
         - "https://warmhearted-bold-emerald.quiknode.pro/be4e6633f9443a4dd26046d40be1650a810db3a1"
         - "https://empty-hardworking-spree.quiknode.pro/d1cb31945987ed11caa6f3e63c2b8b86b00d41ff"
         - "https://solemn-purple-river.quiknode.pro/93a62baaa6ed6004344fca98ff7f05f8f0a12ae1"
-
       api_key: ""  # 如果需要的话
       username: ""
       password: ""

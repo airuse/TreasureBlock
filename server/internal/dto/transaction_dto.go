@@ -61,9 +61,9 @@ type CreateTransactionRequest struct {
 	TxScene      string  `json:"tx_scene" validate:"required"`
 	Remark       string  `json:"remark" validate:"max=256"`
 
-	// 链相关字段
-	Chain  string `json:"chain" validate:"required,oneof=btc eth"`
-	Symbol string `json:"symbol" validate:"required,oneof=eth btc"`
+	// 链相关字段（加入 bsc）
+	Chain  string `json:"chain" validate:"required,oneof=btc eth bsc"`
+	Symbol string `json:"symbol" validate:"required,oneof=eth btc bsc"`
 
 	// 地址字段
 	AddressFrom  string  `json:"address_from" validate:"required"`
@@ -71,15 +71,15 @@ type CreateTransactionRequest struct {
 	AddressFroms *string `json:"address_froms,omitempty"`
 	AddressTos   *string `json:"address_tos,omitempty"`
 
-	// Gas相关字段（ETH特有，BTC可为空）
-	GasLimit uint   `json:"gas_limit" validate:"required"`
+	// Gas相关字段（EVM链）
+	GasLimit uint64 `json:"gas_limit" validate:"required"`
 	GasPrice string `json:"gas_price" validate:"required"`
-	GasUsed  uint   `json:"gas_used" validate:"gte=0"`
+	GasUsed  uint64 `json:"gas_used" validate:"gte=0"`
 
-	// EIP-1559 相关字段（ETH特有）
-	MaxFeePerGas         string `json:"max_fee_per_gas,omitempty"`          // 最高费用（MaxFee）
-	MaxPriorityFeePerGas string `json:"max_priority_fee_per_gas,omitempty"` // 最高小费（MaxPriorityFee）
-	EffectiveGasPrice    string `json:"effective_gas_price,omitempty"`      // 有效Gas价格
+	// EIP-1559 相关字段（ETH/BSC）
+	MaxFeePerGas         string `json:"max_fee_per_gas,omitempty"`
+	MaxPriorityFeePerGas string `json:"max_priority_fee_per_gas,omitempty"`
+	EffectiveGasPrice    string `json:"effective_gas_price,omitempty"`
 
 	// 手续费字段
 	Fee        string  `json:"fee" validate:"required"`
@@ -88,14 +88,14 @@ type CreateTransactionRequest struct {
 	Nonce      uint64  `json:"nonce" validate:"required"`
 
 	// 新增字段
-	Logs     []map[string]interface{} `json:"logs,omitempty"`      // 日志数据（存储在交易表）
-	Receipt  *TransactionReceiptData  `json:"receipt,omitempty"`   // 凭证数据（存储在凭证表）
-	BlockID  *uint64                  `json:"block_id,omitempty"`  // 关联的区块ID
-	TurnsOut *BTCTransactionTurnsData `json:"turns_out,omitempty"` // BTC原生冗余
+	Logs     []map[string]interface{} `json:"logs,omitempty"`
+	Receipt  *TransactionReceiptData  `json:"receipt,omitempty"`
+	BlockID  *uint64                  `json:"block_id,omitempty"`
+	TurnsOut *BTCTransactionTurnsData `json:"turns_out,omitempty"`
 
 	// BTC 原始交易数据字段
-	Vin  *string `json:"vin,omitempty"`  // BTC输入数据(JSON格式)
-	Vout *string `json:"vout,omitempty"` // BTC输出数据(JSON格式)
+	Vin  *string `json:"vin,omitempty"`
+	Vout *string `json:"vout,omitempty"`
 }
 
 // UpdateTransactionRequest 更新交易请求DTO
@@ -103,7 +103,7 @@ type UpdateTransactionRequest struct {
 	Confirm    *uint   `json:"confirm,omitempty" validate:"omitempty,gte=0"`
 	Status     *uint8  `json:"status,omitempty" validate:"omitempty,lte=3"`
 	SendStatus *uint8  `json:"send_status,omitempty" validate:"omitempty,oneof=0 1"`
-	GasUsed    *uint   `json:"gas_used,omitempty" validate:"omitempty,gte=0"`
+	GasUsed    *uint64 `json:"gas_used,omitempty" validate:"omitempty,gte=0"`
 	UsedFee    *string `json:"used_fee,omitempty"`
 	Hex        *string `json:"hex,omitempty"`
 	Remark     *string `json:"remark,omitempty" validate:"omitempty,max=256"`
@@ -123,9 +123,9 @@ type TransactionResponse struct {
 	Symbol               string            `json:"symbol"`
 	AddressFrom          string            `json:"address_from"`
 	AddressTo            string            `json:"address_to"`
-	GasLimit             uint              `json:"gas_limit"`
+	GasLimit             uint64            `json:"gas_limit"`
 	GasPrice             string            `json:"gas_price"`
-	GasUsed              uint              `json:"gas_used"`
+	GasUsed              uint64            `json:"gas_used"`
 	MaxFeePerGas         string            `json:"max_fee_per_gas,omitempty"`
 	MaxPriorityFeePerGas string            `json:"max_priority_fee_per_gas,omitempty"`
 	EffectiveGasPrice    string            `json:"effective_gas_price,omitempty"`
@@ -137,20 +137,20 @@ type TransactionResponse struct {
 	TxScene              string            `json:"tx_scene"`
 	Remark               string            `json:"remark"`
 	IsToken              bool              `json:"is_token"`
-	TokenName            string            `json:"token_name,omitempty"`            // 代币全名
-	TokenSymbol          string            `json:"token_symbol,omitempty"`          // 代币符号
-	TokenDecimals        uint8             `json:"token_decimals,omitempty"`        // 代币精度
-	TokenDescription     string            `json:"token_description,omitempty"`     // 代币描述
-	TokenWebsite         string            `json:"token_website,omitempty"`         // 代币官网
-	TokenExplorer        string            `json:"token_explorer,omitempty"`        // 代币浏览器链接
-	TokenLogo            string            `json:"token_logo,omitempty"`            // 代币Logo
-	TokenMarketCapRank   *int              `json:"token_market_cap_rank,omitempty"` // 市值排名
-	TokenIsStablecoin    bool              `json:"token_is_stablecoin,omitempty"`   // 是否为稳定币
-	TokenIsVerified      bool              `json:"token_is_verified,omitempty"`     // 是否已验证
-	Nonce                uint64            `json:"nonce"`                           // 添加Nonce字段
-	Vin                  *string           `json:"vin,omitempty"`                   // BTC输入数据(JSON格式)
-	Vout                 *string           `json:"vout,omitempty"`                  // BTC输出数据(JSON格式)
-	BTCUTXOs             []*models.BTCUTXO `json:"btc_utxos,omitempty"`             // BTC UTXO数据(JSON格式)
+	TokenName            string            `json:"token_name,omitempty"`
+	TokenSymbol          string            `json:"token_symbol,omitempty"`
+	TokenDecimals        uint8             `json:"token_decimals,omitempty"`
+	TokenDescription     string            `json:"token_description,omitempty"`
+	TokenWebsite         string            `json:"token_website,omitempty"`
+	TokenExplorer        string            `json:"token_explorer,omitempty"`
+	TokenLogo            string            `json:"token_logo,omitempty"`
+	TokenMarketCapRank   *int              `json:"token_market_cap_rank,omitempty"`
+	TokenIsStablecoin    bool              `json:"token_is_stablecoin,omitempty"`
+	TokenIsVerified      bool              `json:"token_is_verified,omitempty"`
+	Nonce                uint64            `json:"nonce"`
+	Vin                  *string           `json:"vin,omitempty"`
+	Vout                 *string           `json:"vout,omitempty"`
+	BTCUTXOs             []*models.BTCUTXO `json:"btc_utxos,omitempty"`
 	Ctime                time.Time         `json:"ctime"`
 	Mtime                time.Time         `json:"mtime"`
 }
@@ -423,9 +423,9 @@ type AddressTransactionResponse struct {
 	AddressFrom          string `json:"address_from"`             // 发送方地址
 	AddressTo            string `json:"address_to"`               // 接收方地址
 	Amount               string `json:"amount"`                   // 交易金额
-	GasLimit             uint   `json:"gas_limit"`                // Gas限制
+	GasLimit             uint64 `json:"gas_limit"`                // Gas限制
 	GasPrice             string `json:"gas_price"`                // Gas价格
-	GasUsed              uint   `json:"gas_used"`                 // 实际使用的Gas
+	GasUsed              uint64 `json:"gas_used"`                 // 实际使用的Gas
 	MaxFeePerGas         string `json:"max_fee_per_gas"`          // 最高费用
 	MaxPriorityFeePerGas string `json:"max_priority_fee_per_gas"` // 最高小费
 	EffectiveGasPrice    string `json:"effective_gas_price"`      // 有效Gas价格

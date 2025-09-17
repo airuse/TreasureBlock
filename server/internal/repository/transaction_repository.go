@@ -14,7 +14,7 @@ type TransactionRepository interface {
 	Create(ctx context.Context, tx *models.Transaction) error
 	CreateBatch(ctx context.Context, txs []*models.Transaction) error
 	GetByHash(ctx context.Context, hash string) (*models.Transaction, error)
-	GetByAddress(ctx context.Context, address string, offset, limit int) ([]*models.Transaction, int64, error)
+	GetByAddress(ctx context.Context, address string, offset, limit int, chain string) ([]*models.Transaction, int64, error)
 	GetByBlockHash(ctx context.Context, blockHash string) ([]*models.Transaction, error)
 	GetByBlockHeight(ctx context.Context, blockHeight uint64, offset, limit int, chain string) ([]*models.Transaction, int64, error)
 	GetByBlockID(ctx context.Context, blockID uint64) ([]*models.Transaction, error)
@@ -65,7 +65,7 @@ func (r *transactionRepository) GetByHash(ctx context.Context, hash string) (*mo
 }
 
 // GetByAddress 根据地址获取交易列表
-func (r *transactionRepository) GetByAddress(ctx context.Context, address string, offset, limit int) ([]*models.Transaction, int64, error) {
+func (r *transactionRepository) GetByAddress(ctx context.Context, address string, offset, limit int, chain string) ([]*models.Transaction, int64, error) {
 	var txs []*models.Transaction
 	var total int64
 
@@ -74,9 +74,18 @@ func (r *transactionRepository) GetByAddress(ctx context.Context, address string
 	var txsFrom []*models.Transaction
 	var txsTo []*models.Transaction
 
+	// 构建查询条件
+	queryFrom := r.db.WithContext(ctx).Where("address_from = ?", address)
+	queryTo := r.db.WithContext(ctx).Where("address_to = ?", address)
+
+	// 如果指定了链类型，添加链过滤条件
+	if chain != "" {
+		queryFrom = queryFrom.Where("chain = ?", chain)
+		queryTo = queryTo.Where("chain = ?", chain)
+	}
+
 	// 查询作为发送方的交易
-	if err := r.db.WithContext(ctx).
-		Where("address_from = ?", address).
+	if err := queryFrom.
 		Order("height DESC").
 		Offset(offset).
 		Limit(limit).
@@ -85,8 +94,7 @@ func (r *transactionRepository) GetByAddress(ctx context.Context, address string
 	}
 
 	// 查询作为接收方的交易
-	if err := r.db.WithContext(ctx).
-		Where("address_to = ?", address).
+	if err := queryTo.
 		Order("height DESC").
 		Offset(offset).
 		Limit(limit).
@@ -104,10 +112,19 @@ func (r *transactionRepository) GetByAddress(ctx context.Context, address string
 
 	// 获取总数 - 分别统计然后相加
 	var totalFrom, totalTo int64
-	if err := r.db.WithContext(ctx).Model(&models.Transaction{}).Where("address_from = ?", address).Count(&totalFrom).Error; err != nil {
+	countQueryFrom := r.db.WithContext(ctx).Model(&models.Transaction{}).Where("address_from = ?", address)
+	countQueryTo := r.db.WithContext(ctx).Model(&models.Transaction{}).Where("address_to = ?", address)
+
+	// 如果指定了链类型，添加链过滤条件
+	if chain != "" {
+		countQueryFrom = countQueryFrom.Where("chain = ?", chain)
+		countQueryTo = countQueryTo.Where("chain = ?", chain)
+	}
+
+	if err := countQueryFrom.Count(&totalFrom).Error; err != nil {
 		return nil, 0, err
 	}
-	if err := r.db.WithContext(ctx).Model(&models.Transaction{}).Where("address_to = ?", address).Count(&totalTo).Error; err != nil {
+	if err := countQueryTo.Count(&totalTo).Error; err != nil {
 		return nil, 0, err
 	}
 	total = totalFrom + totalTo

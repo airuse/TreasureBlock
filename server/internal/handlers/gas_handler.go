@@ -34,8 +34,8 @@ func (h *GasHandler) GetGasRates(c *gin.Context) {
 	chain := c.DefaultQuery("chain", "eth")
 
 	// 验证链类型
-	if chain != "eth" && chain != "btc" {
-		utils.ErrorResponse(c, http.StatusBadRequest, "不支持的链类型，仅支持eth和btc", nil)
+	if chain != "eth" && chain != "btc" && chain != "bsc" {
+		utils.ErrorResponse(c, http.StatusBadRequest, "不支持的链类型，仅支持eth、btc和bsc", nil)
 		return
 	}
 

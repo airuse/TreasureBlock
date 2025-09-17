@@ -44,10 +44,10 @@ func (h *HomeHandler) GetHomeStats(c *gin.Context) {
 	}
 
 	// 验证链类型
-	if chain != "eth" && chain != "btc" {
+	if chain != "eth" && chain != "btc" && chain != "bsc" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
-			"error":   "不支持的链类型，仅支持 eth 和 btc",
+			"error":   "不支持的链类型，仅支持 eth、btc 和 bsc",
 		})
 		return
 	}
@@ -179,8 +179,8 @@ func (h *HomeHandler) getOverviewStats(ctx context.Context, chain string) (gin.H
 	}()
 
 	go func() {
-		// 3. 最新区块的Base Fee（仅ETH）
-		if chain == "eth" {
+		// 3. 最新区块的Base Fee（ETH和BSC都支持）
+		if chain == "eth" || chain == "bsc" {
 			if baseFee, err := h.statsService.GetLatestBaseFee(ctx, chain); err == nil {
 				resultChan <- result{key: "baseFee", value: baseFee}
 			} else {
@@ -201,8 +201,8 @@ func (h *HomeHandler) getOverviewStats(ctx context.Context, chain string) (gin.H
 	}()
 
 	go func() {
-		// 5. 10分钟内的平均Gas价格（仅ETH）
-		if chain == "eth" {
+		// 5. 10分钟内的平均Gas价格（ETH和BSC都支持）
+		if chain == "eth" || chain == "bsc" {
 			if gasPrice, err := h.statsService.GetAverageGasPrice(ctx, chain, 10*time.Minute); err == nil {
 				resultChan <- result{key: "avgGasPrice", value: gasPrice}
 			} else {

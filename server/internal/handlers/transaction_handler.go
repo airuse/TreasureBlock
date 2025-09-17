@@ -96,7 +96,10 @@ func (h *TransactionHandler) GetTransactionsByAddress(c *gin.Context) {
 		pageSize = 20
 	}
 
-	txs, total, err := h.txService.GetTransactionsByAddress(c.Request.Context(), address, page, pageSize)
+	// 获取链类型参数
+	chain := c.Query("chain")
+
+	txs, total, err := h.txService.GetTransactionsByAddress(c.Request.Context(), address, page, pageSize, chain)
 	if err != nil {
 		c.JSON(http.StatusInternalServerError, gin.H{
 			"error": err.Error(),

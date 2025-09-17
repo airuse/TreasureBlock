@@ -23,7 +23,7 @@ type FeeScheduler struct {
 	wsHandler  interfaces.WebSocketBroadcaster // WebSocket广播接口
 
 	// 缓存上一次推送的费率信息
-	lastFeeData map[string]*FeeLevels // key: chain (eth, btc), value: 费率数据
+	lastFeeData map[string]*FeeLevels // key: chain (eth, btc, bsc), value: 费率数据
 }
 
 // FeeData 费率数据结构
@@ -64,11 +64,13 @@ func (fs *FeeScheduler) SetWebSocketHandler(handler interfaces.WebSocketBroadcas
 func (fs *FeeScheduler) Start(ctx context.Context) {
 	fs.logger.Info("费率调度器已启动")
 
-	// ETH每10秒更新一次，BTC每30秒更新一次（Mempool数据变化较快）
+	// ETH每10秒更新一次，BTC每30秒更新一次，BSC每15秒更新一次
 	ethTicker := time.NewTicker(10 * time.Second)
 	btcTicker := time.NewTicker(30 * time.Second)
+	bscTicker := time.NewTicker(5 * time.Second)
 	defer ethTicker.Stop()
 	defer btcTicker.Stop()
+	defer bscTicker.Stop()
 
 	// 立即执行一次
 	fs.updateFeeData(ctx)
@@ -84,6 +86,9 @@ func (fs *FeeScheduler) Start(ctx context.Context) {
 		case <-btcTicker.C:
 			// 更新BTC费率
 			fs.updateBTCFeeData(ctx)
+		case <-bscTicker.C:
+			// 更新BSC费率
+			fs.updateBSCFeeData(ctx)
 		}
 	}
 }
@@ -94,6 +99,8 @@ func (fs *FeeScheduler) updateFeeData(ctx context.Context) {
 	fs.updateETHFeeData(ctx)
 	// 更新BTC费率
 	fs.updateBTCFeeData(ctx)
+	// 更新BSC费率
+	fs.updateBSCFeeData(ctx)
 }
 
 // updateETHFeeData 更新ETH费率数据
@@ -116,6 +123,16 @@ func (fs *FeeScheduler) updateBTCFeeData(ctx context.Context) {
 	}
 }
 
+// updateBSCFeeData 更新BSC费率数据
+func (fs *FeeScheduler) updateBSCFeeData(ctx context.Context) {
+	bscFeeData, err := fs.getBSCFeeData(ctx)
+	if err != nil {
+		fs.logger.Errorf("获取BSC费率失败: %v", err)
+	} else {
+		fs.broadcastFeeData("bsc", bscFeeData)
+	}
+}
+
 // getETHFeeData 获取ETH费率数据
 func (fs *FeeScheduler) getETHFeeData(ctx context.Context) (*FeeLevels, error) {
 	// 获取最新区块信息
@@ -128,15 +145,15 @@ func (fs *FeeScheduler) getETHFeeData(ctx context.Context) (*FeeLevels, error) {
 	// 获取base fee
 	baseFee, err := fs.getBaseFeeFromBlock(ctx, latestBlock)
 	if err != nil {
-		fs.logger.Warnf("获取Base Fee失败，使用默认值: %v", err)
-		baseFee = "20000000000" // 20 Gwei in wei
+		fs.logger.Warnf("获取Base Fee失败: %v", err)
+		baseFee = "0" // 20 Gwei in wei
 	}
 
 	// 获取历史区块的矿工费数据来计算合理的max priority fee
-	maxPriorityFee, err := fs.calculateMaxPriorityFeeFromHistory(ctx, latestBlock.Number)
+	maxPriorityFee, err := fs.calculateMaxPriorityFeeFromHistory(ctx, "eth", latestBlock.Number)
 	if err != nil {
-		fs.logger.Warnf("计算Max Priority Fee失败，使用默认值: %v", err)
-		maxPriorityFee = "2000000000" // 2 Gwei in wei
+		fs.logger.Warnf("计算Max Priority Fee失败: %v", err)
+		maxPriorityFee = "0"
 	}
 
 	// 计算max fee
@@ -238,6 +255,72 @@ func (fs *FeeScheduler) getBTCFeeData(ctx context.Context) (*FeeLevels, error) {
 	return feeLevels, nil
 }
 
+// getBSCFeeData 获取BSC费率数据
+func (fs *FeeScheduler) getBSCFeeData(ctx context.Context) (*FeeLevels, error) {
+	// 获取最新区块信息
+	latestBlock, err := fs.getLatestBlock(ctx, "bsc")
+	if err != nil {
+		fs.logger.Errorf("获取最新BSC区块失败: %v", err)
+		return fs.getDefaultBSCFeeData(), nil
+	}
+
+	// 获取base fee
+	baseFee, err := fs.getBaseFeeFromBlock(ctx, latestBlock)
+	if err != nil {
+		fs.logger.Warnf("获取BSC Base Fee失败: %v", err)
+		baseFee = "0" // 5 Gwei in wei (BSC通常比ETH便宜)
+	}
+
+	// 获取历史区块的矿工费数据来计算合理的max priority fee
+	maxPriorityFee, err := fs.calculateMaxPriorityFeeFromHistory(ctx, "bsc", latestBlock.Number)
+	if err != nil {
+		fs.logger.Warnf("计算BSC Max Priority Fee失败: %v", err)
+		maxPriorityFee = "0"
+	}
+
+	// 计算max fee
+	maxFee := fs.calculateMaxFee(baseFee, maxPriorityFee)
+
+	// 计算网络拥堵状态
+	congestion := fs.calculateNetworkCongestion(baseFee)
+
+	// 创建费率等级
+	feeLevels := &FeeLevels{
+		Slow: FeeData{
+			Chain:             "bsc",
+			BaseFee:           baseFee,
+			MaxPriorityFee:    fs.calculateSlowPriorityFee(maxPriorityFee),
+			MaxFee:            fs.calculateMaxFee(baseFee, fs.calculateSlowPriorityFee(maxPriorityFee)),
+			GasPrice:          fs.calculateLegacyGasPrice(baseFee, fs.calculateSlowPriorityFee(maxPriorityFee)),
+			LastUpdated:       time.Now().Unix(),
+			BlockNumber:       latestBlock.Number,
+			NetworkCongestion: congestion,
+		},
+		Normal: FeeData{
+			Chain:             "bsc",
+			BaseFee:           baseFee,
+			MaxPriorityFee:    maxPriorityFee,
+			MaxFee:            maxFee,
+			GasPrice:          fs.calculateLegacyGasPrice(baseFee, maxPriorityFee),
+			LastUpdated:       time.Now().Unix(),
+			BlockNumber:       latestBlock.Number,
+			NetworkCongestion: congestion,
+		},
+		Fast: FeeData{
+			Chain:             "bsc",
+			BaseFee:           baseFee,
+			MaxPriorityFee:    fs.calculateFastPriorityFee(maxPriorityFee),
+			MaxFee:            fs.calculateMaxFee(baseFee, fs.calculateFastPriorityFee(maxPriorityFee)),
+			GasPrice:          fs.calculateLegacyGasPrice(baseFee, fs.calculateFastPriorityFee(maxPriorityFee)),
+			LastUpdated:       time.Now().Unix(),
+			BlockNumber:       latestBlock.Number,
+			NetworkCongestion: congestion,
+		},
+	}
+
+	return feeLevels, nil
+}
+
 // BlockInfo 区块信息结构
 type BlockInfo struct {
 	Number    uint64
@@ -310,6 +393,21 @@ func (fs *FeeScheduler) getLatestBlock(ctx context.Context, chain string) (*Bloc
 		}, nil
 	}
 
+	if chain == "bsc" {
+		block, ok := blockInterface.(*types.Block)
+		if !ok {
+			return nil, fmt.Errorf("无效的BSC区块数据格式")
+		}
+
+		return &BlockInfo{
+			Number:    blockNumber,
+			BaseFee:   block.BaseFee(),
+			GasUsed:   block.GasUsed(),
+			GasLimit:  block.GasLimit(),
+			Timestamp: block.Time(),
+		}, nil
+	}
+
 	// 对于其他链，返回默认值
 	return &BlockInfo{
 		Number:    blockNumber,
@@ -329,54 +427,65 @@ func (fs *FeeScheduler) getBaseFeeFromBlock(ctx context.Context, block *BlockInf
 }
 
 // calculateMaxPriorityFeeFromHistory 从上一个区块计算Max Priority Fee
-func (fs *FeeScheduler) calculateMaxPriorityFeeFromHistory(ctx context.Context, currentBlockNumber uint64) (string, error) {
+func (fs *FeeScheduler) calculateMaxPriorityFeeFromHistory(ctx context.Context, chain string, currentBlockNumber uint64) (string, error) {
 	// 只分析上一个区块，获取最新的费率信息
 	if currentBlockNumber == 0 {
-		return "2000000000", nil // 默认2 Gwei
+		return "0", nil
 	}
 
 	previousBlockNumber := currentBlockNumber - 1
-	blockInterface, err := fs.rpcManager.GetBlockByNumber(ctx, "eth", big.NewInt(int64(previousBlockNumber)))
+	blockInterface, err := fs.rpcManager.GetBlockByNumber(ctx, chain, big.NewInt(int64(previousBlockNumber)))
 	if err != nil {
 		fs.logger.Warnf("获取上一个区块失败，使用默认费率: %v", err)
-		return "2000000000", nil // 默认2 Gwei
+		return "0", nil
 	}
 
 	// 将interface{}转换为ETH区块类型
 	block, ok := blockInterface.(*types.Block)
 	if !ok {
-		fs.logger.Warnf("无效的ETH区块数据格式，使用默认费率")
-		return "2000000000", nil // 默认2 Gwei
+		fs.logger.Warnf("无效的%s区块数据格式，使用默认费率", chain)
+		return "0", nil
 	}
 
-	// 收集上一个区块中所有EIP-1559交易的矿工费
-	var priorityFees []*big.Int
-	var totalTxs, eip1559Txs int
+	// 收集所有交易的priority fee（EIP-1559直接取GasTipCap，Legacy取GasPrice - BaseFee）
+	var allPriorityFees []*big.Int
+	var totalTxs, eip1559Txs, legacyTxs int
+
+	// 获取当前区块的base fee
+	baseFee := block.BaseFee()
+	if baseFee == nil {
+		baseFee = big.NewInt(0)
+	}
 
 	for _, tx := range block.Transactions() {
 		totalTxs++
 		if tx.Type() == 2 { // EIP-1559 交易
 			eip1559Txs++
 			if tx.GasTipCap() != nil && tx.GasTipCap().Cmp(big.NewInt(0)) > 0 {
-				priorityFees = append(priorityFees, tx.GasTipCap())
+				allPriorityFees = append(allPriorityFees, tx.GasTipCap())
+			}
+		} else { // Legacy 交易
+			legacyTxs++
+			if tx.GasPrice() != nil && tx.GasPrice().Cmp(big.NewInt(0)) > 0 {
+				// Legacy的priority fee = gasPrice - baseFee
+				priorityFee := new(big.Int).Sub(tx.GasPrice(), baseFee)
+				if priorityFee.Cmp(big.NewInt(0)) > 0 {
+					allPriorityFees = append(allPriorityFees, priorityFee)
+				}
 			}
 		}
 	}
 
-	// fs.logger.Infof("区块 %d 统计: 总交易数=%d, EIP-1559交易数=%d, 有效矿工费交易数=%d",
-	// 	previousBlockNumber, totalTxs, eip1559Txs, len(priorityFees))
-
-	if len(priorityFees) == 0 {
-		fs.logger.Warn("上一个区块中没有有效的EIP-1559矿工费，使用默认费率")
-		return "2000000000", nil // 默认2 Gwei
+	// 计算所有priority fee的中位数
+	var medianPriorityFee string
+	if len(allPriorityFees) > 0 {
+		median := fs.calculateMedian(allPriorityFees)
+		medianPriorityFee = median.String()
+	} else {
+		medianPriorityFee = "0"
 	}
 
-	// 计算中位数
-	medianPriorityFee := fs.calculateMedian(priorityFees)
-	// fs.logger.Infof("基于上一个区块(%d)的%d笔EIP-1559交易，计算得出Max Priority Fee: %s Gwei",
-	// 	previousBlockNumber, len(priorityFees), medianPriorityFee.String())
-
-	return medianPriorityFee.String(), nil
+	return medianPriorityFee, nil
 }
 
 // calculateMedian 计算中位数
@@ -728,6 +837,47 @@ func (fs *FeeScheduler) getDefaultBTCFeeData() *FeeLevels {
 			LastUpdated:       time.Now().Unix(),
 			BlockNumber:       0,
 			NetworkCongestion: "normal",
+		},
+	}
+}
+
+// getDefaultBSCFeeData 获取默认BSC费率数据
+func (fs *FeeScheduler) getDefaultBSCFeeData() *FeeLevels {
+	baseFee := "5000000000"        // 5 Gwei in wei (BSC通常比ETH便宜)
+	maxPriorityFee := "1000000000" // 1 Gwei in wei
+	maxFee := fs.calculateMaxFee(baseFee, maxPriorityFee)
+	congestion := "normal"
+
+	return &FeeLevels{
+		Slow: FeeData{
+			Chain:             "bsc",
+			BaseFee:           baseFee,
+			MaxPriorityFee:    fs.calculateSlowPriorityFee(maxPriorityFee),
+			MaxFee:            fs.calculateMaxFee(baseFee, fs.calculateSlowPriorityFee(maxPriorityFee)),
+			GasPrice:          fs.calculateLegacyGasPrice(baseFee, fs.calculateSlowPriorityFee(maxPriorityFee)),
+			LastUpdated:       time.Now().Unix(),
+			BlockNumber:       0,
+			NetworkCongestion: congestion,
+		},
+		Normal: FeeData{
+			Chain:             "bsc",
+			BaseFee:           baseFee,
+			MaxPriorityFee:    maxPriorityFee,
+			MaxFee:            maxFee,
+			GasPrice:          fs.calculateLegacyGasPrice(baseFee, maxPriorityFee),
+			LastUpdated:       time.Now().Unix(),
+			BlockNumber:       0,
+			NetworkCongestion: congestion,
+		},
+		Fast: FeeData{
+			Chain:             "bsc",
+			BaseFee:           baseFee,
+			MaxPriorityFee:    fs.calculateFastPriorityFee(maxPriorityFee),
+			MaxFee:            fs.calculateMaxFee(baseFee, fs.calculateFastPriorityFee(maxPriorityFee)),
+			GasPrice:          fs.calculateLegacyGasPrice(baseFee, fs.calculateFastPriorityFee(maxPriorityFee)),
+			LastUpdated:       time.Now().Unix(),
+			BlockNumber:       0,
+			NetworkCongestion: congestion,
 		},
 	}
 }

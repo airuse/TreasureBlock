@@ -369,7 +369,7 @@ func (s *userAddressService) GetAddressTransactions(userID uint, address string,
 	offset := (page - 1) * pageSize
 
 	// 获取交易列表
-	transactions, total, err := s.transactionRepo.GetByAddress(context.Background(), address, offset, pageSize)
+	transactions, total, err := s.transactionRepo.GetByAddress(context.Background(), address, offset, pageSize, chain)
 	if err != nil {
 		return nil, fmt.Errorf("获取交易列表失败: %w", err)
 	}
@@ -377,11 +377,6 @@ func (s *userAddressService) GetAddressTransactions(userID uint, address string,
 	// 转换为响应DTO
 	var responses []dto.AddressTransactionResponse
 	for _, tx := range transactions {
-		// 如果指定了链类型，只返回对应链的交易
-		if chain != "" && tx.Chain != chain {
-			continue
-		}
-
 		response := dto.AddressTransactionResponse{
 			ID:                   tx.ID,
 			TxID:                 tx.TxID,

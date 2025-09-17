@@ -10,7 +10,7 @@ import (
 
 type TransactionService interface {
 	GetTransactionByHash(ctx context.Context, hash string) (*models.Transaction, error)
-	GetTransactionsByAddress(ctx context.Context, address string, page, pageSize int) ([]*models.Transaction, int64, error)
+	GetTransactionsByAddress(ctx context.Context, address string, page, pageSize int, chain string) ([]*models.Transaction, int64, error)
 	GetTransactionsByBlockHash(ctx context.Context, blockHash string) ([]*models.Transaction, error)
 	GetTransactionsByBlockHeight(ctx context.Context, blockHeight uint64, page, pageSize int, chain string) ([]*models.Transaction, int64, error)
 	GetTransactionsByBlockID(ctx context.Context, blockID uint64) ([]*models.Transaction, error)
@@ -52,7 +52,7 @@ func (s *transactionService) GetTransactionByHash(ctx context.Context, hash stri
 }
 
 // GetTransactionsByAddress 根据地址获取交易列表
-func (s *transactionService) GetTransactionsByAddress(ctx context.Context, address string, page, pageSize int) ([]*models.Transaction, int64, error) {
+func (s *transactionService) GetTransactionsByAddress(ctx context.Context, address string, page, pageSize int, chain string) ([]*models.Transaction, int64, error) {
 	if address == "" {
 		return nil, 0, fmt.Errorf("address cannot be empty")
 	}
@@ -65,7 +65,7 @@ func (s *transactionService) GetTransactionsByAddress(ctx context.Context, addre
 	}
 
 	offset := (page - 1) * pageSize
-	txs, total, err := s.txRepo.GetByAddress(ctx, address, offset, pageSize)
+	txs, total, err := s.txRepo.GetByAddress(ctx, address, offset, pageSize, chain)
 	if err != nil {
 		return nil, 0, fmt.Errorf("failed to get transactions by address: %w", err)
 	}

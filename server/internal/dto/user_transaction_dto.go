@@ -4,7 +4,7 @@ import "time"
 
 // CreateUserTransactionRequest 创建用户交易请求
 type CreateUserTransactionRequest struct {
-	Chain       string  `json:"chain" binding:"required,oneof=btc eth" validate:"required,oneof=btc eth"`
+	Chain       string  `json:"chain" binding:"required,oneof=btc eth bsc" validate:"required,oneof=btc eth bsc"`
 	Symbol      string  `json:"symbol" binding:"required" validate:"required"`
 	FromAddress string  `json:"from_address" binding:"omitempty" validate:"omitempty"`
 	ToAddress   string  `json:"to_address" binding:"omitempty" validate:"omitempty"`

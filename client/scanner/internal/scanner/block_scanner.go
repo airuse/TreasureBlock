@@ -65,6 +65,9 @@ func (bs *BlockScanner) initializeScanners() {
 		case "eth":
 			ethconfig := &chainConfig
 			scanner = scanners.NewEthereumScanner(ethconfig)
+		case "bsc":
+			bscConfig := &chainConfig
+			scanner = scanners.NewBSCScanner(bscConfig)
 		default:
 			logrus.Warnf("Unsupported chain: %s", chainName)
 			continue
@@ -253,11 +256,15 @@ func (bs *BlockScanner) scanSingleBlock(chainName string, scanner Scanner, heigh
 		return
 	}
 
+	fmt.Printf("[%s] 第一步耗时: %+v\n", chainName, time.Since(startTime))
+
 	// 验证区块
 	if err := scanner.ValidateBlock(block); err != nil {
 		logrus.Errorf("[%s] Block validation failed for block %d: %v", chainName, height, err)
 		return
 	}
+
+	fmt.Printf("[%s] 第二步耗时: %+v\n", chainName, time.Since(startTime))
 
 	// 提交区块到服务器，获取区块ID
 	blockID, err := bs.submitBlockToServer(block)
@@ -266,12 +273,22 @@ func (bs *BlockScanner) scanSingleBlock(chainName string, scanner Scanner, heigh
 		return
 	}
 
+	fmt.Printf("[%s] 第三步耗时: %+v\n", chainName, time.Since(startTime))
+
 	// 获取交易信息 - 直接从区块获取，避免哈希不一致问题
 	transactions, err := scanner.GetBlockTransactionsFromBlock(block)
+	for _, tx := range transactions {
+		s, _ := json.Marshal(tx)
+		logrus.Infof("[%s] Transaction: %s", chainName, string(s))
+	}
+
+	fmt.Printf("[%s] 第四步耗时: %+v\n", chainName, time.Since(startTime))
+
 	if err != nil {
 		logrus.Warnf("[%s] Failed to get transactions for block %d: %v", chainName, height, err)
 	} else {
 		scanner.CalculateBlockStats(block, transactions)
+		fmt.Printf("[%s] 第五步耗时: %+v\n", chainName, time.Since(startTime))
 
 		// 上传交易信息到服务器，传入区块ID
 		if err := bs.submitTransactionsToServer(chainName, block, transactions, blockID); err != nil {
@@ -279,6 +296,9 @@ func (bs *BlockScanner) scanSingleBlock(chainName string, scanner Scanner, heigh
 			return
 		}
 	}
+
+	fmt.Printf("[%s] 第六步耗时: %+v\n", chainName, time.Since(startTime))
+
 	bs.updateBlockStatsToServer(block, transactions, blockID)
 
 	// 验证区块
@@ -287,6 +307,8 @@ func (bs *BlockScanner) scanSingleBlock(chainName string, scanner Scanner, heigh
 		return
 	}
 
+	fmt.Printf("[%s] 第七步耗时: %+v\n", chainName, time.Since(startTime))
+
 	// 保存到文件（如果启用）
 	if chainConfig.Scan.SaveToFile {
 		if err := bs.saveBlockToFile(block, chainConfig.Scan.OutputDir); err != nil {
@@ -294,9 +316,12 @@ func (bs *BlockScanner) scanSingleBlock(chainName string, scanner Scanner, heigh
 		}
 	}
 
+	fmt.Printf("[%s] 总耗时: %+v\n", chainName, time.Since(startTime))
+
 	processTime := time.Since(startTime).Milliseconds()
 	logrus.Infof("[%s] Successfully processed and verified block %d (hash: %s, %d tx, %dms)",
 		chainName, height, block.Hash[:16]+"...", block.TransactionCount, processTime)
+
 }
 
 // updateBlockStatsToServer 计算并将区块统计字段更新到后端

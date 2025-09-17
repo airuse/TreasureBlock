@@ -7,7 +7,7 @@ export interface WebSocketMessage {
   action?: 'create' | 'update' | 'delete' | 'fee_update' | 'status_update'  // 第三级别：动作类型
   data: Record<string, unknown>  // 第四级别：真实数据
   timestamp: number
-  chain: 'eth' | 'btc'  // 区块链类型
+  chain: 'eth' | 'btc' | 'bsc'  // 区块链类型
 }
 
 // 费率数据结构
@@ -254,7 +254,7 @@ class WebSocketManager {
       typeof (message as WebSocketMessage).timestamp === 'number' &&
       'chain' in message &&
       typeof (message as WebSocketMessage).chain === 'string' &&
-      ['eth', 'btc'].includes((message as WebSocketMessage).chain)
+      ['eth', 'btc', 'bsc'].includes((message as WebSocketMessage).chain)
     ) as boolean
   }
 

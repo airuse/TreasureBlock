@@ -52,7 +52,12 @@ func NewEthFailoverFromChain(chainName string) (*EthFailoverManager, error) {
 	if len(clients) == 0 {
 		return nil, fmt.Errorf("failed to connect any ETH RPC for chain: %s", chainName)
 	}
-	return &EthFailoverManager{clients: clients, timeout: 10 * time.Second}, nil
+	// 根据链类型设置不同的超时时间
+	timeout := 10 * time.Second
+	if strings.ToLower(chainName) == "bsc" || strings.ToLower(chainName) == "binance" {
+		timeout = 30 * time.Second // BSC链使用更长的超时时间
+	}
+	return &EthFailoverManager{clients: clients, timeout: timeout}, nil
 }
 
 // Close 关闭所有连接

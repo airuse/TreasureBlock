@@ -110,6 +110,36 @@ func (s *blockVerificationService) VerifyBlock(ctx context.Context, blockID uint
 		result.Details = "所有验证项均通过"
 
 		return result, nil
+	} else if block.Chain == "bsc" {
+		receipts, err := s.receiptRepo.GetByBlockNumber(ctx, block.Height, block.Chain)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get block receipts: %w", err)
+		}
+		result := &BlockVerificationResult{
+			BlockID:      blockID,
+			Transactions: len(transactions),
+			Receipts:     len(receipts),
+		}
+
+		// 执行验证
+		if err := s.performETHVerification(block, transactions, receipts); err != nil {
+			result.IsValid = false
+			result.Reason = "验证失败"
+			result.Details = err.Error()
+
+			// 验证失败时，更新哈希后缀并标记为失败
+			if err := s.handleVerificationFailure(ctx, block, err.Error()); err != nil {
+				return nil, fmt.Errorf("failed to handle verification failure: %w", err)
+			}
+
+			return result, nil
+		}
+
+		result.IsValid = true
+		result.Reason = "验证通过"
+		result.Details = "所有验证项均通过"
+
+		return result, nil
 	} else if block.Chain == "btc" {
 		result := &BlockVerificationResult{
 			BlockID:      blockID,

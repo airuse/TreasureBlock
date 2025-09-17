@@ -15,6 +15,15 @@ import BTCBlocksView from '../views/btc/BlocksView.vue'
 import BTCStatsView from '../views/btc/StatsView.vue'
 import BTCBlockDetailView from '../views/btc/detail/BlockDetailView.vue'
 
+// BSC页面
+import BSCHomeView from '../views/bsc/HomeView.vue'
+import BSCBlocksView from '../views/bsc/BlocksView.vue'
+import BSCBlockDetailView from '../views/bsc/detail/BlockDetailView.vue'
+import BSCContractDetailView from '../views/bsc/detail/ContractDetailView.vue'
+import BSCAddressesView from '../views/bsc/AddressesView.vue'
+import BSCStatisticsView from '../views/bsc/StatisticsView.vue'
+import BSCSettingsView from '../views/bsc/SettingsView.vue'
+
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
@@ -131,6 +140,68 @@ const router = createRouter({
       path: '/btc/personal/transactions',
       name: 'btc-personal-transactions',
       component: () => import('../views/btc/personal/TransactionsView.vue')
+    },
+    // BSC路由
+    {
+      path: '/bsc',
+      name: 'bsc-home',
+      component: BSCHomeView
+    },
+    {
+      path: '/bsc/blocks',
+      name: 'bsc-blocks',
+      component: BSCBlocksView
+    },
+    {
+      path: '/bsc/blocks/:height',
+      name: 'bsc-block-detail',
+      component: BSCBlockDetailView
+    },
+    {
+      path: '/bsc/addresses',
+      name: 'bsc-addresses',
+      component: BSCAddressesView
+    },
+    {
+      path: '/bsc/address-transactions',
+      name: 'bsc-address-transactions',
+      component: () => import('../views/bsc/detail/AddressTransactionsView.vue')
+    },
+    {
+      path: '/bsc/addresses/:address',
+      name: 'bsc-contract-detail',
+      component: BSCContractDetailView
+    },
+    {
+      path: '/bsc/statistics',
+      name: 'bsc-statistics',
+      component: BSCStatisticsView
+    },
+    {
+      path: '/bsc/settings',
+      name: 'bsc-settings',
+      component: BSCSettingsView
+    },
+    // 个人中心 - BSC
+    {
+      path: '/bsc/personal',
+      name: 'bsc-personal',
+      redirect: '/bsc/personal/earnings'
+    },
+    {
+      path: '/bsc/personal/earnings',
+      name: 'bsc-personal-earnings',
+      component: () => import('../views/bsc/personal/EarningsView.vue')
+    },
+    {
+      path: '/bsc/personal/addresses',
+      name: 'bsc-personal-addresses',
+      component: () => import('../views/bsc/personal/AddressesView.vue')
+    },
+    {
+      path: '/bsc/personal/transactions',
+      name: 'bsc-personal-transactions',
+      component: () => import('../views/bsc/personal/TransactionsView.vue')
     }
   ]
 })
@@ -157,6 +228,20 @@ router.beforeEach((to, from, next) => {
   if (path.startsWith('/eth/statistics')) {
     console.log(`检测到暂时屏蔽的ETH统计路由: ${path}，重定向到ETH首页`)
     next('/eth')
+    return
+  }
+  
+  // 检查是否是BSC的无效路由
+  if (path.startsWith('/bsc/settings') && !path.includes('/personal/')) {
+    // 检查settings页面是否存在（这里可以根据需要调整）
+    next()
+    return
+  }
+  
+  // 检查是否是BSC的统计页面（暂时屏蔽）
+  if (path.startsWith('/bsc/statistics')) {
+    console.log(`检测到暂时屏蔽的BSC统计路由: ${path}，重定向到BSC首页`)
+    next('/bsc')
     return
   }
   

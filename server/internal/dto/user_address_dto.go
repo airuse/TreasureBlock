@@ -3,7 +3,7 @@ package dto
 // CreateUserAddressRequest 创建用户地址请求
 type CreateUserAddressRequest struct {
 	Address             string   `json:"address" binding:"required"`
-	Chain               string   `json:"chain" binding:"required,oneof=eth btc sol other"`
+	Chain               string   `json:"chain" binding:"required,oneof=eth btc bsc sol other"`
 	Label               string   `json:"label"`
 	Type                string   `json:"type" binding:"required,oneof=wallet contract authorized_contract exchange other"`
 	ContractID          *uint    `json:"contract_id"`          // 关联的合约ID，仅当type为contract时有效
@@ -14,7 +14,7 @@ type CreateUserAddressRequest struct {
 // UpdateUserAddressRequest 更新用户地址请求
 type UpdateUserAddressRequest struct {
 	Label                 *string   `json:"label"`
-	Chain                 *string   `json:"chain" binding:"omitempty,oneof=eth btc sol other"`
+	Chain                 *string   `json:"chain" binding:"omitempty,oneof=eth btc bsc sol other"`
 	Type                  *string   `json:"type" binding:"omitempty,oneof=wallet contract authorized_contract exchange other"`
 	ContractID            *uint     `json:"contract_id"`
 	AuthorizedAddresses   *[]string `json:"authorized_addresses"`    // 授权地址列表

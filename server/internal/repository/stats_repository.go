@@ -58,8 +58,8 @@ func (r *statsRepository) GetTotalTransactionCount(ctx context.Context, chain st
 
 // GetLatestBaseFee 获取最新区块的Base Fee
 func (r *statsRepository) GetLatestBaseFee(ctx context.Context, chain string) (int64, error) {
-	// 只对ETH获取Base Fee
-	if chain != "eth" {
+	// 只对ETH和BSC获取Base Fee
+	if chain != "eth" && chain != "bsc" {
 		return 0, nil
 	}
 
@@ -119,8 +119,8 @@ func (r *statsRepository) GetDailyVolume(ctx context.Context, chain string, dura
 
 // GetAverageGasPrice 获取指定时间范围内的平均Gas价格
 func (r *statsRepository) GetAverageGasPrice(ctx context.Context, chain string, duration time.Duration) (int64, error) {
-	// 只对ETH计算Gas价格
-	if chain != "eth" {
+	// 只对ETH和BSC计算Gas价格
+	if chain != "eth" && chain != "bsc" {
 		return 0, nil
 	}
 
