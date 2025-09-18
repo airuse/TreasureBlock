@@ -165,6 +165,19 @@ func (s *blockVerificationService) VerifyBlock(ctx context.Context, blockID uint
 		result.Reason = "验证通过"
 		result.Details = "所有验证项均通过"
 		return result, nil
+	} else if block.Chain == "sol" {
+		// 对于 Solana，先采用简化验证：仅校验交易数量大于等于0
+		result := &BlockVerificationResult{
+			BlockID:      blockID,
+			Transactions: len(transactions),
+			Receipts:     0,
+		}
+
+		// 这里可扩展基于 RPC 的进一步校验逻辑
+		result.IsValid = true
+		result.Reason = "验证通过"
+		result.Details = "Solana 简化验证通过"
+		return result, nil
 	} else {
 		return nil, fmt.Errorf("不支持的链类型: %s", block.Chain)
 	}

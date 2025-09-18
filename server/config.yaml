@@ -111,6 +111,14 @@ blockchain:
         - "https://yolo-smart-tree.quiknode.pro/52836b8f979fca7325258c42925d6c245ca45079"
         - "https://thrilling-summer-frost.quiknode.pro/ca8e71700184f645a7935acf1487acd191e429a1"
         - "https://warmhearted-bold-emerald.quiknode.pro/be4e6633f9443a4dd26046d40be1650a810db3a1"
+    sol:
+      chain_id: 101
+      name: "Solana"
+      symbol: "SOL"
+      decimals: 9
+      enabled: true
+      rpc_urls:
+        - "https://solana-devnet.core.chainstack.com/2b6c4bfadb9ea95696b79cd68125601a"
 
 cache:
   enabled: false

@@ -61,9 +61,9 @@ type CreateTransactionRequest struct {
 	TxScene      string  `json:"tx_scene" validate:"required"`
 	Remark       string  `json:"remark" validate:"max=256"`
 
-	// 链相关字段（加入 bsc）
-	Chain  string `json:"chain" validate:"required,oneof=btc eth bsc"`
-	Symbol string `json:"symbol" validate:"required,oneof=eth btc bsc"`
+	// 链相关字段（加入 bsc 和 sol）
+	Chain  string `json:"chain" validate:"required,oneof=btc eth bsc sol"`
+	Symbol string `json:"symbol" validate:"required,oneof=eth btc bsc sol"`
 
 	// 地址字段
 	AddressFrom  string  `json:"address_from" validate:"required"`

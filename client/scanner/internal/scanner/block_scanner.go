@@ -27,6 +27,9 @@ type BlockScanner struct {
 	runningMutex sync.RWMutex
 	// 交易预取滑动窗口（每链）
 	txPrefetchers map[string]*txPrefetchState
+	// 最新高度缓存（每链）
+	latestHeightCache map[string]uint64
+	latestMu          sync.RWMutex
 }
 
 // Scanner 扫块器接口
@@ -41,14 +44,18 @@ type Scanner interface {
 // NewBlockScanner 创建新的主扫块器
 func NewBlockScanner(cfg *config.Config) *BlockScanner {
 	scanner := &BlockScanner{
-		config:        cfg,
-		scanners:      make(map[string]Scanner),
-		stopChan:      make(chan struct{}),
-		txPrefetchers: make(map[string]*txPrefetchState),
+		config:            cfg,
+		scanners:          make(map[string]Scanner),
+		stopChan:          make(chan struct{}),
+		txPrefetchers:     make(map[string]*txPrefetchState),
+		latestHeightCache: make(map[string]uint64),
 	}
 
 	// 初始化各种链的扫块器
 	scanner.initializeScanners()
+
+	// 启动每链最新高度刷新器
+	scanner.startLatestHeightRefreshers()
 
 	return scanner
 }
@@ -132,6 +139,9 @@ func (bs *BlockScanner) initializeScanners() {
 		case "bsc":
 			bscConfig := &chainConfig
 			scanner = scanners.NewBSCScanner(bscConfig)
+		case "sol":
+			solConfig := &chainConfig
+			scanner = scanners.NewSolanaScanner(solConfig) // 使用原生实现
 		default:
 			logrus.Warnf("Unsupported chain: %s", chainName)
 			continue
@@ -194,6 +204,29 @@ func (bs *BlockScanner) scanLoop() {
 	logrus.Info("Block scanner stopped")
 }
 
+// 周期性刷新各链的最新高度缓存，降低RPC压力
+func (bs *BlockScanner) startLatestHeightRefreshers() {
+	for chainName, sc := range bs.scanners {
+		go func(chain string, scanner Scanner) {
+			// 默认300ms刷新一次
+			ticker := time.NewTicker(300 * time.Millisecond)
+			defer ticker.Stop()
+			for {
+				select {
+				case <-bs.stopChan:
+					return
+				case <-ticker.C:
+					if h, err := scanner.GetLatestBlockHeight(); err == nil {
+						bs.latestMu.Lock()
+						bs.latestHeightCache[chain] = h
+						bs.latestMu.Unlock()
+					}
+				}
+			}
+		}(chainName, sc)
+	}
+}
+
 // scanAllChains 扫描所有链
 func (bs *BlockScanner) scanAllChains() {
 	var wg sync.WaitGroup
@@ -239,12 +272,29 @@ func (bs *BlockScanner) scanChain(chainName string, scanner Scanner) {
 
 // processScanCycle 处理单个扫描周期 - 每次循环都重新获取最新状态
 func (bs *BlockScanner) processScanCycle(chainName string, scanner Scanner, chainConfig *config.ChainConfig) {
-	// 1. 获取最新区块高度
-	latestHeight, err := scanner.GetLatestBlockHeight()
-	if err != nil {
-		logrus.Errorf("[%s] Failed to get latest block height: %v", chainName, err)
-		return
+	cycleStart := time.Now()
+	var durLatest, durGetLast, durPrefetch, durScan time.Duration
+	// 1. 获取最新区块高度（优先使用缓存）
+	stepStart := time.Now()
+	var latestHeight uint64
+	bs.latestMu.RLock()
+	cached, ok := bs.latestHeightCache[chainName]
+	bs.latestMu.RUnlock()
+	if ok && cached > 0 {
+		latestHeight = cached
+	} else {
+		// 缓存未命中时才调用RPC
+		latest, err := scanner.GetLatestBlockHeight()
+		if err != nil {
+			logrus.Errorf("[%s] Failed to get latest block height: %v", chainName, err)
+			return
+		}
+		latestHeight = latest
+		bs.latestMu.Lock()
+		bs.latestHeightCache[chainName] = latestHeight
+		bs.latestMu.Unlock()
 	}
+	durLatest = time.Since(stepStart)
 
 	// 2. 计算确认后的安全高度
 	safeHeight := latestHeight
@@ -260,7 +310,9 @@ func (bs *BlockScanner) processScanCycle(chainName string, scanner Scanner, chai
 	}
 
 	// 4. 获取最后一个验证通过的区块高度
+	stepStart = time.Now()
 	lastVerifiedHeight, err := bs.getLastVerifiedBlockHeight(chainName)
+	durGetLast = time.Since(stepStart)
 
 	if err != nil {
 		logrus.Errorf("[%s] Failed to get last verified block height: %v", chainName, err)
@@ -277,25 +329,56 @@ func (bs *BlockScanner) processScanCycle(chainName string, scanner Scanner, chai
 		return
 	}
 
-	// 6. 计算要扫描的区块高度
-	scanHeight := lastVerifiedHeight + 1
-
-	logrus.Infof("[%s] Scanning block at height %d (latest: %d, safe: %d, last verified: %d)", chainName, scanHeight, latestHeight, safeHeight, lastVerifiedHeight)
-
-	// 6.1 启动/推进交易预取窗口：覆盖 [scanHeight, min(scanHeight+window-1, safeHeight)]
-	bs.ensureTxPrefetch(chainName, scanner, chainConfig, scanHeight, safeHeight)
-
-	// 7. 扫描单个区块
-	select {
-	case <-bs.stopChan:
-		logrus.Infof("[%s] Stopped scanning due to stop signal", chainName)
-		return // 如果收到停止信号，立即退出
-	default:
-		// 扫描单个区块
-		bs.scanSingleBlock(chainName, scanner, scanHeight, chainConfig)
+	// 6. 计算要扫描的区块高度范围
+	startHeight := lastVerifiedHeight + 1
+	k := chainConfig.Scan.HeightsPerCycle
+	if k <= 0 {
+		k = 5
+	}
+	endHeight := startHeight + uint64(k) - 1
+	if endHeight > safeHeight {
+		endHeight = safeHeight
 	}
 
-	logrus.Infof("[%s] Completed scan cycle for height %d", chainName, scanHeight)
+	if endHeight < startHeight {
+		return
+	}
+
+	logrus.Infof("[%s] Scanning blocks %d..%d (latest: %d, safe: %d, last verified: %d)", chainName, startHeight, endHeight, latestHeight, safeHeight, lastVerifiedHeight)
+
+	// 6.1 预取窗口推进至 endHeight
+	stepStart = time.Now()
+	bs.ensureTxPrefetch(chainName, scanner, chainConfig, startHeight, safeHeight)
+	durPrefetch = time.Since(stepStart)
+
+	// 7. 顺序扫描多个区块（保持提交顺序，与预取不冲突）
+	for h := startHeight; h <= endHeight; h++ {
+		select {
+		case <-bs.stopChan:
+			logrus.Infof("[%s] Stopped scanning due to stop signal", chainName)
+			return
+		default:
+		}
+		step := time.Now()
+		bs.scanSingleBlock(chainName, scanner, h, chainConfig)
+		d := time.Since(step)
+		durScan += d // 记录本轮所有区块总耗时
+	}
+
+	logrus.Infof("[%s] Completed scan cycle for heights %d..%d", chainName, startHeight, endHeight)
+
+	// 输出本次周期的耗时统计
+	cycleTotal := time.Since(cycleStart)
+	logrus.Infof("[%s] Cycle timing (range=%d..%d): total=%dms latest=%dms last=%dms prefetch=%dms scanSum=%dms",
+		chainName,
+		startHeight,
+		endHeight,
+		cycleTotal.Milliseconds(),
+		durLatest.Milliseconds(),
+		durGetLast.Milliseconds(),
+		durPrefetch.Milliseconds(),
+		durScan.Milliseconds(),
+	)
 }
 
 // getLastVerifiedBlockHeight 获取最后一个验证通过的区块高度
@@ -352,10 +435,6 @@ func (bs *BlockScanner) scanSingleBlock(chainName string, scanner Scanner, heigh
 	var txErr error
 	if transactions == nil {
 		transactions, txErr = scanner.GetBlockTransactionsFromBlock(block)
-	}
-	for _, tx := range transactions {
-		s, _ := json.Marshal(tx)
-		logrus.Infof("[%s] Transaction: %s", chainName, string(s))
 	}
 
 	if txErr != nil {
@@ -773,7 +852,10 @@ func (bs *BlockScanner) getChainConfig(chainName string) *config.ChainConfig {
 func (bs *BlockScanner) ensureTxPrefetch(chainName string, scanner Scanner, chainConfig *config.ChainConfig, nextHeight uint64, safeHeight uint64) {
 	ps := bs.txPrefetchers[chainName]
 	if ps == nil {
-		window := 5
+		window := chainConfig.Scan.PrefetchWindow
+		if window <= 0 {
+			window = 5
+		}
 		concurrency := chainConfig.Scan.MaxConcurrent
 		ps = newTxPrefetchState(window, concurrency)
 		bs.txPrefetchers[chainName] = ps

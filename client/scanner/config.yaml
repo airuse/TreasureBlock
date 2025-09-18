@@ -48,6 +48,9 @@ blockchain:
         batch_upload: true           # 是否启用批量上传交易（推荐启用）
         batch_size: 2000             # 批量上传大小，默认1000条交易
         batch_timeout: 30s           # 批量上传超时时间
+        # 预取与批处理参数
+        prefetch_window: 3           # 预取窗口大小（BTC较慢，窗口加大以提高命中率）
+        heights_per_cycle: 1         # 每个扫描周期处理的区块数量（保证稳定与顺序）
     bsc:
       chain_id: 97
       name: "Binance Smart Chain"
@@ -64,8 +67,8 @@ blockchain:
       password: ""
       # BSC链特定的扫描配置
       scan:
-        enabled: true
-        interval: 20ms
+        enabled: false
+        interval: 500ms
         max_retries: 3
         retry_delay: 5s
         confirmations: 6
@@ -83,6 +86,9 @@ blockchain:
         batch_upload: false           # 是否启用批量上传交易（推荐启用）
         batch_size: 2000             # 批量上传大小，默认1000条交易
         batch_timeout: 30s           # 批量上传超时时间
+        # 预取与批处理参数
+        prefetch_window: 12          # 预取窗口大小（BSC较快，窗口 2x~3x heights）
+        heights_per_cycle: 6         # 每个扫描周期处理的区块数量
     eth:
       chain_id: 1
       name: "Ethereum"
@@ -131,10 +137,7 @@ blockchain:
       api_key: ""  # 如果需要的话
       username: ""
       password: ""
-      # 配置的币种地址列表（已知的合约地址）
-      token_addresses:
-        - "0xA0b86a33E6441b8c4C8C0C4b0c4b0c4b0c4b0c4b"  # 示例：USDT合约地址
-        - "0xB0b86a33E6441b8c4C8C0C4b0c4b0c4b0c4b0c4b"  # 示例：USDC合约地址    
+      # 配置的币种地址列表（已知的合约地址）  
       # ETH链特定的扫描配置
       scan:
         enabled: false                # 是否启用ETH链扫描
@@ -155,6 +158,47 @@ blockchain:
         batch_upload: true           # 是否启用批量上传交易（推荐启用）
         batch_size: 2000             # 批量上传大小，默认1000条交易
         batch_timeout: 30s           # 批量上传超时时间
+        # 预取与批处理参数
+        prefetch_window: 12          # 预取窗口大小（ETH交易重，建议 2x~3x heights）
+        heights_per_cycle: 5         # 每个扫描周期处理的区块数量（保守起步）
+    sol:
+      chain_id: 101
+      name: "sol"
+      symbol: "SOL"
+      decimals: 9
+      enabled: true
+      rpc_url: "https://solana-devnet.core.chainstack.com/2b6c4bfadb9ea95696b79cd68125601a"
+      explorer_api_urls:
+        - "https://solana-devnet.core.chainstack.com/2b6c4bfadb9ea95696b79cd68125601a"
+        - "https://solana-devnet.core.chainstack.com/ba227c34aa1687ce7fb29c3c582dbeea"
+        - "https://solana-devnet.core.chainstack.com/05e878dc4aedcb81432084cf7bce51b0"
+        - "https://solana-devnet.core.chainstack.com/705c7391ab5ff4e39640d6a0db08f1bb"
+      api_key: ""
+      username: ""
+      password: ""
+      # SOL链特定的扫描配置
+      scan:
+        enabled: true                # 是否启用SOL链扫描
+        interval: 100ms              # 扫描区块的时间间隔
+        max_retries: 3               # 区块扫描失败时的最大重试次数
+        retry_delay: 2s              # 重试间隔时间
+        confirmations: 1             # 需要等待的区块确认数（Solana确认很快）
+        auto_start: true             # 启动时是否自动开始扫描
+        save_to_file: false          # 是否将扫描结果保存到文件
+        output_dir: "./output/sol"   # 扫描结果输出目录
+        priority: 3                  # 扫描任务优先级（3为低优先级）
+        max_concurrent: 20           # 最大并发扫描区块数
+        block_timeout: 30s           # 单个区块扫描超时时间
+        rescan_interval: 60s         # 重新扫描的时间间隔
+        enable_mempool: false        # 是否启用内存池扫描（Solana不需要）
+        mempool_interval: 10s        # 内存池扫描的时间间隔
+        # 批量上传配置（推荐启用以提高性能）
+        batch_upload: true           # 是否启用批量上传交易（推荐启用）
+        batch_size: 1000             # 批量上传大小，默认1000条交易
+        batch_timeout: 30s           # 批量上传超时时间
+        # 预取与批处理参数
+        prefetch_window: 16          # 预取窗口大小（SOL最快，窗口更大）
+        heights_per_cycle: 1         # 每个扫描周期处理的区块数量（提升吞吐）
 
 log:
   level: "info"

@@ -622,6 +622,8 @@ func (h *BlockHandler) CreateBlock(c *gin.Context) {
 		chainType = ChainTypeBTC
 	case "bsc":
 		chainType = ChainTypeBSC
+	case "sol":
+		chainType = ChainTypeSOL
 	default:
 		chainType = ChainTypeETH // 默认以太坊
 	}

@@ -8,11 +8,15 @@ const (
 	ChainBTC ChainType = "btc"
 	// ChainETH 以太坊链
 	ChainETH ChainType = "eth"
+	// ChainBSC BSC链
+	ChainBSC ChainType = "bsc"
+	// ChainSOL Solana链
+	ChainSOL ChainType = "sol"
 )
 
 // IsValid 检查链类型是否有效
 func (c ChainType) IsValid() bool {
-	return c == ChainBTC || c == ChainETH
+	return c == ChainBTC || c == ChainETH || c == ChainBSC || c == ChainSOL
 }
 
 // String 返回链类型的字符串表示
@@ -22,7 +26,7 @@ func (c ChainType) String() string {
 
 // GetChainTypes 获取所有有效的链类型
 func GetChainTypes() []ChainType {
-	return []ChainType{ChainBTC, ChainETH}
+	return []ChainType{ChainBTC, ChainETH, ChainBSC, ChainSOL}
 }
 
 // IsBTC 检查是否为BTC链
@@ -33,4 +37,14 @@ func (c ChainType) IsBTC() bool {
 // IsETH 检查是否为ETH链
 func (c ChainType) IsETH() bool {
 	return c == ChainETH
+}
+
+// IsBSC 检查是否为BSC链
+func (c ChainType) IsBSC() bool {
+	return c == ChainBSC
+}
+
+// IsSOL 检查是否为SOL链
+func (c ChainType) IsSOL() bool {
+	return c == ChainSOL
 }

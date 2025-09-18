@@ -82,6 +82,10 @@ type ChainScanConfig struct {
 	BatchUpload  bool          `yaml:"batch_upload"`  // 是否启用批量上传（推荐启用）
 	BatchSize    int           `yaml:"batch_size"`    // 批量上传大小，默认1000
 	BatchTimeout time.Duration `yaml:"batch_timeout"` // 批量上传超时时间
+
+	// 预取与循环批处理参数
+	PrefetchWindow  int `yaml:"prefetch_window"`   // 预取窗口大小（ensureTxPrefetch窗口）
+	HeightsPerCycle int `yaml:"heights_per_cycle"` // 每个扫描周期处理的区块数量
 }
 
 // LogConfig 日志配置
@@ -319,25 +323,25 @@ func loadServerConfig() error {
 		chainConfig.Scan.Confirmations = scanConfig.Confirmations
 
 		// 获取RPC配置（可选）
-		rpcConfig, err := api.GetRPCConfig(chainKey)
-		if err != nil {
-			logrus.Warnf("Failed to load RPC config for chain %s: %v", chainKey, err)
-		} else {
-			// 更新RPC配置
-			chainConfig.RPCURL = rpcConfig.URL
-			chainConfig.APIKey = rpcConfig.APIKey
-			chainConfig.Username = rpcConfig.Username
-			chainConfig.Password = rpcConfig.Password
-			logrus.Infof("Updated RPC config for chain %s", chainKey)
-		}
+		// rpcConfig, err := api.GetRPCConfig(chainKey)
+		// if err != nil {
+		// 	logrus.Warnf("Failed to load RPC config for chain %s: %v", chainKey, err)
+		// } else {
+		// 	// 更新RPC配置
+		// 	chainConfig.RPCURL = rpcConfig.URL
+		// 	chainConfig.APIKey = rpcConfig.APIKey
+		// 	chainConfig.Username = rpcConfig.Username
+		// 	chainConfig.Password = rpcConfig.Password
+		// 	logrus.Infof("Updated RPC config for chain %s", chainKey)
+		// }
 
-		// 获取币种配置（如果是以太坊链）
-		if chainKey == "eth" {
-			if err := loadCoinConfigsFromAPI(api, &chainConfig); err != nil {
-				logrus.Warnf("Failed to load coin configs for chain %s: %v", chainKey, err)
-			} else {
-				logrus.Infof("Successfully loaded coin configs for chain %s", chainKey)
-			}
+		// 获取币种配置（如果是以太坊链或Solana链）
+		if chainKey == "eth" || chainKey == "sol" || chainKey == "bsc" {
+			// if err := loadCoinConfigsFromAPI(api, &chainConfig); err != nil {
+			// 	logrus.Warnf("Failed to load coin configs for chain %s: %v", chainKey, err)
+			// } else {
+			// 	logrus.Infof("Successfully loaded coin configs for chain %s", chainKey)
+			// }
 		}
 
 		// 更新链配置到全局配置中
@@ -392,10 +396,10 @@ func loadCoinConfigsFromAPI(api *pkg.ScannerAPI, chainConfig *ChainConfig) error
 		return fmt.Errorf("failed to get coin configs from API: %w", err)
 	}
 
-	// 提取以太坊链的合约地址
+	// 提取以太坊链和Solana链的合约地址
 	var contractAddresses []string
 	for _, config := range coinConfigs {
-		if config.ChainName == "eth" && config.Status == 1 && config.ContractAddr != "" {
+		if (config.ChainName == "eth" || config.ChainName == "sol") && config.Status == 1 && config.ContractAddr != "" {
 			contractAddresses = append(contractAddresses, config.ContractAddr)
 		}
 	}
@@ -406,7 +410,7 @@ func loadCoinConfigsFromAPI(api *pkg.ScannerAPI, chainConfig *ChainConfig) error
 		return fmt.Errorf("failed to get all contracts from API: %w", err)
 	}
 	for _, constant := range constants {
-		if constant.ChainName == "eth" && constant.Status == 1 && constant.Address != "" {
+		if (constant.ChainName == "eth" || constant.ChainName == "sol") && constant.Status == 1 && constant.Address != "" {
 			contractAddresses = append(contractAddresses, constant.Address)
 		}
 	}

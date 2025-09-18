@@ -23,11 +23,11 @@ gengjiangdi@outlook.com-https://bsc-testnet.core.chainstack.com/121b6c75b21bfad0
 gengjiangdi1@outlook.com-https://bsc-testnet.core.chainstack.com/230a3cc67305e569c8cb6afbe8b4b98d
 16692555512@163.com-https://bsc-testnet.core.chainstack.com/5190644a86def4f6a809767c086a6cdf
 15037508950@163.com-https://bsc-testnet.core.chainstack.com/37227029d9dd9980f7d9dda9f6d3cd63
-15136965530@163.com-https://ethereum-mainnet.core.chainstack.com/483d27c712e9d3f5adae3ef60246529c
-15238253001@163.com-https://ethereum-mainnet.core.chainstack.com/1c17a8ff6bcf6cd6371f97c5310963c8
-654017336@qq.com-https://ethereum-mainnet.core.chainstack.com/34e69fc33d3f9cbbdc1e0cbcf30e8f11
-835606178@qq.com-https://ethereum-mainnet.core.chainstack.com/f88c0e02c0f9f38c4880701a44fa0133
-523052994@qq.com-https://ethereum-mainnet.core.chainstack.com/92b0739e8f73e3d79e79f13f46f5f8ec
+15136965530@163.com-https://solana-devnet.core.chainstack.com/4638e5beaad96a5eef455fa2b15c8ff8
+15238253001@163.com-https://solana-devnet.core.chainstack.com/2b6c4bfadb9ea95696b79cd68125601a
+654017336@qq.com-https://solana-devnet.core.chainstack.com/ba227c34aa1687ce7fb29c3c582dbeea
+835606178@qq.com-https://solana-devnet.core.chainstack.com/05e878dc4aedcb81432084cf7bce51b0
+523052994@qq.com-https://solana-devnet.core.chainstack.com/705c7391ab5ff4e39640d6a0db08f1bb
 virusegg123@gmail.com-https://ethereum-mainnet.core.chainstack.com/fa00dae894f9dd1b7b4a530d83a83bd7
 
 quiknode[每月10M](Viruse123..)
