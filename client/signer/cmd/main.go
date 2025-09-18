@@ -41,7 +41,7 @@ func firstAddress(addresses []string) (string, bool) {
 func main() {
 	fmt.Println("=== 区块链交易签名程序 ===")
 	fmt.Println("版本: 1.0.0")
-	fmt.Println("支持: ETH, BTC")
+	fmt.Println("支持: ETH, BSC, BTC")
 	fmt.Println("=========================")
 
 	// 验证系统密码
@@ -195,8 +195,18 @@ func handleQRCodeImport(ethSigner *eth.ETHSigner, btcSigner *btc.BTCSigner) {
 	fmt.Printf("发送地址: %s\n", transaction.From)
 
 	// 根据QR码中的类型字段自动选择签名器
-	if transaction.IsETH() {
-		fmt.Println("🔷 自动识别为ETH交易，使用ETH签名器")
+	if transaction.IsEVM() {
+		chain := strings.ToUpper(transaction.Type)
+		if chain == "" {
+			chain = transaction.GetChainName()
+		}
+		if chain == "ETHEREUM" {
+			chain = "ETH"
+		}
+		if strings.EqualFold(transaction.Type, "bsc") {
+			chain = "BSC"
+		}
+		fmt.Printf("🔷 自动识别为%s交易，使用ETH签名器\n", chain)
 		signETHTransaction(ethSigner, transaction)
 	} else if transaction.IsBTC() {
 		fmt.Println("🟠 自动识别为BTC交易，使用BTC签名器")

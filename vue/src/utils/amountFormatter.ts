@@ -35,8 +35,8 @@ export function formatTokenAmount(amount: string, symbol: string, decimals: numb
   }
   
   // 如果没有提供精度，根据币种智能判断
-  if (symbol === 'ETH') {
-    // ETH使用18位精度
+  if (symbol === 'ETH' || symbol === 'BNB') {
+    // ETH/BNB 使用18位精度
     return formatAmountWithDecimals(intAmount, 18)
   } else if (symbol === 'USDC' || symbol === 'USDT') {
     // USDC/USDT使用6位精度

@@ -190,6 +190,21 @@ func (m *EthFailoverManager) NonceAt(ctx context.Context, account common.Address
 	return 0, lastErr
 }
 
+// PendingNonceAt 故障转移查询 pending nonce
+func (m *EthFailoverManager) PendingNonceAt(ctx context.Context, account common.Address) (uint64, error) {
+	var lastErr error
+	deadline := time.Now().Add(m.timeout)
+	for time.Now().Before(deadline) {
+		cli := m.next()
+		n, err := cli.PendingNonceAt(ctx, account)
+		if err == nil {
+			return n, nil
+		}
+		lastErr = err
+	}
+	return 0, lastErr
+}
+
 // EstimateGas 故障转移估算Gas
 func (m *EthFailoverManager) EstimateGas(ctx context.Context, msg ethereum.CallMsg) (uint64, error) {
 	var lastErr error

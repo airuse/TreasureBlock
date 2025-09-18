@@ -117,15 +117,44 @@ func (es *ETHSigner) buildTransaction(transaction *pkg.TransactionData) (*types.
 		return nil, fmt.Errorf("解析交易数据失败: %w", err)
 	}
 
-	// 构建AccessList
+	// BSC 使用 Legacy Type-0（单一 gasPrice），不走 EIP-1559
+	if transaction.IsBSC() {
+		// 从 MaxFeePerGas 或 MaxPriorityFeePerGas 推导 gasPrice（兼容传入 Wei 或 Gwei）
+		gasPriceStr := transaction.MaxFeePerGas
+		if gasPriceStr == "" {
+			gasPriceStr = transaction.MaxPriorityFeePerGas
+		}
+		if gasPriceStr == "" {
+			return nil, fmt.Errorf("BSC 交易需要提供 MaxFeePerGas 作为 gasPrice")
+		}
+
+		gasPriceWei, gerr := es.parseGasToWei(gasPriceStr)
+		if gerr != nil {
+			return nil, fmt.Errorf("解析BSC gasPrice失败: %w", gerr)
+		}
+
+		gasLimit := uint64(21000)
+		if transaction.Gas > 0 {
+			gasLimit = transaction.Gas
+		}
+
+		legacy := &types.LegacyTx{
+			Nonce:    transaction.Nonce,
+			To:       &to,
+			Value:    value,
+			Gas:      gasLimit,
+			GasPrice: gasPriceWei,
+			Data:     data,
+		}
+		return types.NewTx(legacy), nil
+	}
+
+	// 构建AccessList（EIP-1559链）
 	accessList := es.buildAccessList(transaction.AccessList)
 
-	// 解析费率设置 - 费率必须提供，不能为空
-	if transaction.MaxPriorityFeePerGas == "" {
-		return nil, fmt.Errorf("MaxPriorityFeePerGas不能为空，请在导出交易时设置费率")
-	}
-	if transaction.MaxFeePerGas == "" {
-		return nil, fmt.Errorf("MaxFeePerGas不能为空，请在导出交易时设置费率")
+	// 解析费率设置 - 费率必须提供，不能为空（EIP-1559）
+	if transaction.MaxPriorityFeePerGas == "" || transaction.MaxFeePerGas == "" {
+		return nil, fmt.Errorf("MaxPriorityFeePerGas/MaxFeePerGas不能为空，请在导出交易时设置费率")
 	}
 
 	gasTipCap, err := strconv.ParseFloat(transaction.MaxPriorityFeePerGas, 64)
@@ -186,6 +215,45 @@ func (es *ETHSigner) parseHexValue(hexValue string) (*big.Int, error) {
 	return value, nil
 }
 
+// parseGasToWei 尝试将输入的 gas 值解析为 Wei
+// 支持两种输入：
+// 1) 纯数字（十进制），默认视为 Gwei；
+// 2) 纯数字且非常大（>=1e12），视为 Wei（保守判断）；
+func (es *ETHSigner) parseGasToWei(value string) (*big.Int, error) {
+	v := strings.TrimSpace(value)
+	if strings.HasPrefix(v, "0x") || strings.HasPrefix(v, "0X") {
+		return nil, fmt.Errorf("gasPrice应为十进制字符串(Gwei或Wei)")
+	}
+
+	// 如果包含小数点，按 Gwei 小数处理
+	if strings.Contains(v, ".") {
+		rat := new(big.Rat)
+		if _, ok := rat.SetString(v); !ok {
+			return nil, fmt.Errorf("无效的小数值: %s", v)
+		}
+		// 乘以 1e9 (Gwei->Wei)
+		mul := new(big.Rat).SetInt(big.NewInt(1_000_000_000))
+		rat.Mul(rat, mul)
+		// 向下取整为整数 Wei
+		num := new(big.Int)
+		ratNum := rat.Num()
+		ratDen := rat.Denom()
+		num.Quo(ratNum, ratDen)
+		return num, nil
+	}
+
+	// 纯整数：小于1e12 认为是 Gwei，否则认为是 Wei
+	n, ok := new(big.Int).SetString(v, 10)
+	if !ok {
+		return nil, fmt.Errorf("无效的十进制值: %s", v)
+	}
+	threshold := new(big.Int).Exp(big.NewInt(10), big.NewInt(12), nil) // 1e12
+	if n.Cmp(threshold) < 0 {
+		return new(big.Int).Mul(n, big.NewInt(1_000_000_000)), nil
+	}
+	return n, nil
+}
+
 // buildAccessList 构建访问列表
 func (es *ETHSigner) buildAccessList(accessList []pkg.AccessListItem) types.AccessList {
 	var ethAccessList types.AccessList
@@ -210,17 +278,25 @@ func (es *ETHSigner) buildAccessList(accessList []pkg.AccessListItem) types.Acce
 
 // DisplayTransaction 显示ETH交易详情
 func (es *ETHSigner) DisplayTransaction(transaction *pkg.TransactionData) {
-	fmt.Println("\n=== ETH交易详情 ===")
+	name := transaction.GetChainName()
+	if name == "Unknown" && (transaction.IsEVM()) {
+		name = "EVM"
+	}
+	fmt.Println("\n=== " + name + " 交易详情 ===")
 	fmt.Printf("交易ID: %d\n", transaction.ID)
-	fmt.Printf("链ID: %s (Ethereum)\n", transaction.ChainID)
+	fmt.Printf("链ID: %s (%s)\n", transaction.ChainID, name)
 	fmt.Printf("Nonce: %d\n", transaction.Nonce)
 	fmt.Printf("发送地址: %s\n", transaction.From)
 	fmt.Printf("接收地址: %s\n", transaction.To)
 	fmt.Printf("交易金额: %s wei\n", transaction.Value)
 	fmt.Printf("交易数据: %s\n", transaction.Data)
 	fmt.Printf("交易gas limit: %d\n", transaction.Gas)
-	fmt.Printf("交易gas tip cap: %s\n", transaction.MaxPriorityFeePerGas)
-	fmt.Printf("交易gas fee cap: %s\n", transaction.MaxFeePerGas)
+	if transaction.IsBSC() {
+		fmt.Printf("交易gas price: %s (Gwei或Wei)\n", transaction.MaxFeePerGas)
+	} else {
+		fmt.Printf("交易gas tip cap: %s\n", transaction.MaxPriorityFeePerGas)
+		fmt.Printf("交易gas fee cap: %s\n", transaction.MaxFeePerGas)
+	}
 
 	if len(transaction.AccessList) > 0 {
 		fmt.Printf("访问列表: %d 项\n", len(transaction.AccessList))

@@ -103,8 +103,8 @@ func ParseQRCodeData(qrData string) (*TransactionData, error) {
 		}
 		// 设置From字段为Address字段的值，用于兼容现有代码
 		transaction.From = transaction.Address
-	} else if transaction.IsETH() {
-		// ETH交易验证
+	} else if transaction.IsEVM() {
+		// EVM交易验证（ETH/BSC等）
 		if transaction.ChainID == "" {
 			return nil, &ValidationError{Field: "chainId", Message: "链ID不能为空"}
 		}
@@ -146,11 +146,24 @@ func (t *TransactionData) IsETH() bool {
 // IsBTC 判断是否为BTC交易
 func (t *TransactionData) IsBTC() bool { return t.Type == "btc" }
 
+// IsBSC 判断是否为BSC交易
+func (t *TransactionData) IsBSC() bool {
+	// BSC 主网: 56, 测试网: 97
+	return t.Type == "bsc" || t.ChainID == "56" || t.ChainID == "97"
+}
+
+// IsEVM 判断是否为EVM兼容链（ETH/BSC等）
+func (t *TransactionData) IsEVM() bool {
+	return t.IsETH() || t.IsBSC()
+}
+
 // GetChainName 获取链名称
 func (t *TransactionData) GetChainName() string {
 	switch t.Type {
 	case "eth":
 		return "Ethereum"
+	case "bsc":
+		return "BNB Smart Chain"
 	case "btc":
 		return "Bitcoin"
 	default:

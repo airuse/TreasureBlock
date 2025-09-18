@@ -114,7 +114,19 @@ func (s *userAddressService) CreateAddress(userID uint, req *dto.CreateUserAddre
 				blockNum = new(big.Int).SetUint64(createdHeight)
 			}
 			// 合约余额（当前地址在该ERC-20合约下的余额）
-			if bal, err3 := s.contractCall.CallBalanceOf(ctx, contract.Address, req.Address, blockNum); err3 == nil {
+			// 按链调用，避免跨链拿错余额
+			chain := strings.ToLower(req.Chain)
+			bal := (*big.Int)(nil)
+			var err3 error
+			switch chain {
+			case "eth":
+				bal, err3 = s.contractCall.CallBalanceOfOnChain(ctx, "eth", contract.Address, req.Address, blockNum)
+			case "bsc":
+				bal, err3 = s.contractCall.CallBalanceOfOnChain(ctx, "bsc", contract.Address, req.Address, blockNum)
+			default:
+				bal, err3 = s.contractCall.CallBalanceOf(ctx, contract.Address, req.Address, blockNum)
+			}
+			if err3 == nil {
 				balStr := bal.String()
 				userAddress.ContractBalance = &balStr
 			}
@@ -122,7 +134,17 @@ func (s *userAddressService) CreateAddress(userID uint, req *dto.CreateUserAddre
 			if len(authMap) > 0 {
 				for spender := range authMap {
 					// authMap 存的是授权者地址，spender 是授权者地址，req.Address 是当前地址
-					if allowance, err4 := s.contractCall.CallAllowance(ctx, contract.Address, spender, req.Address, blockNum); err4 == nil {
+					var allowance *big.Int
+					var err4 error
+					switch chain {
+					case "eth":
+						allowance, err4 = s.contractCall.CallAllowanceOnChain(ctx, "eth", contract.Address, spender, req.Address, blockNum)
+					case "bsc":
+						allowance, err4 = s.contractCall.CallAllowanceOnChain(ctx, "bsc", contract.Address, spender, req.Address, blockNum)
+					default:
+						allowance, err4 = s.contractCall.CallAllowance(ctx, contract.Address, spender, req.Address, blockNum)
+					}
+					if err4 == nil {
 						info := authMap[spender]
 						info.Allowance = allowance.String()
 						authMap[spender] = info
@@ -352,6 +374,40 @@ func (s *userAddressService) getCurrentBlockHeightAndBalance(address string) (ui
 	return blockNumber, balance.String(), nil
 }
 
+// getEVMCurrentBlockHeightAndBalance 获取指定EVM链当前区块高度和地址余额（返回Wei字符串）
+func (s *userAddressService) getEVMCurrentBlockHeightAndBalance(chain string, address string) (uint64, string, error) {
+	ctx := context.Background()
+
+	chainLower := strings.ToLower(chain)
+
+	// 检查RPC配置
+	chainConfig, exists := config.AppConfig.Blockchain.Chains[chainLower]
+	if !exists || (chainConfig.RPCURL == "" && len(chainConfig.RPCURLs) == 0) {
+		return 0, "0", fmt.Errorf("未配置%s RPC URL", strings.ToUpper(chainLower))
+	}
+
+	// 故障转移
+	fo, err := utils.NewEthFailoverFromChain(chainLower)
+	if err != nil {
+		return 0, "0", fmt.Errorf("初始化%s故障转移失败: %w", strings.ToUpper(chainLower), err)
+	}
+	defer fo.Close()
+
+	// 最新高度
+	blockNumber, err := fo.BlockNumber(ctx)
+	if err != nil {
+		return 0, "0", fmt.Errorf("获取当前区块高度失败: %w", err)
+	}
+
+	// 余额（按该高度）
+	balance, err := fo.BalanceAt(ctx, common.HexToAddress(address), big.NewInt(int64(blockNumber)))
+	if err != nil {
+		return blockNumber, "0", fmt.Errorf("获取地址余额失败: %w", err)
+	}
+
+	return blockNumber, balance.String(), nil
+}
+
 // GetAddressTransactions 获取地址相关的交易列表
 func (s *userAddressService) GetAddressTransactions(userID uint, address string, page, pageSize int, chain string) (*dto.AddressTransactionsResponse, error) {
 	// 验证用户是否有权限查看该地址
@@ -525,6 +581,13 @@ func (s *userAddressService) RefreshAddressBalances(userID uint, addressID uint)
 			addr.Balance = &bal
 			addr.BalanceHeight = height
 		}
+	case "bsc":
+		var err error
+		height, bal, err = s.getEVMCurrentBlockHeightAndBalance("bsc", addr.Address)
+		if err == nil {
+			addr.Balance = &bal
+			addr.BalanceHeight = height
+		}
 	case "btc":
 		// 对于BTC，从UTXO计算余额
 		var err error
@@ -557,7 +620,18 @@ func (s *userAddressService) RefreshAddressBalances(userID uint, addressID uint)
 				blockNum = new(big.Int).SetUint64(height)
 			}
 			// 合约余额（address 在该合约下的余额）
-			if bal2, err3 := s.contractCall.CallBalanceOf(ctx, contract.Address, addr.Address, blockNum); err3 == nil {
+			// 指定链调用，避免跨链取错余额
+			var bal2 *big.Int
+			var err3 error
+			switch strings.ToLower(addr.Chain) {
+			case "eth":
+				bal2, err3 = s.contractCall.CallBalanceOfOnChain(ctx, "eth", contract.Address, addr.Address, blockNum)
+			case "bsc":
+				bal2, err3 = s.contractCall.CallBalanceOfOnChain(ctx, "bsc", contract.Address, addr.Address, blockNum)
+			default:
+				bal2, err3 = s.contractCall.CallBalanceOf(ctx, contract.Address, addr.Address, blockNum)
+			}
+			if err3 == nil {
 				balStr := bal2.String()
 				addr.ContractBalance = &balStr
 
@@ -567,7 +641,17 @@ func (s *userAddressService) RefreshAddressBalances(userID uint, addressID uint)
 			if addr.AuthorizedAddresses != nil {
 				updated := make(models.AuthorizedAddressesJSON, len(addr.AuthorizedAddresses))
 				for owner := range addr.AuthorizedAddresses {
-					if alw, err4 := s.contractCall.CallAllowance(ctx, contract.Address, owner, addr.Address, blockNum); err4 == nil {
+					var alw *big.Int
+					var err4 error
+					switch strings.ToLower(addr.Chain) {
+					case "eth":
+						alw, err4 = s.contractCall.CallAllowanceOnChain(ctx, "eth", contract.Address, owner, addr.Address, blockNum)
+					case "bsc":
+						alw, err4 = s.contractCall.CallAllowanceOnChain(ctx, "bsc", contract.Address, owner, addr.Address, blockNum)
+					default:
+						alw, err4 = s.contractCall.CallAllowance(ctx, contract.Address, owner, addr.Address, blockNum)
+					}
+					if err4 == nil {
 						updated[owner] = models.AuthorizedInfo{Allowance: alw.String()}
 					} else {
 						// 保留原值

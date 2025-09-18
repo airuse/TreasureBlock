@@ -94,6 +94,7 @@ func (h *ContractHandler) CreateOrUpdateContract(c *gin.Context) {
 // GetContractByAddress 根据地址获取合约
 func (h *ContractHandler) GetContractByAddress(c *gin.Context) {
 	address := c.Param("address")
+	chainName := c.Query("chainName")
 	if address == "" {
 		c.JSON(http.StatusBadRequest, gin.H{
 			"success": false,
@@ -102,7 +103,13 @@ func (h *ContractHandler) GetContractByAddress(c *gin.Context) {
 		return
 	}
 
-	contract, err := h.contractService.GetContractByAddress(c.Request.Context(), address)
+	var contract *models.Contract
+	var err error
+	if chainName != "" {
+		contract, err = h.contractService.GetContractByAddressAndChain(c.Request.Context(), address, chainName)
+	} else {
+		contract, err = h.contractService.GetContractByAddress(c.Request.Context(), address)
+	}
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{
 			"success": false,

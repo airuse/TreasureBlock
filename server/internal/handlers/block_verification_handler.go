@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"net/http"
 	"strconv"
+	"sync"
+	"time"
 
 	"blockChainBrowser/server/internal/dto"
 	"blockChainBrowser/server/internal/middleware"
@@ -22,6 +24,11 @@ type BlockVerificationHandler struct {
 	contractParseService services.ContractParseService
 	btcUTXOService       services.BTCUTXOService
 	transactionService   services.TransactionService
+	// 缓存每条链最后验证通过的区块高度
+	heightCache      map[string]uint64
+	heightCacheMutex sync.RWMutex
+	// 可选：用于定期触发后台刷新/清理
+	cacheUpdatedAt map[string]time.Time
 }
 
 // NewBlockVerificationHandler 创建区块验证处理器
@@ -32,6 +39,8 @@ func NewBlockVerificationHandler(verificationService services.BlockVerificationS
 		contractParseService: contractParseService,
 		btcUTXOService:       btcUTXOService,
 		transactionService:   transactionService,
+		heightCache:          make(map[string]uint64),
+		cacheUpdatedAt:       make(map[string]time.Time),
 	}
 }
 
@@ -96,6 +105,16 @@ func (h *BlockVerificationHandler) VerifyBlock(c *gin.Context) {
 	// 验证通过需要吧数据库 block 表的 verification_status 更新为 1
 	h.verificationService.UpdateBlockVerificationStatus(c.Request.Context(), blockID, true, "验证通过")
 
+	// 同步更新本地缓存的最后验证高度（由后端掌控）
+	if block != nil {
+		h.heightCacheMutex.Lock()
+		if cur, ok := h.heightCache[block.Chain]; !ok || block.Height > cur {
+			h.heightCache[block.Chain] = block.Height
+			h.cacheUpdatedAt[block.Chain] = time.Now()
+		}
+		h.heightCacheMutex.Unlock()
+	}
+
 	// 获取用户ID
 	userID, exists := middleware.GetUserIDFromContext(c)
 	if !exists {
@@ -152,6 +171,31 @@ func (h *BlockVerificationHandler) GetLastVerifiedBlockHeight(c *gin.Context) {
 		return
 	}
 
+	// 先尝试命中本地缓存（后端掌控缓存）
+	h.heightCacheMutex.RLock()
+	cachedHeight, ok := h.heightCache[chain]
+	h.heightCacheMutex.RUnlock()
+
+	if ok {
+		// 异步触发超时处理，尽快返回响应
+		go func(ch string, last uint64) {
+			if err := h.verificationService.HandleTimeoutBlocks(context.Background(), ch, last+1); err != nil {
+				logrus.Errorf("HandleTimeoutBlocks error: %v", err)
+			}
+		}(chain, cachedHeight)
+
+		c.JSON(http.StatusOK, gin.H{
+			"success": true,
+			"data": gin.H{
+				"chain":  chain,
+				"height": cachedHeight,
+			},
+			"message": "获取成功(缓存)",
+		})
+		return
+	}
+
+	// 未命中缓存则查询服务层并回填缓存
 	height, err := h.verificationService.GetLastVerifiedBlockHeight(c.Request.Context(), chain)
 	if err != nil {
 		c.JSON(http.StatusNotFound, gin.H{
@@ -162,11 +206,17 @@ func (h *BlockVerificationHandler) GetLastVerifiedBlockHeight(c *gin.Context) {
 		return
 	}
 
-	// 获取最后一个验证通过的区块高度，然后判断是否已经超时，如果超时则将此高度hash后缀增加_loser,然后吧deleted_at逻辑删除掉
-	if err := h.verificationService.HandleTimeoutBlocks(c.Request.Context(), chain, height+1); err != nil {
-		// 记录错误但不影响正常流程，继续执行
-		logrus.Errorf("HandleTimeoutBlocks error: %v", err)
-	}
+	h.heightCacheMutex.Lock()
+	h.heightCache[chain] = height
+	h.cacheUpdatedAt[chain] = time.Now()
+	h.heightCacheMutex.Unlock()
+
+	// 异步执行超时处理
+	go func(ch string, last uint64) {
+		if err := h.verificationService.HandleTimeoutBlocks(context.Background(), ch, last+1); err != nil {
+			logrus.Errorf("HandleTimeoutBlocks error: %v", err)
+		}
+	}(chain, height)
 
 	c.JSON(http.StatusOK, gin.H{
 		"success": true,

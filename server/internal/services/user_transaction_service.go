@@ -362,8 +362,9 @@ func (s *userTransactionService) ExportTransaction(ctx context.Context, id uint,
 	// 获取发送地址的当前nonce（如果交易中没有设置nonce）
 	currentNonce := userTx.Nonce
 	if currentNonce == nil {
-		// 使用ethclient获取地址的当前nonce
-		nonce, err := s.getAddressNonce(ctx, userTx.FromAddress)
+		// 使用对应链的 pending nonce，避免与内存池未上链交易冲突
+		nonce, err := s.getAddressNonceByChain(ctx, userTx.Chain, userTx.FromAddress)
+		fmt.Printf("获取地址nonce: %v\n", nonce)
 		if err != nil {
 			// 如果获取nonce失败，使用默认值0
 			// fmt.Printf("获取地址nonce失败: %v，使用默认值0\n", err)
@@ -449,8 +450,9 @@ func (s *userTransactionService) ExportTransaction(ctx context.Context, id uint,
 	// fmt.Printf("  userTx.MaxFeePerGas (after): %v\n", userTx.MaxFeePerGas)
 	// fmt.Printf("开始进行估算GasLimit")
 	// fmt.Printf("参数 查验 userTx.Chain = %s,userTx.GasLimit = %v \n", userTx.Chain, userTx.GasLimit)
-	// 估算GasLimit（未设置时；ETH链；合约调用或代币交易）
-	if strings.ToLower(userTx.Chain) == "eth" {
+	// 估算GasLimit（未设置时；EVM链；合约调用或代币交易）
+	chainLower := strings.ToLower(userTx.Chain)
+	if chainLower == "eth" || chainLower == "bsc" || chainLower == "binance" {
 		// fmt.Printf("参数 查验 userTx.TransactionType %s\n", userTx.TransactionType)
 		// ETH + token/合约调用 -> 估算；ETH 原生 -> 固定21000
 		if userTx.TransactionType == "token" {
@@ -473,7 +475,14 @@ func (s *userTransactionService) ExportTransaction(ctx context.Context, id uint,
 
 			// fmt.Printf("🔍 估算Gas  txData: %+v\n", txData)
 
-			if gas, err := rpcManager.EstimateEthGas(ctx, userTx.FromAddress, toForGas, value, dataBytes); err == nil {
+			var gas uint64
+			var err error
+			if chainLower == "eth" {
+				gas, err = rpcManager.EstimateEthGas(ctx, userTx.FromAddress, toForGas, value, dataBytes)
+			} else {
+				gas, err = rpcManager.EstimateBscGas(ctx, userTx.FromAddress, toForGas, value, dataBytes)
+			}
+			if err == nil {
 				gasWithBuffer := gas + gas/5
 				gasU := uint(gasWithBuffer)
 				userTx.GasLimit = &gasU
@@ -959,27 +968,42 @@ func (s *userTransactionService) uint64ToString(u *uint64) string {
 }
 
 // getAddressNonce 获取地址的当前nonce
-func (s *userTransactionService) getAddressNonce(ctx context.Context, address string) (uint64, error) {
-	// 从配置文件获取ETH RPC URL
-	chainConfig, exists := config.AppConfig.Blockchain.Chains["eth"]
-	if !exists || (chainConfig.RPCURL == "" && len(chainConfig.RPCURLs) == 0) {
-		return 0, fmt.Errorf("未配置ETH RPC URL")
+func (s *userTransactionService) getAddressNonceByChain(ctx context.Context, chain string, address string) (uint64, error) {
+	chainLower := strings.ToLower(chain)
+	switch chainLower {
+	case "eth", "ethereum":
+		// ETH：使用 pending nonce，便于连续发多笔
+		if _, ok := config.AppConfig.Blockchain.Chains[chainLower]; !ok {
+			return 0, fmt.Errorf("未配置%s RPC URL", chainLower)
+		}
+		fo, err := utils.NewEthFailoverFromChain(chainLower)
+		if err != nil {
+			return 0, fmt.Errorf("初始化%s故障转移失败: %w", strings.ToUpper(chainLower), err)
+		}
+		defer fo.Close()
+		nonce, err := fo.PendingNonceAt(ctx, common.HexToAddress(address))
+		if err != nil {
+			return 0, fmt.Errorf("获取地址pending nonce失败: %w", err)
+		}
+		return nonce, nil
+	case "bsc", "binance":
+		// BSC：优先使用 latest（避免历史未清理的 pending 抬高nonce）
+		if _, ok := config.AppConfig.Blockchain.Chains[chainLower]; !ok {
+			return 0, fmt.Errorf("未配置%s RPC URL", chainLower)
+		}
+		fo, err := utils.NewEthFailoverFromChain(chainLower)
+		if err != nil {
+			return 0, fmt.Errorf("初始化%s故障转移失败: %w", strings.ToUpper(chainLower), err)
+		}
+		defer fo.Close()
+		nonce, err := fo.NonceAt(ctx, common.HexToAddress(address), nil)
+		if err != nil {
+			return 0, fmt.Errorf("获取地址latest nonce失败: %w", err)
+		}
+		return nonce, nil
+	default:
+		return 0, fmt.Errorf("不支持的链获取nonce: %s", chain)
 	}
-
-	// 使用故障转移管理器
-	fo, err := utils.NewEthFailoverFromChain("eth")
-	if err != nil {
-		return 0, fmt.Errorf("初始化ETH故障转移失败: %w", err)
-	}
-	defer fo.Close()
-
-	// 获取地址的当前nonce（故障转移）
-	nonce, err := fo.NonceAt(ctx, common.HexToAddress(address), nil)
-	if err != nil {
-		return 0, fmt.Errorf("获取地址nonce失败: %w", err)
-	}
-
-	return nonce, nil
 }
 
 // generateTxData 生成交易数据（十六进制格式）

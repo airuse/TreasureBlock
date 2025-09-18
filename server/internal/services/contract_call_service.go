@@ -15,6 +15,9 @@ type ContractCallService interface {
 	// 调用合约的只读方法
 	CallBalanceOf(ctx context.Context, contractAddress, accountAddress string, blockNumber *big.Int) (*big.Int, error)
 	CallAllowance(ctx context.Context, contractAddress, ownerAddress, spenderAddress string, blockNumber *big.Int) (*big.Int, error)
+	// 指定链的只读方法（用于多EVM链）
+	CallBalanceOfOnChain(ctx context.Context, chain, contractAddress, accountAddress string, blockNumber *big.Int) (*big.Int, error)
+	CallAllowanceOnChain(ctx context.Context, chain, contractAddress, ownerAddress, spenderAddress string, blockNumber *big.Int) (*big.Int, error)
 	// 通用合约调用方法
 	CallContractMethod(ctx context.Context, contractAddress, callData string, blockNumber *big.Int) ([]byte, error)
 }
@@ -65,6 +68,27 @@ func (s *contractCallService) CallBalanceOf(ctx context.Context, contractAddress
 	return balance, nil
 }
 
+// CallBalanceOfOnChain 按链调用 balanceOf（EVM兼容，如 eth/bsc）
+func (s *contractCallService) CallBalanceOfOnChain(ctx context.Context, chain, contractAddress, accountAddress string, blockNumber *big.Int) (*big.Int, error) {
+	methodSelector := "0x70a08231"
+	addressParam := strings.TrimPrefix(accountAddress, "0x")
+	addressParam = strings.ToLower(addressParam)
+	if len(addressParam) != 40 {
+		return nil, fmt.Errorf("invalid address length: %d", len(addressParam))
+	}
+	addressParam = strings.Repeat("0", 24) + addressParam
+	callData := methodSelector + addressParam
+
+	result, err := s.rpcManager.CallContractOnChain(ctx, chain, "0x0000000000000000000000000000000000000000", contractAddress, big.NewInt(0), mustDecodeHex(callData), blockNumber)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call balanceOf on %s: %w", chain, err)
+	}
+	if len(result) != 32 {
+		return nil, fmt.Errorf("invalid balanceOf result length: %d", len(result))
+	}
+	return new(big.Int).SetBytes(result), nil
+}
+
 // CallAllowance 调用合约的 allowance 方法
 func (s *contractCallService) CallAllowance(ctx context.Context, contractAddress, ownerAddress, spenderAddress string, blockNumber *big.Int) (*big.Int, error) {
 	// allowance(address,address) 的函数选择器是 0xdd62ed3e
@@ -90,6 +114,31 @@ func (s *contractCallService) CallAllowance(ctx context.Context, contractAddress
 	// 转换为big.Int
 	allowance := new(big.Int).SetBytes(result)
 	return allowance, nil
+}
+
+// CallAllowanceOnChain 按链调用 allowance（EVM兼容，如 eth/bsc）
+func (s *contractCallService) CallAllowanceOnChain(ctx context.Context, chain, contractAddress, ownerAddress, spenderAddress string, blockNumber *big.Int) (*big.Int, error) {
+	methodSelector := "0xdd62ed3e"
+	ownerParam := s.encodeAddress(ownerAddress)
+	spenderParam := s.encodeAddress(spenderAddress)
+	callData := methodSelector + ownerParam + spenderParam
+
+	result, err := s.rpcManager.CallContractOnChain(ctx, chain, "0x0000000000000000000000000000000000000000", contractAddress, big.NewInt(0), mustDecodeHex(callData), blockNumber)
+	if err != nil {
+		return nil, fmt.Errorf("failed to call allowance on %s: %w", chain, err)
+	}
+	if len(result) != 32 {
+		return nil, fmt.Errorf("invalid allowance result length: %d", len(result))
+	}
+	return new(big.Int).SetBytes(result), nil
+}
+
+func mustDecodeHex(s string) []byte {
+	b, err := hex.DecodeString(strings.TrimPrefix(s, "0x"))
+	if err != nil {
+		panic(err)
+	}
+	return b
 }
 
 // CallContractMethod 通用合约调用方法

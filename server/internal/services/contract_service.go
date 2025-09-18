@@ -14,6 +14,7 @@ import (
 type ContractService interface {
 	CreateOrUpdateContract(ctx context.Context, contractInfo *models.Contract) (*models.Contract, error)
 	GetContractByAddress(ctx context.Context, address string) (*models.Contract, error)
+	GetContractByAddressAndChain(ctx context.Context, address string, chainName string) (*models.Contract, error)
 	GetContractsByChain(ctx context.Context, chainName string) ([]*models.Contract, error)
 	GetContractsByType(ctx context.Context, contractType string) ([]*models.Contract, error)
 	GetERC20Tokens(ctx context.Context) ([]*models.Contract, error)
@@ -41,8 +42,12 @@ func NewContractService(contractRepo repository.ContractRepository, coinConfigRe
 
 // CreateOrUpdateContract 创建或更新合约
 func (s *contractService) CreateOrUpdateContract(ctx context.Context, contractInfo *models.Contract) (*models.Contract, error) {
-	// 检查合约是否已存在
-	existingContract, err := s.contractRepo.GetByAddress(ctx, contractInfo.Address)
+	// 优先按地址+链名检查是否已存在（避免跨链混淆）
+	existingContract, err := s.contractRepo.GetByAddressAndChain(ctx, contractInfo.Address, contractInfo.ChainName)
+	if err != nil || existingContract == nil {
+		// 回退到仅按地址检查，兼容旧数据
+		existingContract, err = s.contractRepo.GetByAddress(ctx, contractInfo.Address)
+	}
 	if err == nil && existingContract != nil {
 		// 合约已存在，更新信息
 		return s.updateExistingContract(ctx, existingContract, contractInfo)
@@ -82,9 +87,10 @@ func (s *contractService) createNewContract(ctx context.Context, contractInfo *m
 	if err := s.contractRepo.Create(ctx, contract); err != nil {
 		return nil, fmt.Errorf("failed to create contract: %w", err)
 	}
-
+	fmt.Printf("创建了一个新的合约\n")
 	// 如果是ERC-20合约，自动创建币种配置
 	if contract.IsERC20 {
+		fmt.Printf("创建了一个新的ERC-20 币种\n")
 		if err := s.createCoinConfigForERC20(ctx, contract); err != nil {
 			// 记录错误但不影响合约创建
 			// fmt.Printf("Warning: Failed to create coin config for ERC-20 contract %s: %v\n", contract.Address, err)
@@ -97,6 +103,7 @@ func (s *contractService) createNewContract(ctx context.Context, contractInfo *m
 // updateExistingContract 更新现有合约
 func (s *contractService) updateExistingContract(ctx context.Context, existing *models.Contract, contractInfo *models.Contract) (*models.Contract, error) {
 	// 更新所有基本信息字段
+	existing.ChainName = contractInfo.ChainName
 	existing.Name = contractInfo.Name
 	existing.Symbol = contractInfo.Symbol
 	existing.Decimals = contractInfo.Decimals
@@ -208,6 +215,11 @@ func (s *contractService) createCoinConfigForERC20(ctx context.Context, contract
 // GetContractByAddress 根据地址获取合约
 func (s *contractService) GetContractByAddress(ctx context.Context, address string) (*models.Contract, error) {
 	return s.contractRepo.GetByAddress(ctx, address)
+}
+
+// GetContractByAddressAndChain 根据地址和链名称获取合约
+func (s *contractService) GetContractByAddressAndChain(ctx context.Context, address string, chainName string) (*models.Contract, error) {
+	return s.contractRepo.GetByAddressAndChain(ctx, address, chainName)
 }
 
 // GetContractsByChain 根据链名称获取合约列表

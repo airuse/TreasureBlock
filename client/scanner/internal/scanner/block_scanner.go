@@ -25,6 +25,8 @@ type BlockScanner struct {
 	stopChan     chan struct{}
 	running      bool
 	runningMutex sync.RWMutex
+	// 交易预取滑动窗口（每链）
+	txPrefetchers map[string]*txPrefetchState
 }
 
 // Scanner 扫块器接口
@@ -39,15 +41,77 @@ type Scanner interface {
 // NewBlockScanner 创建新的主扫块器
 func NewBlockScanner(cfg *config.Config) *BlockScanner {
 	scanner := &BlockScanner{
-		config:   cfg,
-		scanners: make(map[string]Scanner),
-		stopChan: make(chan struct{}),
+		config:        cfg,
+		scanners:      make(map[string]Scanner),
+		stopChan:      make(chan struct{}),
+		txPrefetchers: make(map[string]*txPrefetchState),
 	}
 
 	// 初始化各种链的扫块器
 	scanner.initializeScanners()
 
 	return scanner
+}
+
+// txPrefetchState 维护一个异步滑动窗口缓存：区块高度 -> (区块, 交易列表)
+type txPrefetchState struct {
+	mu         sync.RWMutex
+	windowSize int
+	sem        chan struct{} // 限制预取并发
+	blocks     map[uint64]*models.Block
+	txs        map[uint64][]map[string]interface{}
+}
+
+func newTxPrefetchState(windowSize, concurrency int) *txPrefetchState {
+	if windowSize <= 0 {
+		windowSize = 5
+	}
+	if concurrency <= 0 {
+		concurrency = 5
+	}
+	return &txPrefetchState{
+		windowSize: windowSize,
+		sem:        make(chan struct{}, concurrency),
+		blocks:     make(map[uint64]*models.Block),
+		txs:        make(map[uint64][]map[string]interface{}),
+	}
+}
+
+func (ps *txPrefetchState) get(height uint64) (*models.Block, []map[string]interface{}, bool) {
+	ps.mu.RLock()
+	defer ps.mu.RUnlock()
+	b, okb := ps.blocks[height]
+	t, okt := ps.txs[height]
+	if okb && okt {
+		return b, t, true
+	}
+	return nil, nil, false
+}
+
+func (ps *txPrefetchState) set(height uint64, b *models.Block, t []map[string]interface{}) {
+	ps.mu.Lock()
+	ps.blocks[height] = b
+	ps.txs[height] = t
+	ps.mu.Unlock()
+}
+
+func (ps *txPrefetchState) has(height uint64) bool {
+	ps.mu.RLock()
+	defer ps.mu.RUnlock()
+	_, okb := ps.blocks[height]
+	_, okt := ps.txs[height]
+	return okb && okt
+}
+
+func (ps *txPrefetchState) pruneBelow(minHeight uint64) {
+	ps.mu.Lock()
+	for h := range ps.blocks {
+		if h < minHeight {
+			delete(ps.blocks, h)
+			delete(ps.txs, h)
+		}
+	}
+	ps.mu.Unlock()
 }
 
 // initializeScanners 初始化各种链的扫块器
@@ -218,6 +282,9 @@ func (bs *BlockScanner) processScanCycle(chainName string, scanner Scanner, chai
 
 	logrus.Infof("[%s] Scanning block at height %d (latest: %d, safe: %d, last verified: %d)", chainName, scanHeight, latestHeight, safeHeight, lastVerifiedHeight)
 
+	// 6.1 启动/推进交易预取窗口：覆盖 [scanHeight, min(scanHeight+window-1, safeHeight)]
+	bs.ensureTxPrefetch(chainName, scanner, chainConfig, scanHeight, safeHeight)
+
 	// 7. 扫描单个区块
 	select {
 	case <-bs.stopChan:
@@ -250,21 +317,29 @@ func (bs *BlockScanner) getLastVerifiedBlockHeight(chainName string) (uint64, er
 func (bs *BlockScanner) scanSingleBlock(chainName string, scanner Scanner, height uint64, chainConfig *config.ChainConfig) {
 	startTime := time.Now()
 
-	block, err := scanner.GetBlockByHeight(height)
-	if err != nil {
-		logrus.Errorf("[%s] Failed to get block %d: %v", chainName, height, err)
-		return
+	// 优先从预取缓存取出区块与交易
+	var block *models.Block
+	var transactions []map[string]interface{}
+	if ps, ok := bs.txPrefetchers[chainName]; ok {
+		if b, txs, ok2 := ps.get(height); ok2 {
+			block = b
+			transactions = txs
+		}
 	}
-
-	fmt.Printf("[%s] 第一步耗时: %+v\n", chainName, time.Since(startTime))
+	if block == nil {
+		blk, getErr := scanner.GetBlockByHeight(height)
+		if getErr != nil {
+			logrus.Errorf("[%s] Failed to get block %d: %v", chainName, height, getErr)
+			return
+		}
+		block = blk
+	}
 
 	// 验证区块
 	if err := scanner.ValidateBlock(block); err != nil {
 		logrus.Errorf("[%s] Block validation failed for block %d: %v", chainName, height, err)
 		return
 	}
-
-	fmt.Printf("[%s] 第二步耗时: %+v\n", chainName, time.Since(startTime))
 
 	// 提交区块到服务器，获取区块ID
 	blockID, err := bs.submitBlockToServer(block)
@@ -273,22 +348,20 @@ func (bs *BlockScanner) scanSingleBlock(chainName string, scanner Scanner, heigh
 		return
 	}
 
-	fmt.Printf("[%s] 第三步耗时: %+v\n", chainName, time.Since(startTime))
-
-	// 获取交易信息 - 直接从区块获取，避免哈希不一致问题
-	transactions, err := scanner.GetBlockTransactionsFromBlock(block)
+	// 获取交易信息 - 若未预取，则从区块获取
+	var txErr error
+	if transactions == nil {
+		transactions, txErr = scanner.GetBlockTransactionsFromBlock(block)
+	}
 	for _, tx := range transactions {
 		s, _ := json.Marshal(tx)
 		logrus.Infof("[%s] Transaction: %s", chainName, string(s))
 	}
 
-	fmt.Printf("[%s] 第四步耗时: %+v\n", chainName, time.Since(startTime))
-
-	if err != nil {
-		logrus.Warnf("[%s] Failed to get transactions for block %d: %v", chainName, height, err)
+	if txErr != nil {
+		logrus.Warnf("[%s] Failed to get transactions for block %d: %v", chainName, height, txErr)
 	} else {
 		scanner.CalculateBlockStats(block, transactions)
-		fmt.Printf("[%s] 第五步耗时: %+v\n", chainName, time.Since(startTime))
 
 		// 上传交易信息到服务器，传入区块ID
 		if err := bs.submitTransactionsToServer(chainName, block, transactions, blockID); err != nil {
@@ -297,26 +370,20 @@ func (bs *BlockScanner) scanSingleBlock(chainName string, scanner Scanner, heigh
 		}
 	}
 
-	fmt.Printf("[%s] 第六步耗时: %+v\n", chainName, time.Since(startTime))
-
 	bs.updateBlockStatsToServer(block, transactions, blockID)
 
 	// 验证区块
-	if err := bs.verifyBlock(blockID); err != nil {
-		logrus.Errorf("[%s] Block verification failed for block %d: %v", chainName, height, err)
+	if verr := bs.verifyBlock(blockID); verr != nil {
+		logrus.Errorf("[%s] Block verification failed for block %d: %v", chainName, height, verr)
 		return
 	}
 
-	fmt.Printf("[%s] 第七步耗时: %+v\n", chainName, time.Since(startTime))
-
 	// 保存到文件（如果启用）
 	if chainConfig.Scan.SaveToFile {
-		if err := bs.saveBlockToFile(block, chainConfig.Scan.OutputDir); err != nil {
-			logrus.Warnf("[%s] Failed to save block %d to file: %v", chainName, height, err)
+		if ferr := bs.saveBlockToFile(block, chainConfig.Scan.OutputDir); ferr != nil {
+			logrus.Warnf("[%s] Failed to save block %d to file: %v", chainName, height, ferr)
 		}
 	}
-
-	fmt.Printf("[%s] 总耗时: %+v\n", chainName, time.Since(startTime))
 
 	processTime := time.Since(startTime).Milliseconds()
 	logrus.Infof("[%s] Successfully processed and verified block %d (hash: %s, %d tx, %dms)",
@@ -700,4 +767,51 @@ func (bs *BlockScanner) getChainConfig(chainName string) *config.ChainConfig {
 		return &chainConfig
 	}
 	return nil
+}
+
+// ensureTxPrefetch 启动或推进交易预取滑动窗口
+func (bs *BlockScanner) ensureTxPrefetch(chainName string, scanner Scanner, chainConfig *config.ChainConfig, nextHeight uint64, safeHeight uint64) {
+	ps := bs.txPrefetchers[chainName]
+	if ps == nil {
+		window := 5
+		concurrency := chainConfig.Scan.MaxConcurrent
+		ps = newTxPrefetchState(window, concurrency)
+		bs.txPrefetchers[chainName] = ps
+	}
+	// 目标上界
+	var upper uint64
+	if nextHeight+uint64(ps.windowSize)-1 <= safeHeight {
+		upper = nextHeight + uint64(ps.windowSize) - 1
+	} else {
+		upper = safeHeight
+	}
+	for h := nextHeight; h <= upper; h++ {
+		if ps.has(h) {
+			continue
+		}
+		select {
+		case ps.sem <- struct{}{}:
+			go func(height uint64) {
+				defer func() { <-ps.sem }()
+				// 拉取区块
+				blk, err := scanner.GetBlockByHeight(height)
+				if err != nil {
+					logrus.Warnf("[%s] Prefetch block %d failed: %v", chainName, height, err)
+					return
+				}
+				// 拉取交易
+				txs, err := scanner.GetBlockTransactionsFromBlock(blk)
+				if err != nil {
+					logrus.Warnf("[%s] Prefetch txs for block %d failed: %v", chainName, height, err)
+					return
+				}
+				ps.set(height, blk, txs)
+			}(h)
+		default:
+			// 并发已满，后续周期再补
+			return
+		}
+	}
+	// 修剪窗口以下的数据，避免内存膨胀
+	ps.pruneBelow(nextHeight)
 }

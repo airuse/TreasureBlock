@@ -56,7 +56,9 @@ blockchain:
       enabled: true
       # rpc_url: "https://bsc-dataseed.binance.org/"
       explorer_api_urls:
-        - "https://bsc-testnet.core.chainstack.com/121b6c75b21bfad0e4bb8c64620ac358"
+        - "https://bsc-testnet.core.chainstack.com/230a3cc67305e569c8cb6afbe8b4b98d"
+        - "https://bsc-testnet.core.chainstack.com/5190644a86def4f6a809767c086a6cdf"
+        - "https://bsc-testnet.core.chainstack.com/37227029d9dd9980f7d9dda9f6d3cd63"
       api_key: ""
       username: ""
       password: ""

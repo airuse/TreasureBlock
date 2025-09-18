@@ -13,6 +13,7 @@ import (
 type ContractRepository interface {
 	Create(ctx context.Context, contract *models.Contract) error
 	GetByAddress(ctx context.Context, address string) (*models.Contract, error)
+	GetByAddressAndChain(ctx context.Context, address string, chainName string) (*models.Contract, error)
 	GetByChainName(ctx context.Context, chainName string) ([]*models.Contract, error)
 	GetByType(ctx context.Context, contractType string) ([]*models.Contract, error)
 	GetERC20Tokens(ctx context.Context) ([]*models.Contract, error)
@@ -54,6 +55,16 @@ func (r *contractRepository) GetByID(ctx context.Context, id uint) (*models.Cont
 func (r *contractRepository) GetByAddress(ctx context.Context, address string) (*models.Contract, error) {
 	var contract models.Contract
 	err := r.db.WithContext(ctx).Where("address = ?", address).First(&contract).Error
+	if err != nil {
+		return nil, err
+	}
+	return &contract, nil
+}
+
+// GetByAddressAndChain 根据地址和链名称获取合约
+func (r *contractRepository) GetByAddressAndChain(ctx context.Context, address string, chainName string) (*models.Contract, error) {
+	var contract models.Contract
+	err := r.db.WithContext(ctx).Where("address = ? AND chain_name = ?", address, chainName).First(&contract).Error
 	if err != nil {
 		return nil, err
 	}

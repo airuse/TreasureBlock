@@ -900,6 +900,36 @@ func (m *RPCClientManager) EstimateEthGas(ctx context.Context, from, to string, 
 	return fo.EstimateGas(ctx, msg)
 }
 
+// EstimateBscGas 估算BSC交易的Gas上限（EVM兼容）
+func (m *RPCClientManager) EstimateBscGas(ctx context.Context, from, to string, value *big.Int, data []byte) (uint64, error) {
+	fo, exists := m.ethFailovers["bsc"]
+	if !exists {
+		for key, f := range m.ethFailovers {
+			if strings.Contains(strings.ToLower(key), "bsc") || strings.Contains(strings.ToLower(key), "binance") {
+				fo = f
+				exists = true
+				break
+			}
+		}
+	}
+	if !exists {
+		return 0, fmt.Errorf("BSC RPC故障转移未初始化")
+	}
+
+	var toAddr *common.Address
+	if to != "" {
+		addr := common.HexToAddress(to)
+		toAddr = &addr
+	}
+	msg := ethereum.CallMsg{
+		From:  common.HexToAddress(from),
+		To:    toAddr,
+		Value: value,
+		Data:  data,
+	}
+	return fo.EstimateGas(ctx, msg)
+}
+
 // CallContract 调用合约方法（eth_call）
 func (m *RPCClientManager) CallContract(ctx context.Context, from, to string, value *big.Int, data []byte, blockNumber *big.Int) ([]byte, error) {
 	// 获取ETH故障转移管理器
@@ -917,6 +947,59 @@ func (m *RPCClientManager) CallContract(ctx context.Context, from, to string, va
 		return nil, fmt.Errorf("ETH RPC故障转移未初始化")
 	}
 
+	var toAddr *common.Address
+	if to != "" {
+		addr := common.HexToAddress(to)
+		toAddr = &addr
+	}
+
+	msg := ethereum.CallMsg{
+		From:  common.HexToAddress(from),
+		To:    toAddr,
+		Value: value,
+		Data:  data,
+	}
+
+	return fo.CallContract(ctx, msg, blockNumber)
+}
+
+// CallContractOnChain 按链调用合约方法（eth_call）
+func (m *RPCClientManager) CallContractOnChain(ctx context.Context, chain string, from, to string, value *big.Int, data []byte, blockNumber *big.Int) ([]byte, error) {
+	chainLower := strings.ToLower(chain)
+
+	var fo *EthFailoverManager
+	var exists bool
+
+	switch chainLower {
+	case "eth", "ethereum":
+		fo, exists = m.ethFailovers["eth"]
+		if !exists {
+			for key, f := range m.ethFailovers {
+				if strings.Contains(strings.ToLower(key), "eth") {
+					fo = f
+					exists = true
+					break
+				}
+			}
+		}
+	case "bsc", "binance":
+		fo, exists = m.ethFailovers["bsc"]
+		if !exists {
+			for key, f := range m.ethFailovers {
+				if strings.Contains(strings.ToLower(key), "bsc") || strings.Contains(strings.ToLower(key), "binance") {
+					fo = f
+					exists = true
+					break
+				}
+			}
+		}
+	default:
+		return nil, fmt.Errorf("不支持的EVM链: %s", chain)
+	}
+
+	if !exists || fo == nil {
+		return nil, fmt.Errorf("%s RPC故障转移未初始化", strings.ToUpper(chainLower))
+	}
 	var toAddr *common.Address
 	if to != "" {
 		addr := common.HexToAddress(to)

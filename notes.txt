@@ -19,10 +19,10 @@ gengjiangdi@outlook.com-15037508950-https://eth-mainnet.g.alchemy.com/v2/A8Rr89_
 
 chainstack[每天3M](Viruse123..)
 viruse123@outlook.com-https://bitcoin-testnet.core.chainstack.com/fc0977c5fde70ec8c26e2d500a1491dd
-gengjiangdi@outlook.com-https://bsc-testnet.core.chainstack.com/6c3a0cee04ae98d1c07b811890192867
-gengjiangdi1@outlook.com-https://ethereum-mainnet.core.chainstack.com/f128085e44a144c3a63295011a716628
-16692555512@163.com-https://ethereum-mainnet.core.chainstack.com/7940b16771bdfe19340899e9a975604e
-15037508950@163.com-https://ethereum-mainnet.core.chainstack.com/9f3263672e76b307af91917e8aea47b1
+gengjiangdi@outlook.com-https://bsc-testnet.core.chainstack.com/121b6c75b21bfad0e4bb8c64620ac358
+gengjiangdi1@outlook.com-https://bsc-testnet.core.chainstack.com/230a3cc67305e569c8cb6afbe8b4b98d
+16692555512@163.com-https://bsc-testnet.core.chainstack.com/5190644a86def4f6a809767c086a6cdf
+15037508950@163.com-https://bsc-testnet.core.chainstack.com/37227029d9dd9980f7d9dda9f6d3cd63
 15136965530@163.com-https://ethereum-mainnet.core.chainstack.com/483d27c712e9d3f5adae3ef60246529c
 15238253001@163.com-https://ethereum-mainnet.core.chainstack.com/1c17a8ff6bcf6cd6371f97c5310963c8
 654017336@qq.com-https://ethereum-mainnet.core.chainstack.com/34e69fc33d3f9cbbdc1e0cbcf30e8f11

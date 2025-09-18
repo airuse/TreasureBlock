@@ -95,7 +95,6 @@ func (s *TransactionStatusScheduler) updateTransactionStatus(ctx context.Context
 		s.logger.Errorf("查询交易状态失败: ID=%d, TxHash=%s, Error=%v", tx.ID, *tx.TxHash, err)
 		return
 	}
-	fmt.Printf("用rpc获取交易信息: %+v\n", txStatus)
 	// 根据查询结果更新状态
 	oldStatus := tx.Status
 	needUpdate := false
