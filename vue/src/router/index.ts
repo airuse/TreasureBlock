@@ -24,6 +24,15 @@ import BSCAddressesView from '../views/bsc/AddressesView.vue'
 import BSCStatisticsView from '../views/bsc/StatisticsView.vue'
 import BSCSettingsView from '../views/bsc/SettingsView.vue'
 
+// SOL页面
+import SOLHomeView from '../views/sol/HomeView.vue'
+import SOLBlocksView from '../views/sol/BlocksView.vue'
+import SOLBlockDetailView from '../views/sol/detail/BlockDetailView.vue'
+import SOLContractDetailView from '../views/sol/detail/ContractDetailView.vue'
+import SOLAddressesView from '../views/sol/AddressesView.vue'
+import SOLStatisticsView from '../views/sol/StatisticsView.vue'
+import SOLSettingsView from '../views/sol/SettingsView.vue'
+
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
   routes: [
@@ -202,6 +211,68 @@ const router = createRouter({
       path: '/bsc/personal/transactions',
       name: 'bsc-personal-transactions',
       component: () => import('../views/bsc/personal/TransactionsView.vue')
+    },
+    // SOL路由
+    {
+      path: '/sol',
+      name: 'sol-home',
+      component: SOLHomeView
+    },
+    {
+      path: '/sol/blocks',
+      name: 'sol-blocks',
+      component: SOLBlocksView
+    },
+    {
+      path: '/sol/blocks/:height',
+      name: 'sol-block-detail',
+      component: SOLBlockDetailView
+    },
+    {
+      path: '/sol/addresses',
+      name: 'sol-addresses',
+      component: SOLAddressesView
+    },
+    {
+      path: '/sol/address-transactions',
+      name: 'sol-address-transactions',
+      component: () => import('../views/sol/detail/AddressTransactionsView.vue')
+    },
+    {
+      path: '/sol/addresses/:address',
+      name: 'sol-contract-detail',
+      component: SOLContractDetailView
+    },
+    {
+      path: '/sol/statistics',
+      name: 'sol-statistics',
+      component: SOLStatisticsView
+    },
+    {
+      path: '/sol/settings',
+      name: 'sol-settings',
+      component: SOLSettingsView
+    },
+    // 个人中心 - SOL
+    {
+      path: '/sol/personal',
+      name: 'sol-personal',
+      redirect: '/sol/personal/earnings'
+    },
+    {
+      path: '/sol/personal/earnings',
+      name: 'sol-personal-earnings',
+      component: () => import('../views/sol/personal/EarningsView.vue')
+    },
+    {
+      path: '/sol/personal/addresses',
+      name: 'sol-personal-addresses',
+      component: () => import('../views/sol/personal/AddressesView.vue')
+    },
+    {
+      path: '/sol/personal/transactions',
+      name: 'sol-personal-transactions',
+      component: () => import('../views/sol/personal/TransactionsView.vue')
     }
   ]
 })
@@ -242,6 +313,20 @@ router.beforeEach((to, from, next) => {
   if (path.startsWith('/bsc/statistics')) {
     console.log(`检测到暂时屏蔽的BSC统计路由: ${path}，重定向到BSC首页`)
     next('/bsc')
+    return
+  }
+  
+  // 检查是否是SOL的无效路由
+  if (path.startsWith('/sol/settings') && !path.includes('/personal/')) {
+    // 检查settings页面是否存在（这里可以根据需要调整）
+    next()
+    return
+  }
+  
+  // 检查是否是SOL的统计页面（暂时屏蔽）
+  if (path.startsWith('/sol/statistics')) {
+    console.log(`检测到暂时屏蔽的SOL统计路由: ${path}，重定向到SOL首页`)
+    next('/sol')
     return
   }
   

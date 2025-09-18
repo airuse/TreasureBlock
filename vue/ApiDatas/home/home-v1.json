@@ -18,7 +18,7 @@
             "required": true,
             "schema": {
               "type": "string",
-              "enum": ["eth", "btc"]
+              "enum": ["eth", "btc", "bsc", "sol"]
             }
           }
         ],
@@ -65,6 +65,15 @@
                         "size": 256000,
                         "miner": "0x742d35Cc6634C0532925a3b8D4C9db96C4b4d8b6",
                         "chain": "eth"
+                      },
+                      {
+                        "height": 250000000,
+                        "hash": "5J7X8H9K2L3M4N5P6Q7R8S9T0U1V2W3X4Y5Z6A7B8C9D0E1F2G3H4I5J6K7L8M9N0",
+                        "timestamp": 1693123456789,
+                        "transactions_count": 2500,
+                        "size": 128000,
+                        "miner": "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM",
+                        "chain": "sol"
                       }
                     ],
                     "latestTransactions": [
@@ -97,6 +106,16 @@
                         "gas_price": 20000000000,
                         "gas_used": 45000,
                         "chain": "eth"
+                      },
+                      {
+                        "hash": "5J7X8H9K2L3M4N5P6Q7R8S9T0U1V2W3X4Y5Z6A7B8C9D0E1F2G3H4I5J6K7L8M9N0",
+                        "timestamp": 1693123456789,
+                        "amount": 1.5,
+                        "from": "9WzDXwBbmkg8ZTbNMqUxvQRAyrZzDsGYdLVL9zYtAWWM",
+                        "to": "7xKXtg2CW87d97TXJSDpbD5jBkheTqA83TZRuJosgAsU",
+                        "gas_price": 5000,
+                        "gas_used": 2000,
+                        "chain": "sol"
                       }
                     ]
                   },
