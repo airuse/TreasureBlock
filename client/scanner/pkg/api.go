@@ -306,3 +306,29 @@ func (api *ScannerAPI) UpdateBlockStats(hash string, payload map[string]interfac
 	}
 	return nil
 }
+
+// ================== 扩展：转账事件 & Solana 明细 ==================
+
+// UploadTransferEventsBatch 批量上传跨链转账事件
+func (api *ScannerAPI) UploadTransferEventsBatch(events []map[string]interface{}) error {
+	if len(events) == 0 {
+		return nil
+	}
+	body := map[string]interface{}{"events": events}
+	if err := api.client.POST("/api/v1/transfers/create/batch", body, nil); err != nil {
+		return fmt.Errorf("upload transfer events failed: %w", err)
+	}
+	return nil
+}
+
+// UploadSolTxDetail 上传单笔Sol交易明细及指令
+func (api *ScannerAPI) UploadSolTxDetail(detail map[string]interface{}, instructions []map[string]interface{}) error {
+	body := map[string]interface{}{
+		"detail":       detail,
+		"instructions": instructions,
+	}
+	if err := api.client.POST("/api/v1/sol/tx/detail", body, nil); err != nil {
+		return fmt.Errorf("upload sol tx detail failed: %w", err)
+	}
+	return nil
+}

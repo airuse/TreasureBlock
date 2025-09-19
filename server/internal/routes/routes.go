@@ -29,6 +29,8 @@ func SetupRoutes(
 	homeHandler *handlers.HomeHandler,
 	earningsHandler *handlers.EarningsHandler,
 	gasHandler *handlers.GasHandler,
+	transferEventHandler *handlers.TransferEventHandler,
+	solHandler *handlers.SolHandler,
 	authService services.AuthService,
 	apiKeyRepo repository.APIKeyRepository,
 	requestLogRepo repository.RequestLogRepository,
@@ -200,6 +202,18 @@ func SetupRoutes(
 			transactions.POST("/create/batch", txHandler.CreateTransactionsBatch)                         // 批量创建交易记录
 			transactions.GET("/receipt/:hash", txHandler.GetTransactionReceiptByHash)                     // 根据哈希获取交易凭证
 			transactions.GET("/parsed/:hash", contractParseResultHandler.GetByTxHash)                     // 根据哈希获取解析结果
+		}
+
+		// 转账事件（供扫描器调用）
+		transfers := v1.Group("/transfers")
+		{
+			transfers.POST("/create/batch", transferEventHandler.CreateBatch)
+		}
+
+		// Solana 专属
+		sol := v1.Group("/sol")
+		{
+			sol.POST("/tx/detail", solHandler.CreateTxDetail)
 		}
 
 		// 地址相关路由

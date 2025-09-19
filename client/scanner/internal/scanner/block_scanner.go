@@ -141,7 +141,7 @@ func (bs *BlockScanner) initializeScanners() {
 			scanner = scanners.NewBSCScanner(bscConfig)
 		case "sol":
 			solConfig := &chainConfig
-			scanner = scanners.NewSolanaScanner(solConfig) // 使用原生实现
+			scanner = scanners.NewSolanaScanner(solConfig) // 使用改进的原生实现
 		default:
 			logrus.Warnf("Unsupported chain: %s", chainName)
 			continue
@@ -642,6 +642,11 @@ func (bs *BlockScanner) submitTransactionsBatch(chainName string, block *models.
 	}
 
 	logrus.Infof("[%s] Successfully uploaded %d transactions in batch for block %d", chainName, len(batchTransactions), block.Height)
+
+	// 如果是 Sol 链，额外上传转账事件与交易明细（最佳努力）
+	if chainName == "sol" {
+		bs.processSolanaArtifacts(transactions, block)
+	}
 	return nil
 }
 
@@ -702,7 +707,26 @@ func (bs *BlockScanner) submitTransactionsIndividually(chainName string, block *
 	}
 
 	logrus.Infof("[%s] Successfully uploaded %d transactions individually for block %d", chainName, len(transactions), block.Height)
+	if chainName == "sol" {
+		bs.processSolanaArtifacts(transactions, block)
+	}
 	return nil
+}
+
+// processSolanaArtifacts 处理 Solana 特定的工件（委托给 SolanaScanner）
+func (bs *BlockScanner) processSolanaArtifacts(transactions []map[string]interface{}, block *models.Block) {
+	// 获取 Solana 扫描器实例
+	if solanaScanner, exists := bs.scanners["sol"]; exists {
+		if solScanner, ok := solanaScanner.(*scanners.SolanaScanner); ok {
+			// 转换 block 为通用格式
+			blockData := map[string]interface{}{
+				"height": block.Height,
+				"hash":   block.Hash,
+			}
+			// 委托给 Solana 扫描器处理
+			solScanner.ProcessSolanaArtifacts(transactions, blockData)
+		}
+	}
 }
 
 // buildTransactionRequest 构建交易请求数据

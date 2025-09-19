@@ -102,9 +102,15 @@ func New() *Server {
 	)
 	contractParseResultRepo := repository.NewContractParseResultRepository()
 	contractParseResultService := services.NewContractParseService(contractParseResultRepo, transactionReceiptRepo, txRepo, blockRepo, parserConfigRepo, coinConfigRepo, userAddressRepo)
+	transferEventRepo := repository.NewTransferEventRepository()
+	transferEventService := services.NewTransferEventService(transferEventRepo)
+	solRepo := repository.NewSolRepository()
+	solService := services.NewSolService(solRepo)
 
 	// 创建处理器
 	txHandler := handlers.NewTransactionHandler(txService, transactionReceiptService, parserConfigRepo, blockVerificationService, contractParseResultService, coinConfigService, userAddressService)
+	transferEventHandler := handlers.NewTransferEventHandler(transferEventService)
+	solHandler := handlers.NewSolHandler(solService)
 	wsHandler := handlers.NewWebSocketHandler()
 	blockHandler := handlers.NewBlockHandler(blockService, wsHandler)
 	addressHandler := handlers.NewAddressHandler(addressService)
@@ -167,6 +173,8 @@ func New() *Server {
 		homeHandler,
 		earningsHandler,
 		gasHandler,
+		transferEventHandler,
+		solHandler,
 		authService,
 		apiKeyRepo,
 		requestLogRepo,

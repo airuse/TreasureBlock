@@ -1,12 +1,17 @@
 package failover
 
 import (
+	"context"
+	"encoding/json"
 	"fmt"
 	"strings"
 	"sync/atomic"
 	"time"
 
-	"github.com/gagliardetto/solana-go/rpc"
+	"github.com/blocto/solana-go-sdk/client"
+	"github.com/blocto/solana-go-sdk/common"
+	"github.com/blocto/solana-go-sdk/rpc"
+	"github.com/sirupsen/logrus"
 )
 
 // SOLNodeStatus 节点状态
@@ -27,65 +32,62 @@ type SOLNodeState struct {
 	totalRequests int64
 }
 
-// SOLRequestTask 请求任务
-type SOLRequestTask struct {
-	ID        string
-	Operation string
-	Callback  func(*rpc.Client) (interface{}, error)
-}
-
-// SOLFailoverManager Solana 故障转移调度器（基于 RPC Client）
-// localClient 可为空；externalClients 长度可以为0或多个
-// 注意：该管理器是轻量即时执行的，不维护后台协程
+// SOLFailoverManager Solana 故障转移调度器（基于 blocto/solana-go-sdk）
 type SOLFailoverManager struct {
-	localClient     *rpc.Client
-	externalClients []*rpc.Client
-	nodeStates      []*SOLNodeState
+	mainClient      *client.Client
+	failoverClients []*client.Client
+	failoverStates  []*SOLNodeState // 只存储故障转移节点的状态
 	currentIndex    int64
 }
 
 // NewSOLFailoverManager 创建管理器
-func NewSOLFailoverManager(localClient *rpc.Client, externalClients []*rpc.Client) *SOLFailoverManager {
-	states := make([]*SOLNodeState, len(externalClients))
-	for i := range states {
-		states[i] = &SOLNodeState{status: SOLNodeHealthy}
+func NewSOLFailoverManager(mainClient *client.Client, failoverClients []*client.Client) *SOLFailoverManager {
+	// 只为故障转移节点创建状态
+	failoverStates := make([]*SOLNodeState, len(failoverClients))
+	for i := range failoverStates {
+		failoverStates[i] = &SOLNodeState{status: SOLNodeHealthy}
 	}
+
 	return &SOLFailoverManager{
-		localClient:     localClient,
-		externalClients: externalClients,
-		nodeStates:      states,
+		mainClient:      mainClient,
+		failoverClients: failoverClients,
+		failoverStates:  failoverStates,
 	}
 }
 
 // Execute 执行带故障转移的请求
-func (m *SOLFailoverManager) Execute(operation string, cb func(*rpc.Client) (interface{}, error)) (interface{}, error) {
+func (m *SOLFailoverManager) Execute(ctx context.Context, operation string, cb func(*client.Client) (interface{}, error)) (interface{}, error) {
 	start := time.Now()
 
-	// 尝试本地节点
-	if m.localClient != nil {
-		if data, err := cb(m.localClient); err == nil {
+	// 首先尝试主客户端
+	if m.mainClient != nil {
+		if data, err := cb(m.mainClient); err == nil {
+			logrus.Debugf("[sol] Main client %s succeeded", operation)
 			return data, nil
+		} else {
+			logrus.Warnf("[sol] Main client %s failed: %v", operation, err)
 		}
 	}
 
-	// 轮询外部节点，直到成功或全部失败
-	if len(m.externalClients) == 0 {
-		return nil, fmt.Errorf("failed to %s: no nodes configured", operation)
+	// 主客户端失败后，轮询故障转移客户端
+	if len(m.failoverClients) == 0 {
+		return nil, fmt.Errorf("failed to %s: no failover clients configured", operation)
 	}
 
-	startIndex := int(atomic.AddInt64(&m.currentIndex, 1)) % len(m.externalClients)
-	for i := 0; i < len(m.externalClients); i++ {
-		idx := (startIndex + i) % len(m.externalClients)
-		client := m.externalClients[idx]
-		node := m.nodeStates[idx]
+	startIndex := int(atomic.AddInt64(&m.currentIndex, 1)) % len(m.failoverClients)
+	for i := 0; i < len(m.failoverClients); i++ {
+		idx := (startIndex + i) % len(m.failoverClients)
+		client := m.failoverClients[idx]
+		node := m.failoverStates[idx] // 直接使用故障转移节点状态
 
-		// 检查休息
+		// 检查休息状态
 		now := time.Now()
 		if node.status != SOLNodeHealthy && now.Before(node.restUntil) {
+			logrus.Debugf("[sol] Failover client %d is resting until %v", idx, node.restUntil)
 			continue
 		}
 		if node.status != SOLNodeHealthy && now.After(node.restUntil) {
-			m.resetNode(idx)
+			m.resetFailoverNode(idx)
 		}
 
 		if node.firstCallTime.IsZero() {
@@ -96,116 +98,187 @@ func (m *SOLFailoverManager) Execute(operation string, cb func(*rpc.Client) (int
 
 		data, err := cb(client)
 		if err == nil {
+			logrus.Infof("[sol] Failover client %d %s succeeded", idx, operation)
 			return data, nil
 		}
 
 		// 根据错误设置休息策略
 		if m.isRateLimit(err) {
+			logrus.Warnf("[sol] Failover client %d %s rate limited", idx, operation)
 			node.status = SOLNodeOverheat
 			used := node.lastCallTime.Sub(node.firstCallTime)
 			rest := time.Second - used
 			if rest < 0 {
-				rest = time.Millisecond * 10
+				rest = time.Millisecond * 10000
 			}
 			node.restUntil = now.Add(rest)
 		} else {
+			logrus.Warnf("[sol] Failover client %d %s failed: %v", idx, operation, err)
 			node.status = SOLNodeDamaged
 			node.restUntil = now.Add(10 * time.Second)
 		}
 	}
 
-	return nil, fmt.Errorf("failed to %s: all nodes failed after %v", operation, time.Since(start))
+	return nil, fmt.Errorf("failed to %s: all clients failed after %v", operation, time.Since(start))
 }
 
-// 便捷方法族
-func (m *SOLFailoverManager) CallWithFailover(operation string, cb func(*rpc.Client) error) error {
-	_, err := m.Execute(operation, func(client *rpc.Client) (interface{}, error) {
-		return nil, cb(client)
-	})
-	return err
-}
-
-func (m *SOLFailoverManager) CallWithFailoverUint64(operation string, cb func(*rpc.Client) (uint64, error)) (uint64, error) {
-	res, err := m.Execute(operation, func(client *rpc.Client) (interface{}, error) {
-		return cb(client)
+// GetSlot 获取最新slot
+func (m *SOLFailoverManager) GetSlot(ctx context.Context) (uint64, error) {
+	res, err := m.Execute(ctx, "GetSlot", func(c *client.Client) (interface{}, error) {
+		return c.GetSlot(ctx)
 	})
 	if err != nil {
 		return 0, err
 	}
-	if v, ok := res.(uint64); ok {
-		return v, nil
+	if slot, ok := res.(uint64); ok {
+		return slot, nil
 	}
-	return 0, fmt.Errorf("unexpected result type")
+	return 0, fmt.Errorf("unexpected result type for GetSlot")
 }
 
-func (m *SOLFailoverManager) CallWithFailoverSlot(operation string, cb func(*rpc.Client) (uint64, error)) (uint64, error) {
-	res, err := m.Execute(operation, func(client *rpc.Client) (interface{}, error) {
-		return cb(client)
-	})
-	if err != nil {
-		return 0, err
-	}
-	if v, ok := res.(uint64); ok {
-		return v, nil
-	}
-	return 0, fmt.Errorf("unexpected result type")
-}
-
-func (m *SOLFailoverManager) CallWithFailoverBlock(operation string, cb func(*rpc.Client) (*rpc.GetBlockResult, error)) (*rpc.GetBlockResult, error) {
-	res, err := m.Execute(operation, func(client *rpc.Client) (interface{}, error) {
-		return cb(client)
+// GetBlock 获取区块
+func (m *SOLFailoverManager) GetBlock(ctx context.Context, slot uint64) (*client.Block, error) {
+	res, err := m.Execute(ctx, "GetBlock", func(c *client.Client) (interface{}, error) {
+		// 使用自定义的RPC配置来支持jsonParsed编码和版本化交易
+		return c.RpcClient.GetBlockWithConfig(ctx, slot, rpc.GetBlockConfig{
+			Encoding:                       rpc.GetBlockConfigEncodingJsonParsed,
+			Commitment:                     rpc.CommitmentFinalized,
+			MaxSupportedTransactionVersion: &[]uint8{0}[0], // 支持版本化交易
+		})
 	})
 	if err != nil {
 		return nil, err
 	}
-	if v, ok := res.(*rpc.GetBlockResult); ok {
-		return v, nil
+
+	// 调试输出
+
+	// 手动转换RPC响应为Block结构
+	if response, ok := res.(rpc.JsonRpcResponse[*rpc.GetBlock]); ok && response.Result != nil {
+		// 由于jsonParsed格式与SDK的Block结构不完全兼容，
+		// 我们需要创建一个简化的Block结构来适配
+		var blockTime *time.Time
+		if response.Result.BlockTime != nil {
+			t := time.Unix(*response.Result.BlockTime, 0)
+			blockTime = &t
+		}
+
+		block := &client.Block{
+			Blockhash:         response.Result.Blockhash,
+			BlockTime:         blockTime,
+			BlockHeight:       response.Result.BlockHeight,
+			PreviousBlockhash: response.Result.PreviousBlockhash,
+			ParentSlot:        response.Result.ParentSlot,
+			Signatures:        response.Result.Signatures,
+			Rewards:           convertRewards(response.Result.Rewards),
+		}
+
+		// 转换交易数据
+		transactions := make([]client.BlockTransaction, 0, len(response.Result.Transactions))
+		for _, rpcTx := range response.Result.Transactions {
+			// 创建简化的交易结构
+			tx := client.BlockTransaction{
+				Meta: convertTransactionMeta(rpcTx.Meta),
+			}
+
+			// 从jsonParsed数据中提取账户密钥
+			if txData, ok := rpcTx.Transaction.(map[string]interface{}); ok {
+				if message, ok := txData["message"].(map[string]interface{}); ok {
+					if accountKeys, ok := message["accountKeys"].([]interface{}); ok {
+						keys := make([]common.PublicKey, 0, len(accountKeys))
+						for _, keyData := range accountKeys {
+							if keyMap, ok := keyData.(map[string]interface{}); ok {
+								if pubkey, ok := keyMap["pubkey"].(string); ok {
+									keys = append(keys, common.PublicKeyFromString(pubkey))
+								}
+							}
+						}
+						tx.AccountKeys = keys
+					}
+				}
+			}
+
+			transactions = append(transactions, tx)
+		}
+		block.Transactions = transactions
+
+		return block, nil
 	}
-	return nil, fmt.Errorf("unexpected result type")
+	return nil, fmt.Errorf("unexpected result type for GetBlock")
 }
 
-func (m *SOLFailoverManager) CallWithFailoverString(operation string, cb func(*rpc.Client) (string, error)) (string, error) {
-	res, err := m.Execute(operation, func(client *rpc.Client) (interface{}, error) {
-		return cb(client)
-	})
-	if err != nil {
-		return "", err
-	}
-	if v, ok := res.(string); ok {
-		return v, nil
-	}
-	return "", fmt.Errorf("unexpected result type")
-}
-
-func (m *SOLFailoverManager) CallWithFailoverMap(operation string, cb func(*rpc.Client) (map[string]interface{}, error)) (map[string]interface{}, error) {
-	res, err := m.Execute(operation, func(client *rpc.Client) (interface{}, error) {
-		return cb(client)
+// GetBlockRaw 获取原始区块数据（用于jsonParsed格式的深度解析）
+func (m *SOLFailoverManager) GetBlockRaw(ctx context.Context, slot uint64) (map[string]interface{}, error) {
+	res, err := m.Execute(ctx, "GetBlockRaw", func(c *client.Client) (interface{}, error) {
+		// 直接调用RPC客户端获取原始响应
+		return c.RpcClient.GetBlockWithConfig(ctx, slot, rpc.GetBlockConfig{
+			Encoding:                       rpc.GetBlockConfigEncodingJsonParsed,
+			Commitment:                     rpc.CommitmentFinalized,
+			MaxSupportedTransactionVersion: &[]uint8{0}[0], // 支持版本化交易
+		})
 	})
 	if err != nil {
 		return nil, err
 	}
-	if v, ok := res.(map[string]interface{}); ok {
-		return v, nil
+
+	// 将响应转换为map以便进一步处理
+	if response, ok := res.(rpc.JsonRpcResponse[*rpc.GetBlock]); ok && response.Result != nil {
+		// 将RPC响应转换为map
+		jsonData, err := json.Marshal(response.Result)
+		if err != nil {
+			return nil, fmt.Errorf("failed to marshal block data: %v", err)
+		}
+
+		var blockMap map[string]interface{}
+		if err := json.Unmarshal(jsonData, &blockMap); err != nil {
+			return nil, fmt.Errorf("failed to unmarshal block data: %v", err)
+		}
+
+		return blockMap, nil
 	}
-	return nil, fmt.Errorf("unexpected result type")
+	return nil, fmt.Errorf("unexpected result type for GetBlockRaw")
 }
 
-func (m *SOLFailoverManager) CallWithFailoverMaps(operation string, cb func(*rpc.Client) ([]map[string]interface{}, error)) ([]map[string]interface{}, error) {
-	res, err := m.Execute(operation, func(client *rpc.Client) (interface{}, error) {
-		return cb(client)
-	})
-	if err != nil {
-		return nil, err
+// convertRewards 转换奖励数据
+func convertRewards(rewards []rpc.Reward) []client.Reward {
+	if len(rewards) == 0 {
+		return nil
 	}
-	if v, ok := res.([]map[string]interface{}); ok {
-		return v, nil
+
+	result := make([]client.Reward, 0, len(rewards))
+	for _, r := range rewards {
+		result = append(result, client.Reward{
+			Pubkey:     common.PublicKeyFromString(r.Pubkey),
+			Lamports:   r.Lamports,
+			RewardType: r.RewardType,
+			Commission: r.Commission,
+		})
 	}
-	return nil, fmt.Errorf("unexpected result type")
+	return result
 }
 
-// 私有工具
-func (m *SOLFailoverManager) resetNode(idx int) {
-	n := m.nodeStates[idx]
+// convertTransactionMeta 转换交易元数据（简化版本）
+func convertTransactionMeta(meta *rpc.TransactionMeta) *client.TransactionMeta {
+	if meta == nil {
+		return nil
+	}
+
+	// 简化转换，只转换基本字段
+	return &client.TransactionMeta{
+		Err:                  meta.Err,
+		Fee:                  meta.Fee,
+		PreBalances:          meta.PreBalances,
+		PostBalances:         meta.PostBalances,
+		LogMessages:          meta.LogMessages,
+		ComputeUnitsConsumed: meta.ComputeUnitsConsumed,
+	}
+}
+
+// 私有工具方法
+func (m *SOLFailoverManager) resetFailoverNode(idx int) {
+	if idx >= len(m.failoverStates) {
+		return
+	}
+	n := m.failoverStates[idx]
 	n.status = SOLNodeHealthy
 	n.firstCallTime = time.Time{}
 	n.lastCallTime = time.Time{}
@@ -220,21 +293,23 @@ func (m *SOLFailoverManager) isRateLimit(err error) bool {
 	return strings.Contains(es, "429") ||
 		strings.Contains(es, "rate limit") ||
 		strings.Contains(es, "too many requests") ||
-		strings.Contains(es, "request limit")
+		strings.Contains(es, "request limit") ||
+		strings.Contains(es, "throttled")
 }
 
 // GetStats 获取统计信息
 func (m *SOLFailoverManager) GetStats() map[string]interface{} {
-	healthyNodes := 0
-	for _, node := range m.nodeStates {
+	healthyFailoverNodes := 0
+	for _, node := range m.failoverStates {
 		if node.status == SOLNodeHealthy {
-			healthyNodes++
+			healthyFailoverNodes++
 		}
 	}
 
 	return map[string]interface{}{
-		"healthy_nodes": healthyNodes,
-		"total_nodes":   len(m.nodeStates),
-		"local_client":  m.localClient != nil,
+		"main_client":            m.mainClient != nil,
+		"failover_clients":       len(m.failoverClients),
+		"healthy_failover_nodes": healthyFailoverNodes,
+		"total_failover_nodes":   len(m.failoverStates),
 	}
 }

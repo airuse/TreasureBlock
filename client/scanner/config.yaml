@@ -167,7 +167,7 @@ blockchain:
       symbol: "SOL"
       decimals: 9
       enabled: true
-      rpc_url: "https://solana-devnet.core.chainstack.com/2b6c4bfadb9ea95696b79cd68125601a"
+      # rpc_url: "https://solana-devnet.core.chainstack.com/2b6c4bfadb9ea95696b79cd68125601a"
       explorer_api_urls:
         - "https://solana-devnet.core.chainstack.com/2b6c4bfadb9ea95696b79cd68125601a"
         - "https://solana-devnet.core.chainstack.com/ba227c34aa1687ce7fb29c3c582dbeea"
@@ -197,7 +197,7 @@ blockchain:
         batch_size: 1000             # 批量上传大小，默认1000条交易
         batch_timeout: 30s           # 批量上传超时时间
         # 预取与批处理参数
-        prefetch_window: 16          # 预取窗口大小（SOL最快，窗口更大）
+        prefetch_window: 1          # 预取窗口大小（SOL最快，窗口更大）
         heights_per_cycle: 1         # 每个扫描周期处理的区块数量（提升吞吐）
 
 log:
