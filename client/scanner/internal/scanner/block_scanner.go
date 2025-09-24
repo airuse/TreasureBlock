@@ -631,21 +631,23 @@ func (bs *BlockScanner) submitTransactionsBatch(chainName string, block *models.
 
 	// 使用批量上传API
 	logrus.Infof("[%s] Uploading %d transactions in batch for block %d", chainName, len(batchTransactions), block.Height)
+	if chainName != "sol" {
 
-	if err := api.UploadTransactionsBatch(batchTransactions); err != nil {
-		// 检查是否为致命错误，如果是就直接退出程序
-		if strings.Contains(strings.ToUpper(err.Error()), "BLOCK_TRANSACTION_FAILED") {
-			pkg.HandleFatalError(err, "交易批量上传失败")
+		if err := api.UploadTransactionsBatch(batchTransactions); err != nil {
+			// 检查是否为致命错误，如果是就直接退出程序
+			if strings.Contains(strings.ToUpper(err.Error()), "BLOCK_TRANSACTION_FAILED") {
+				pkg.HandleFatalError(err, "交易批量上传失败")
+			}
+
+			return fmt.Errorf("batch upload transactions failed: %w", err)
 		}
-
-		return fmt.Errorf("batch upload transactions failed: %w", err)
 	}
 
 	logrus.Infof("[%s] Successfully uploaded %d transactions in batch for block %d", chainName, len(batchTransactions), block.Height)
 
 	// 如果是 Sol 链，额外上传转账事件与交易明细（最佳努力）
 	if chainName == "sol" {
-		bs.processSolanaArtifacts(transactions, block)
+		bs.processSolanaArtifacts(transactions, block, blockID)
 	}
 	return nil
 }
@@ -678,17 +680,20 @@ func (bs *BlockScanner) submitTransactionsIndividually(chainName string, block *
 			// 构建交易请求数据
 			txRequest := bs.buildTransactionRequest(chainName, block, tx, blockID)
 
-			// 上传交易
-			if err := api.UploadTransaction(txRequest); err != nil {
-				// 检查是否为致命错误，如果是就直接退出程序
-				if strings.Contains(strings.ToUpper(err.Error()), "BLOCK_TRANSACTION_FAILED") {
-					pkg.HandleFatalError(err, "交易上传失败")
-				}
+			if chainName != "sol" {
 
-				logrus.Warnf("[%s] Failed to upload transaction %v: %v", chainName, tx["hash"], err)
-				// 收集非致命错误，等待全部完成后再统一返回
-				errCh <- err
-				return
+				// 上传交易
+				if err := api.UploadTransaction(txRequest); err != nil {
+					// 检查是否为致命错误，如果是就直接退出程序
+					if strings.Contains(strings.ToUpper(err.Error()), "BLOCK_TRANSACTION_FAILED") {
+						pkg.HandleFatalError(err, "交易上传失败")
+					}
+
+					logrus.Warnf("[%s] Failed to upload transaction %v: %v", chainName, tx["hash"], err)
+					// 收集非致命错误，等待全部完成后再统一返回
+					errCh <- err
+					return
+				}
 			}
 		}(tx)
 	}
@@ -708,13 +713,13 @@ func (bs *BlockScanner) submitTransactionsIndividually(chainName string, block *
 
 	logrus.Infof("[%s] Successfully uploaded %d transactions individually for block %d", chainName, len(transactions), block.Height)
 	if chainName == "sol" {
-		bs.processSolanaArtifacts(transactions, block)
+		bs.processSolanaArtifacts(transactions, block, blockID)
 	}
 	return nil
 }
 
 // processSolanaArtifacts 处理 Solana 特定的工件（委托给 SolanaScanner）
-func (bs *BlockScanner) processSolanaArtifacts(transactions []map[string]interface{}, block *models.Block) {
+func (bs *BlockScanner) processSolanaArtifacts(transactions []map[string]interface{}, block *models.Block, blockID uint64) {
 	// 获取 Solana 扫描器实例
 	if solanaScanner, exists := bs.scanners["sol"]; exists {
 		if solScanner, ok := solanaScanner.(*scanners.SolanaScanner); ok {
@@ -724,7 +729,7 @@ func (bs *BlockScanner) processSolanaArtifacts(transactions []map[string]interfa
 				"hash":   block.Hash,
 			}
 			// 委托给 Solana 扫描器处理
-			solScanner.ProcessSolanaArtifacts(transactions, blockData)
+			solScanner.ProcessSolanaArtifacts(transactions, blockData, blockID)
 		}
 	}
 }
@@ -757,6 +762,13 @@ func (bs *BlockScanner) buildTransactionRequest(chainName string, block *models.
 		"amount": func() string {
 			if amount, ok := tx["value"].(float64); ok {
 				return strconv.FormatFloat(amount, 'f', -1, 64)
+			} else if amount, ok := tx["value"].(uint64); ok {
+				return strconv.FormatUint(amount, 10)
+			} else if amount, ok := tx["value"].(int); ok {
+				if amount < 0 {
+					return "0"
+				}
+				return strconv.FormatInt(int64(amount), 10)
 			} else if amount, ok := tx["value"].(string); ok {
 				return amount
 			}
@@ -773,6 +785,13 @@ func (bs *BlockScanner) buildTransactionRequest(chainName string, block *models.
 		"fee": func() string {
 			if fee, ok := tx["fee"].(float64); ok {
 				return strconv.FormatFloat(fee, 'f', -1, 64)
+			} else if fee, ok := tx["fee"].(uint64); ok {
+				return strconv.FormatUint(fee, 10)
+			} else if fee, ok := tx["fee"].(int); ok {
+				if fee < 0 {
+					return "0"
+				}
+				return strconv.FormatInt(int64(fee), 10)
 			} else if fee, ok := tx["fee"].(string); ok {
 				return fee
 			}

@@ -143,6 +143,7 @@ func SetupRoutes(
 
 		// Gas缓存（公开）：页面初次打开快速展示
 		noAuthAPI.GET("/gas/btc", gasHandler.GetBTCGasRatesCached)
+		noAuthAPI.GET("/gas/sol", gasHandler.GetSOLGasRatesCached)
 		contracts := noAuthAPI.Group("/contracts")
 		{
 			contracts.GET("", contractHandler.GetAllContracts)               // 获取所有合约
@@ -214,6 +215,15 @@ func SetupRoutes(
 		sol := v1.Group("/sol")
 		{
 			sol.POST("/tx/detail", solHandler.CreateTxDetail)
+			sol.POST("/tx/detail/batch", solHandler.CreateTxDetailBatch)
+			sol.GET("/tx/detail", solHandler.ListTxDetails)
+			sol.GET("/tx/:txId/artifacts", solHandler.GetArtifactsByTxID)
+			// Programs maintenance
+			sol.POST("/programs", solHandler.CreateProgram)
+			sol.GET("/programs", solHandler.ListPrograms)
+			sol.GET("/programs/:id", solHandler.GetProgram)
+			sol.PUT("/programs/:id", solHandler.UpdateProgram)
+			sol.DELETE("/programs/:id", solHandler.DeleteProgram)
 		}
 
 		// 地址相关路由

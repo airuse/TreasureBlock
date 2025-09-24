@@ -45,17 +45,17 @@
                   <input
                     type="radio"
                     v-model="transactionType"
-                    value="erc20"
+                    value="spl20"
                     class="mr-2 text-blue-600"
                     @change="handleTransactionTypeChange"
                   />
-                  <span class="text-sm text-gray-700">ERC-20代币</span>
+                  <span class="text-sm text-gray-700">SPL-Token</span>
                 </label>
               </div>
             </div>
 
             <!-- 合约操作类型选择 (仅ERC-20时显示) -->
-            <div v-if="transactionType === 'erc20'">
+            <div v-if="transactionType === 'spl20'">
               <label class="block text-sm font-medium text-gray-700 mb-2">合约操作类型</label>
               <div class="flex space-x-4">
                 <label class="flex items-center">
@@ -93,7 +93,7 @@
             </div>
 
             <!-- 代币选择 (仅ERC-20时显示) -->
-            <div v-if="transactionType === 'erc20'">
+            <div v-if="transactionType === 'spl20'">
               <label class="block text-sm font-medium text-gray-700 mb-2">选择代币</label>
               <div class="relative">
                 <input
@@ -389,7 +389,7 @@ const initEditForm = () => {
     
     // 设置交易类型
     if (tx.transaction_type === 'token') {
-      transactionType.value = 'erc20'
+      transactionType.value = 'spl20'
       // 设置代币相关信息
       if (tx.token_contract_address) {
         // 查找并设置选中的代币
@@ -822,7 +822,7 @@ const handleSubmit = async () => {
       return
     }
     
-    if (transactionType.value === 'erc20' && !selectedToken.value) {
+    if (transactionType.value === 'spl20' && !selectedToken.value) {
       alert('请选择代币')
       return
     }

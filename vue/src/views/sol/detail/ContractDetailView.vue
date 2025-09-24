@@ -3,7 +3,7 @@
     <!-- 页面标题和返回按钮 -->
     <div class="flex items-center space-x-4">
       <router-link 
-        to="/sol/addresses" 
+        to="/sol/programs" 
         class="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
       >
         <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">

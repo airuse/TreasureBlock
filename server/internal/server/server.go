@@ -104,8 +104,14 @@ func New() *Server {
 	contractParseResultService := services.NewContractParseService(contractParseResultRepo, transactionReceiptRepo, txRepo, blockRepo, parserConfigRepo, coinConfigRepo, userAddressRepo)
 	transferEventRepo := repository.NewTransferEventRepository()
 	transferEventService := services.NewTransferEventService(transferEventRepo)
-	solRepo := repository.NewSolRepository()
-	solService := services.NewSolService(solRepo)
+
+	// Solana 相关仓库和服务
+	solTxDetailRepo := repository.NewSolTxDetailRepository(database.GetDB())
+	solEventRepo := repository.NewSolEventRepository(database.GetDB())
+	solInstructionRepo := repository.NewSolInstructionRepository(database.GetDB())
+	solProgramRepo := repository.NewSolProgramRepository(database.GetDB())
+	solParsedExtraRepo := repository.NewSolParsedExtraRepository(database.GetDB())
+	solService := services.NewSolService(solTxDetailRepo, solEventRepo, solInstructionRepo, solProgramRepo, solParsedExtraRepo)
 
 	// 创建处理器
 	txHandler := handlers.NewTransactionHandler(txService, transactionReceiptService, parserConfigRepo, blockVerificationService, contractParseResultService, coinConfigService, userAddressService)
@@ -126,7 +132,7 @@ func New() *Server {
 	earningsHandler := handlers.NewEarningsHandler(earningsService)
 	userTransactionHandler := handlers.NewUserTransactionHandler()
 	contractParseResultHandler := handlers.NewContractParseResultHandler(contractParseResultService)
-	blockVerificationHandler := handlers.NewBlockVerificationHandler(blockVerificationService, earningsService, contractParseResultService, btcUTXOService, txService)
+	blockVerificationHandler := handlers.NewBlockVerificationHandler(blockVerificationService, earningsService, contractParseResultService, btcUTXOService, txService, solService)
 
 	// 启动WebSocket处理器
 	wsHandler.Start()

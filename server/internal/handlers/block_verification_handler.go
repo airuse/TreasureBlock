@@ -24,6 +24,7 @@ type BlockVerificationHandler struct {
 	contractParseService services.ContractParseService
 	btcUTXOService       services.BTCUTXOService
 	transactionService   services.TransactionService
+	solService           services.SolService
 	// 缓存每条链最后验证通过的区块高度
 	heightCache      map[string]uint64
 	heightCacheMutex sync.RWMutex
@@ -32,13 +33,14 @@ type BlockVerificationHandler struct {
 }
 
 // NewBlockVerificationHandler 创建区块验证处理器
-func NewBlockVerificationHandler(verificationService services.BlockVerificationService, earningsService services.EarningsService, contractParseService services.ContractParseService, btcUTXOService services.BTCUTXOService, transactionService services.TransactionService) *BlockVerificationHandler {
+func NewBlockVerificationHandler(verificationService services.BlockVerificationService, earningsService services.EarningsService, contractParseService services.ContractParseService, btcUTXOService services.BTCUTXOService, transactionService services.TransactionService, solService services.SolService) *BlockVerificationHandler {
 	return &BlockVerificationHandler{
 		verificationService:  verificationService,
 		earningsService:      earningsService,
 		contractParseService: contractParseService,
 		btcUTXOService:       btcUTXOService,
 		transactionService:   transactionService,
+		solService:           solService,
 		heightCache:          make(map[string]uint64),
 		cacheUpdatedAt:       make(map[string]time.Time),
 	}
@@ -100,6 +102,45 @@ func (h *BlockVerificationHandler) VerifyBlock(c *gin.Context) {
 		}
 	} else if block != nil && block.Chain == "eth" {
 		h.contractParseService.ParseBlockTransactions(c.Request.Context(), blockID)
+	} else if block != nil && block.Chain == "sol" {
+		// 解析 Sol 交易：根据维护的 Program 规则解析，保存事件/指令，不兼容数据入扩展表
+
+		details, err := h.solService.GetDetailsByBlockID(c.Request.Context(), blockID)
+		if err != nil {
+			logrus.Errorf("GetDetailsByBlockID failed for block %d: %v", blockID, err)
+		} else if len(details) > 0 {
+			programs, err := h.solService.GetAllPrograms(c.Request.Context())
+			if err != nil {
+				logrus.Errorf("GetAllPrograms failed: %v", err)
+			} else {
+				// 构建映射
+				programMap := make(map[string]*models.SolProgram, len(programs))
+				for _, p := range programs {
+					programMap[p.ProgramID] = p
+				}
+				for _, d := range details {
+					if d == nil {
+						continue
+					}
+					req, extra, err := h.solService.ParseUsingProgramRules(c.Request.Context(), d, programMap)
+					if err != nil {
+						logrus.Errorf("ParseUsingProgramRules failed tx %s: %v", d.TxID, err)
+						continue
+					}
+					// 转换额外数据
+					var extras []models.SolParsedExtra
+					if len(extra) > 0 {
+						for k, v := range extra {
+							bs, _ := json.Marshal(v)
+							extras = append(extras, models.SolParsedExtra{TxID: d.TxID, ProgramID: k, IsInner: false, Data: models.JSONText(string(bs))})
+						}
+					}
+					if err := h.solService.SaveArtifacts(c.Request.Context(), d.TxID, d.BlockID, d.Slot, req.Events, req.Instructions, extras); err != nil {
+						logrus.Errorf("SaveArtifacts failed tx %s: %v", d.TxID, err)
+					}
+				}
+			}
+		}
 	}
 
 	// 验证通过需要吧数据库 block 表的 verification_status 更新为 1
@@ -117,6 +158,7 @@ func (h *BlockVerificationHandler) VerifyBlock(c *gin.Context) {
 
 	// 获取用户ID
 	userID, exists := middleware.GetUserIDFromContext(c)
+
 	if !exists {
 		logrus.Errorf("Failed to get user ID from context for block verification earnings")
 	} else {
@@ -125,13 +167,12 @@ func (h *BlockVerificationHandler) VerifyBlock(c *gin.Context) {
 		if err != nil {
 			logrus.Errorf("Failed to get block info for earnings calculation: %v", err)
 		} else {
-			// 处理扫块收益
 			blockInfo := &dto.BlockEarningsInfo{
 				BlockID:          blockID,
 				BlockHeight:      block.Height,
 				Chain:            block.Chain,
-				TransactionCount: int64(result.Transactions),
-				EarningsAmount:   int64(result.Transactions), // 1个交易对应1个T币
+				TransactionCount: int64(block.TransactionCount),
+				EarningsAmount:   int64(block.TransactionCount), // 1个交易对应1个T币
 			}
 
 			if err := h.earningsService.ProcessBlockVerificationEarnings(c.Request.Context(), uint64(userID), blockInfo); err != nil {

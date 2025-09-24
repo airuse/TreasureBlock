@@ -13,6 +13,8 @@ import * as personalAddresses from './personal-addresses'
 import * as noAuth from './no-auth'
 import * as userTransactions from './user-transactions'
 import * as gas from './gas'
+import * as sol from './sol'
+import * as solPrograms from './sol-programs'
 
 // 统一导出所有API模块
 export {
@@ -29,7 +31,9 @@ export {
   personalAddresses,
   noAuth,
   userTransactions,
-  gas
+  gas,
+  sol,
+  solPrograms
 }
 
 // 默认导出所有模块
@@ -47,5 +51,7 @@ export default {
   personalAddresses,
   noAuth,
   userTransactions,
-  gas
+  gas,
+  sol,
+  solPrograms
 }

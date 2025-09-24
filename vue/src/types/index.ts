@@ -16,4 +16,6 @@ export * from './no-auth'
 export * from './user-transaction'
 export * from './gas'
 export * from './personal-address'
+export * from './sol'
+export * from './sol-program'
  

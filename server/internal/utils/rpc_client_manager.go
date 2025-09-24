@@ -23,6 +23,7 @@ type RPCClientManager struct {
 	ethFailovers map[string]*EthFailoverManager // 链名 -> ETH故障转移管理器
 	btcFailovers map[string]*BTCFailoverManager // 链名 -> BTC故障转移管理器
 	btcClients   map[string]*BitcoinRPCClient   // 链名 -> BTC客户端（保留用于兼容性）
+	solFailovers map[string]*SolFailoverManager // 链名 -> SOL故障转移管理器
 	logger       *logrus.Logger
 }
 
@@ -79,6 +80,7 @@ func NewRPCClientManager() *RPCClientManager {
 		ethFailovers: make(map[string]*EthFailoverManager),
 		btcFailovers: make(map[string]*BTCFailoverManager),
 		btcClients:   make(map[string]*BitcoinRPCClient),
+		solFailovers: make(map[string]*SolFailoverManager),
 		logger:       logrus.New(),
 	}
 
@@ -111,6 +113,13 @@ func NewRPCClientManager() *RPCClientManager {
 				manager.logger.Infof("Initialized BTC failover manager: %s", chainName)
 			} else {
 				manager.logger.Errorf("Failed to init BTC failover %s: %v", chainName, err)
+			}
+		case "sol", "solana":
+			if fo, err := NewSolFailoverFromChain(chainName); err == nil {
+				manager.solFailovers[chainName] = fo
+				manager.logger.Infof("Initialized SOL failover manager: %s", chainName)
+			} else {
+				manager.logger.Errorf("Failed to init SOL failover %s: %v", chainName, err)
 			}
 		}
 	}
@@ -1029,6 +1038,24 @@ func (m *RPCClientManager) GetBTCFailover(chain string) (*BTCFailoverManager, bo
 		}
 	}
 	return fo, exists
+}
+
+// GetSolanaClient 获取SOL故障转移管理器
+func (m *RPCClientManager) GetSolanaClient(chain string) (*SolFailoverManager, error) {
+	fo, exists := m.solFailovers[chain]
+	if !exists {
+		for key, f := range m.solFailovers {
+			if strings.Contains(strings.ToLower(key), "sol") {
+				fo = f
+				exists = true
+				break
+			}
+		}
+	}
+	if !exists {
+		return nil, fmt.Errorf("SOL客户端未找到: %s", chain)
+	}
+	return fo, nil
 }
 
 // Close 关闭所有连接

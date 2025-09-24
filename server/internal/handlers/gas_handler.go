@@ -34,8 +34,8 @@ func (h *GasHandler) GetGasRates(c *gin.Context) {
 	chain := c.DefaultQuery("chain", "eth")
 
 	// 验证链类型
-	if chain != "eth" && chain != "btc" && chain != "bsc" {
-		utils.ErrorResponse(c, http.StatusBadRequest, "不支持的链类型，仅支持eth、btc和bsc", nil)
+	if chain != "eth" && chain != "btc" && chain != "bsc" && chain != "sol" {
+		utils.ErrorResponse(c, http.StatusBadRequest, "不支持的链类型，仅支持eth、btc、bsc和sol", nil)
 		return
 	}
 
@@ -83,4 +83,21 @@ func (h *GasHandler) GetBTCGasRatesCached(c *gin.Context) {
 		return
 	}
 	utils.SuccessResponse(c, http.StatusOK, "获取BTC缓存费率成功", feeData)
+}
+
+// GetSOLGasRatesCached 获取SOL缓存费率信息（无鉴权初始加载用）
+// @Summary 获取SOL缓存费率信息（无鉴权）
+// @Description 读取调度器内存缓存的SOL费率，适合页面初次打开时快速展示
+// @Tags Gas费率
+// @Produce json
+// @Success 200 {object} utils.Response{data=services.FeeLevels} "获取成功"
+// @Failure 404 {object} utils.Response "暂无费率数据"
+// @Router /api/no-auth/gas/sol [get]
+func (h *GasHandler) GetSOLGasRatesCached(c *gin.Context) {
+	feeData := h.feeScheduler.GetLastFeeData("sol")
+	if feeData == nil {
+		utils.ErrorResponse(c, http.StatusNotFound, "暂无SOL费率数据，请稍后重试", nil)
+		return
+	}
+	utils.SuccessResponse(c, http.StatusOK, "获取SOL缓存费率成功", feeData)
 }

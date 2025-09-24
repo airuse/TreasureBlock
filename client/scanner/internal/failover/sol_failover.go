@@ -212,7 +212,7 @@ func (m *SOLFailoverManager) GetBlockRaw(ctx context.Context, slot uint64) (map[
 		// 直接调用RPC客户端获取原始响应
 		return c.RpcClient.GetBlockWithConfig(ctx, slot, rpc.GetBlockConfig{
 			Encoding:                       rpc.GetBlockConfigEncodingJsonParsed,
-			Commitment:                     rpc.CommitmentFinalized,
+			Commitment:                     rpc.Commitment(rpc.GetBlockConfigTransactionDetailsFull),
 			MaxSupportedTransactionVersion: &[]uint8{0}[0], // 支持版本化交易
 		})
 	})

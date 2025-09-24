@@ -151,7 +151,7 @@ func (m *BTCFailoverManager) getLatestBlockHeightFromURL(ctx context.Context, ba
 	client := &http.Client{Timeout: m.timeout}
 	resp, err := client.Do(req)
 	if err != nil {
-		fmt.Printf("读取响应体失败: %v\n", err)
+		fmt.Printf("读取响应体失败1: %v\n", err)
 		return 0, err
 	}
 	defer resp.Body.Close()
@@ -910,7 +910,7 @@ func (m *BTCFailoverManager) getMempoolTransactionsFromURL(ctx context.Context, 
 	client := &http.Client{Timeout: m.timeout}
 	resp, err := client.Do(req)
 	if err != nil {
-		fmt.Printf("读取响应体失败: %v\n", err)
+		fmt.Printf("读取响应体失败2: %v\n", err)
 		return nil, err
 	}
 	defer resp.Body.Close()
@@ -921,7 +921,7 @@ func (m *BTCFailoverManager) getMempoolTransactionsFromURL(ctx context.Context, 
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		fmt.Printf("读取响应体失败: %v\n", err)
+		fmt.Printf("读取响应体失败3: %v\n", err)
 		return nil, err
 	}
 

@@ -322,13 +322,17 @@ func (api *ScannerAPI) UploadTransferEventsBatch(events []map[string]interface{}
 }
 
 // UploadSolTxDetail 上传单笔Sol交易明细及指令
-func (api *ScannerAPI) UploadSolTxDetail(detail map[string]interface{}, instructions []map[string]interface{}) error {
-	body := map[string]interface{}{
-		"detail":       detail,
-		"instructions": instructions,
-	}
-	if err := api.client.POST("/api/v1/sol/tx/detail", body, nil); err != nil {
+func (api *ScannerAPI) UploadSolTxDetail(requestBody map[string]interface{}) error {
+	if err := api.client.POST("/api/v1/sol/tx/detail", requestBody, nil); err != nil {
 		return fmt.Errorf("upload sol tx detail failed: %w", err)
+	}
+	return nil
+}
+
+// UploadSolTxDetailBatch 批量上传Sol交易明细及指令
+func (api *ScannerAPI) UploadSolTxDetailBatch(requestBody map[string]interface{}) error {
+	if err := api.client.POST("/api/v1/sol/tx/detail/batch", requestBody, nil); err != nil {
+		return fmt.Errorf("upload sol tx detail batch failed: %w", err)
 	}
 	return nil
 }

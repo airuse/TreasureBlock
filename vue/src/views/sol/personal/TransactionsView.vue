@@ -31,8 +31,8 @@
       </div>
     </div>
 
-    <!-- 实时费率信息 -->
-    <div v-if="feeLevels" class="bg-white shadow rounded-lg">
+    <!-- 实时费率信息（SOL 默认关闭） -->
+    <div v-if="solFeeUIEnabled && feeLevels" class="bg-white shadow rounded-lg">
       <div class="px-4 py-3">
         <div class="flex items-center justify-between mb-3">
           <h3 class="text-lg leading-6 font-medium text-gray-900">实时费率信息</h3>
@@ -51,7 +51,7 @@
                   <span class="text-xs text-gray-500">基础费用</span>
                 </div>
                 <div class="text-sm text-gray-700">
-                  <span class="font-mono">{{ formatFeeWithPrecision(feeLevels.normal.base_fee) }} Gwei</span>
+                  <span class="font-mono">{{ formatSOLFee(feeLevels.normal.base_fee) }} lamports</span>
                 </div>
               </div>
               
@@ -59,10 +59,10 @@
               <div class="border border-gray-200 rounded-lg p-2.5">
                 <div class="flex items-center justify-between mb-1">
                   <h4 class="text-sm font-medium text-gray-900">慢速</h4>
-                  <span class="text-xs text-gray-500">0.5x 倍率</span>
+                  <span class="text-xs text-gray-500">低优先费</span>
                 </div>
                 <div class="text-sm text-gray-600">
-                  Priority: <span class="font-mono">{{ formatFeeWithPrecision(feeLevels.slow.max_priority_fee) }} Gwei</span>
+                  Priority: <span class="font-mono">{{ formatSOLFee(feeLevels.slow.max_priority_fee) }} lamports</span>
                 </div>
               </div>
               
@@ -70,10 +70,10 @@
               <div class="border border-blue-200 bg-blue-50 rounded-lg p-2.5">
                 <div class="flex items-center justify-between mb-1">
                   <h4 class="text-sm font-medium text-blue-900">普通</h4>
-                  <span class="text-xs text-blue-600">1.0x 倍率</span>
+                  <span class="text-xs text-blue-600">推荐优先费</span>
                 </div>
                 <div class="text-sm text-blue-800">
-                  Priority: <span class="font-mono">{{ formatFeeWithPrecision(feeLevels.normal.max_priority_fee) }} Gwei</span>
+                  Priority: <span class="font-mono">{{ formatSOLFee(feeLevels.normal.max_priority_fee) }} lamports</span>
                 </div>
               </div>
               
@@ -81,51 +81,31 @@
               <div class="border border-gray-200 rounded-lg p-2.5">
                 <div class="flex items-center justify-between mb-1">
                   <h4 class="text-sm font-medium text-gray-900">快速</h4>
-                  <span class="text-xs text-gray-500">2.0x 倍率</span>
+                  <span class="text-xs text-gray-500">高优先费</span>
                 </div>
                 <div class="text-sm text-gray-600">
-                  Priority: <span class="font-mono">{{ formatFeeWithPrecision(feeLevels.fast.max_priority_fee) }} Gwei</span>
+                  Priority: <span class="font-mono">{{ formatSOLFee(feeLevels.fast.max_priority_fee) }} lamports</span>
                 </div>
               </div>
             </div>
           </div>
           
-          <!-- 右侧：趋势图 -->
+          <!-- 右侧：优先费趋势图 -->
           <div class="flex-1 min-w-0">
-            <!-- 两个独立的折线图 -->
-            <div class="space-y-4">
-              <!-- Base Fee 图表 -->
-              <div class="relative">
-                <div class="text-sm font-medium text-gray-700 mb-2">Base Fee 趋势</div>
-                <div class="h-32">
-                  <canvas ref="baseFeeChartCanvas" class="w-full h-full cursor-crosshair"></canvas>
-                </div>
-                <!-- Base Fee 工具提示 -->
-                <div 
-                  ref="baseFeeTooltip" 
-                  class="absolute bg-gray-800 text-white text-xs px-2 py-1 rounded shadow-lg pointer-events-none opacity-0 transition-opacity duration-200 z-10"
-                  style="transform: translate(-50%, -100%); margin-top: -8px;"
-                >
-                  <div class="font-medium">Base Fee</div>
-                  <div class="text-gray-300">Value: <span class="text-white font-mono" id="tooltip-base-fee-value">0</span> Gwei</div>
-                </div>
+            <!-- 只显示优先费趋势图 -->
+            <div class="relative">
+              <div class="text-sm font-medium text-gray-700 mb-2">优先费趋势</div>
+              <div class="h-32">
+                <canvas ref="priorityFeeChartCanvas" class="w-full h-full cursor-crosshair"></canvas>
               </div>
-              
-              <!-- Max Priority Fee 图表 -->
-              <div class="relative">
-                <div class="text-sm font-medium text-gray-700 mb-2">Max Priority Fee 趋势</div>
-                <div class="h-32">
-                  <canvas ref="priorityFeeChartCanvas" class="w-full h-full cursor-crosshair"></canvas>
-                </div>
-                <!-- Priority Fee 工具提示 -->
-                <div 
-                  ref="priorityFeeTooltip" 
-                  class="absolute bg-gray-800 text-white text-xs px-2 py-1 rounded shadow-lg pointer-events-none opacity-0 transition-opacity duration-200 z-10"
-                  style="transform: translate(-50%, -100%); margin-top: -8px;"
-                >
-                  <div class="font-medium">Max Priority Fee</div>
-                  <div class="text-gray-300">Value: <span class="text-white font-mono" id="tooltip-priority-fee-value">0</span> Gwei</div>
-                </div>
+              <!-- Priority Fee 工具提示 -->
+              <div 
+                ref="priorityFeeTooltip" 
+                class="absolute bg-gray-800 text-white text-xs px-2 py-1 rounded shadow-lg pointer-events-none opacity-0 transition-opacity duration-200 z-10"
+                style="transform: translate(-50%, -100%); margin-top: -8px;"
+              >
+                <div class="font-medium">Priority Fee</div>
+                <div class="text-gray-300">Value: <span class="text-white font-mono" id="tooltip-priority-fee-value">0</span> lamports</div>
               </div>
             </div>
           </div>
@@ -403,8 +383,8 @@
       </div>
     </div>
 
-    <!-- 费率设置模态框 -->
-    <div v-if="showFeeModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
+    <!-- 费率设置模态框（SOL 默认关闭） -->
+    <div v-if="solFeeUIEnabled && showFeeModal" class="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
       <div class="bg-white rounded-lg shadow-xl max-w-2xl w-full mx-4">
         <div class="px-6 py-4 border-b border-gray-200">
           <h3 class="text-lg font-medium text-gray-900">设置交易费率</h3>
@@ -649,7 +629,7 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import type { UserTransaction, UserTransactionStatsResponse } from '@/types'
 import CreateTransactionModal from '@/components/sol/personal/CreateTransactionModal.vue'
 import { getUserTransactions, getUserTransactionStats, exportTransaction as exportTransactionAPI, importSignature as importSignatureAPI } from '@/api/user-transactions'
-import { getGasRates } from '@/api/gas'
+import { getGasRates, getSOLGasRatesCached } from '@/api/gas'
 import { useChainWebSocket } from '@/composables/useWebSocket'
 import { formatTokenAmount } from '@/utils/amountFormatter'
 import { convertWeiToGwei, formatFeeForDisplay } from '@/utils/unitConverter'
@@ -660,6 +640,7 @@ import type { TransactionStatusUpdate } from '@/utils/websocket'
 const showCreateModal = ref(false)
 const showImportModal = ref(false)
 const showFeeModal = ref(false) // 费率设置模态框
+const solFeeUIEnabled = ref(true) // 显示SOL费率信息（通过WS实时更新）
 const selectedStatus = ref('')
 const currentPage = ref(1)
 const pageSize = ref(10)
@@ -716,15 +697,11 @@ const networkCongestion = ref<string>('normal')
 // 费率历史数据存储（用于折线图）
 const feeHistory = ref<Array<{
   timestamp: number
-  baseFee: number
   maxPriorityFee: number
-  maxFee: number
 }>>([])
 
 // 图表相关
-const baseFeeChartCanvas = ref<HTMLCanvasElement | null>(null)
 const priorityFeeChartCanvas = ref<HTMLCanvasElement | null>(null)
-const baseFeeTooltip = ref<HTMLDivElement | null>(null)
 const priorityFeeTooltip = ref<HTMLDivElement | null>(null)
 let chartInstance: any = null
 
@@ -772,11 +749,11 @@ const getTransactionTypeText = (tx: UserTransaction) => {
   if (tx.transaction_type === 'coin' || tx.transaction_type === 'native') {
     return 'SOL 转账'
   } else if (tx.transaction_type === 'token') {
-    return `${tx.symbol} 代币转账`
+    return `${tx.symbol} SPL 代币转账`
   } else if (tx.symbol === 'SOL') {
     return 'SOL 转账'
   } else {
-    return `${tx.symbol} 代币转账`
+    return `${tx.symbol} SPL 代币转账`
   }
 }
 
@@ -803,6 +780,22 @@ const formatFeeWithPrecision = (feeInWei: string | number) => {
   
   // 保留9位小数
   return feeInGwei.toFixed(9)
+}
+
+// 格式化SOL费率，直接显示lamports
+const formatSOLFee = (feeInLamports: string | number) => {
+  if (!feeInLamports) return '0'
+  
+  // 直接返回lamports数值，不进行单位转换
+  const fee = typeof feeInLamports === 'string' ? parseFloat(feeInLamports) : feeInLamports
+  
+  // 如果是整数，不显示小数点
+  if (Number.isInteger(fee)) {
+    return fee.toString()
+  }
+  
+  // 如果有小数，保留2位小数
+  return fee.toFixed(2)
 }
 
 // 格式化时间
@@ -875,100 +868,19 @@ const copyToClipboard = async (text: string) => {
   }
 }
 
-// 导出交易 - 先显示费率设置模态框
-const exportTransaction = (tx: UserTransaction) => {
+// 导出交易（SOL 直接导出，无需费率设置）
+const exportTransaction = async (tx: UserTransaction) => {
   selectedTransaction.value = tx
-  showFeeModal.value = true
-}
-
-// 确认费率并导出交易
-const confirmFeeAndExport = async () => {
-  if (!selectedTransaction.value) return
-  
   try {
-    // 准备费率数据
-    let feeData: any = {}
-    console.log('🔍 前端费率设置调试信息:')
-    console.log('  feeMode.value:', feeMode.value)
-    console.log('  feeLevels.value:', feeLevels.value)
-    console.log('  autoFeeSpeed.value:', autoFeeSpeed.value)
-    console.log('  manualFee.value:', manualFee.value)
-    
-    if (feeMode.value === 'auto') {
-      // 使用实时费率数据
-      if (feeLevels.value) {
-        if (autoFeeSpeed.value === 'ultra-low') {
-          // 极低模式：Priority = 1 Wei, Max = Base + 1 Wei
-          const baseFeeWei = feeLevels.value.normal.base_fee
-          const maxFeeWei = (BigInt(baseFeeWei) + BigInt(1)).toString()
-          feeData = {
-            maxPriorityFeePerGas: '1', // 1 Wei
-            maxFeePerGas: maxFeeWei    // Base + 1 Wei
-          }
-          console.log('  ✅ 使用极低费率数据 (Wei):', feeData)
-        } else {
-          const selectedFee = feeLevels.value[autoFeeSpeed.value]
-          console.log('  selectedFee:', selectedFee)
-          // 实时费率数据已经是Wei单位，直接使用
-          feeData = {
-            maxPriorityFeePerGas: selectedFee.max_priority_fee,
-            maxFeePerGas: selectedFee.max_fee
-          }
-          console.log('  ✅ 使用实时费率数据 (Wei):', feeData)
-        }
-      } else {
-        // 降级到默认费率，转换为Wei
-        if (autoFeeSpeed.value === 'ultra-low') {
-          // 极低模式：Priority = 1 Wei, Max = 20 Gwei + 1 Wei
-          const baseFeeWei = (20 * 1e9).toString() // 20 Gwei
-          const maxFeeWei = (BigInt(baseFeeWei) + BigInt(1)).toString()
-          feeData = {
-            maxPriorityFeePerGas: '1', // 1 Wei
-            maxFeePerGas: maxFeeWei    // 20 Gwei + 1 Wei
-          }
-          console.log('  ⚠️ 使用极低默认费率数据 (Wei):', feeData)
-        } else {
-          const gasPrice = autoFeeRates[autoFeeSpeed.value]
-          feeData = {
-            maxPriorityFeePerGas: (gasPrice * 1e9).toString(), // 转换为Wei
-            maxFeePerGas: (gasPrice * 1.5 * 1e9).toString() // 转换为Wei
-          }
-          console.log('  ⚠️ 使用默认费率数据 (Wei):', feeData)
-        }
-      }
-    } else {
-      // 手动模式，将Gwei转换为Wei
-      const priorityFeeWei = (parseFloat(manualFee.value.maxPriorityFeePerGas) * 1e9).toString()
-      const maxFeeWei = (parseFloat(manualFee.value.maxFeePerGas) * 1e9).toString()
-      feeData = {
-        maxPriorityFeePerGas: priorityFeeWei,
-        maxFeePerGas: maxFeeWei
-      }
-      console.log('  ✅ 使用手动费率数据 (Wei):', feeData)
-    }
-    
-    // 调用导出API，传递费率数据
-    const response = await exportTransactionAPI(selectedTransaction.value.id, feeData)
+    const response = await exportTransactionAPI(tx.id, {})
     if (response.success) {
-      // 成功导出后，更新本地状态为未签名
-      selectedTransaction.value.status = 'unsigned'
-      
-      // 刷新列表与统计，确保计数正确
+      tx.status = 'unsigned'
       loadTransactions()
       loadTransactionStats()
-
-      // 关闭费率设置模态框
-      showFeeModal.value = false
-      
-      // 显示QR码预览模态框
-      selectedQRTransaction.value = selectedTransaction.value
+      selectedQRTransaction.value = tx
       showQRModal.value = true
-      qrCodeDataURL.value = '' // 重置QR码
-      
-      // 异步生成QR码
-      generateQRCode(response.data, selectedTransaction.value)
-      
-      
+      qrCodeDataURL.value = ''
+      generateQRCode(response.data, tx)
     } else {
       alert('导出交易失败: ' + response.message)
     }
@@ -976,6 +888,12 @@ const confirmFeeAndExport = async () => {
     console.error('导出交易失败:', error)
     alert('导出交易失败，请重试')
   }
+}
+
+// 确认费率并导出交易（SOL 不需要费率设置，直接导出）
+const confirmFeeAndExport = async () => {
+  if (!selectedTransaction.value) return
+  await exportTransaction(selectedTransaction.value)
 }
 
 // 生成QR码（用于预览）
@@ -1317,11 +1235,11 @@ Nonce: ${tx.nonce || '自动获取'}
 错误详情: ${tx.error_msg}`
   }
 
-  // 添加ERC-20相关信息
+  // 添加 SPL 代币相关信息
   if (tx.transaction_type === 'token') {
     details += `
 
-=== ERC-20 代币信息 ===
+=== SPL 代币信息 ===
 交易类型: 代币转账
 合约操作: ${getContractOperationText(tx.contract_operation_type || '')}
 代币合约地址: ${tx.token_contract_address || '未设置'}
@@ -1555,9 +1473,7 @@ const addFeeHistory = (feeData: FeeLevels) => {
   const now = Date.now()
   const historyItem = {
     timestamp: now,
-    baseFee: parseFloat(feeData.normal.base_fee || '0') / 1e9, // 转换为Gwei
-    maxPriorityFee: parseFloat(feeData.normal.max_priority_fee) / 1e9,
-    maxFee: parseFloat(feeData.normal.max_fee) / 1e9
+    maxPriorityFee: parseFloat(feeData.normal.max_priority_fee) // 直接使用lamports，不转换单位
   }
   
   // 添加到历史数据
@@ -1572,41 +1488,6 @@ const addFeeHistory = (feeData: FeeLevels) => {
   updateChart()
 }
 
-// Base Fee 鼠标移动事件处理
-const handleBaseFeeMouseMove = (event: MouseEvent) => {
-  if (!baseFeeChartCanvas.value || !baseFeeTooltip.value || feeHistory.value.length === 0) return
-  
-  const canvas = baseFeeChartCanvas.value
-  const rect = canvas.getBoundingClientRect()
-  const x = event.clientX - rect.left
-  const y = event.clientY - rect.top
-  
-  // 计算数据点索引
-  const padding = { top: 10, right: 10, bottom: 20, left: 40 }
-  const chartWidth = rect.width - padding.left - padding.right
-  const dataIndex = Math.round(((x - padding.left) / chartWidth) * (feeHistory.value.length - 1))
-  
-  // 确保索引在有效范围内
-  if (dataIndex >= 0 && dataIndex < feeHistory.value.length) {
-    const data = feeHistory.value[dataIndex]
-    
-    // 更新工具提示内容
-    const baseFeeElement = document.getElementById('tooltip-base-fee-value')
-    if (baseFeeElement) baseFeeElement.textContent = data.baseFee.toFixed(9)
-    
-    // 计算相对于父容器的位置
-    const parentRect = baseFeeTooltip.value.parentElement?.getBoundingClientRect()
-    
-    if (parentRect) {
-      const relativeX = event.clientX - parentRect.left
-      const relativeY = event.clientY - parentRect.top
-      
-      baseFeeTooltip.value.style.left = relativeX + 'px'
-      baseFeeTooltip.value.style.top = (relativeY - 10) + 'px'
-      baseFeeTooltip.value.style.opacity = '1'
-    }
-  }
-}
 
 // Priority Fee 鼠标移动事件处理
 const handlePriorityFeeMouseMove = (event: MouseEvent) => {
@@ -1628,7 +1509,7 @@ const handlePriorityFeeMouseMove = (event: MouseEvent) => {
     
     // 更新工具提示内容
     const priorityFeeElement = document.getElementById('tooltip-priority-fee-value')
-    if (priorityFeeElement) priorityFeeElement.textContent = data.maxPriorityFee.toFixed(9)
+    if (priorityFeeElement) priorityFeeElement.textContent = formatSOLFee(data.maxPriorityFee)
     
     // 计算相对于父容器的位置
     const parentRect = priorityFeeTooltip.value.parentElement?.getBoundingClientRect()
@@ -1644,12 +1525,6 @@ const handlePriorityFeeMouseMove = (event: MouseEvent) => {
   }
 }
 
-// Base Fee 鼠标离开事件处理
-const handleBaseFeeMouseLeave = () => {
-  if (baseFeeTooltip.value) {
-    baseFeeTooltip.value.style.opacity = '0'
-  }
-}
 
 // Priority Fee 鼠标离开事件处理
 const handlePriorityFeeMouseLeave = () => {
@@ -1743,7 +1618,14 @@ const drawSingleChart = (canvas: HTMLCanvasElement, data: number[], color: strin
   for (let i = 0; i <= 4; i++) {
     const value = minValue + (valueRange / 4) * (4 - i)
     const y = padding.top + (chartHeight / 4) * i
-    ctx.fillText(value.toFixed(6), padding.left - 5, y + 3)
+    // 根据数值大小调整精度
+    if (value >= 1000) {
+      ctx.fillText(value.toFixed(0), padding.left - 5, y + 3)
+    } else if (value >= 1) {
+      ctx.fillText(value.toFixed(1), padding.left - 5, y + 3)
+    } else {
+      ctx.fillText(value.toFixed(2), padding.left - 5, y + 3)
+    }
   }
 }
 
@@ -1751,27 +1633,14 @@ const drawSingleChart = (canvas: HTMLCanvasElement, data: number[], color: strin
 const updateChart = () => {
   if (feeHistory.value.length === 0) return
   
-  // 绘制 Base Fee 图表
-  if (baseFeeChartCanvas.value) {
-    const baseFeeData = feeHistory.value.map(item => item.baseFee)
-    drawSingleChart(
-      baseFeeChartCanvas.value, 
-      baseFeeData, 
-      '#6b7280', 
-      'Base Fee',
-      handleBaseFeeMouseMove,
-      handleBaseFeeMouseLeave
-    )
-  }
-  
-  // 绘制 Max Priority Fee 图表
+  // 只绘制 Max Priority Fee 图表
   if (priorityFeeChartCanvas.value) {
     const priorityFeeData = feeHistory.value.map(item => item.maxPriorityFee)
     drawSingleChart(
       priorityFeeChartCanvas.value, 
       priorityFeeData, 
       '#3b82f6', 
-      'Max Priority Fee',
+      'Priority Fee',
       handlePriorityFeeMouseMove,
       handlePriorityFeeMouseLeave
     )
@@ -1781,11 +1650,21 @@ const updateChart = () => {
 // 加载Gas费率数据
 const loadGasRates = async () => {
   try {
-    // console.log('🔄 加载Gas费率数据...')
-    const response = await getGasRates({ chain: 'sol' })
+    // console.log('🔄 加载SOL费率数据...')
+    
+    // 先尝试使用缓存接口（无鉴权，快速加载）
+    let response
+    try {
+      response = await getSOLGasRatesCached()
+      // console.log('✅ 使用缓存接口加载SOL费率数据成功:', response.data)
+    } catch (cacheError) {
+      console.warn('⚠️ 缓存接口失败，尝试认证接口:', cacheError)
+      // 如果缓存接口失败，回退到认证接口
+      response = await getGasRates({ chain: 'sol' })
+    }
     
     if (response.success) {
-      // console.log('✅ Gas费率数据加载成功:', response.data)
+      // console.log('✅ SOL费率数据加载成功:', response.data)
       feeLevels.value = response.data
       
       // 添加历史数据
@@ -1799,10 +1678,10 @@ const loadGasRates = async () => {
       // 立即更新图表显示
       updateChart()
     } else {
-      console.warn('⚠️ Gas费率数据加载失败:', response.message)
+      console.warn('⚠️ SOL费率数据加载失败:', response.message)
     }
   } catch (error) {
-    console.error('❌ 加载Gas费率数据失败:', error)
+    console.error('❌ 加载SOL费率数据失败:', error)
   }
 }
 

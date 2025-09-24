@@ -201,6 +201,7 @@
                 <path v-if="item.name === '首页'" d="M10.707 2.293a1 1 0 00-1.414 0l-7 7a1 1 0 001.414 1.414L4 10.414V17a1 1 0 001 1h2a1 1 0 001-1v-2a1 1 0 011-1h2a1 1 0 011 1v2a1 1 0 001 1h2a1 1 0 001-1v-6.586l.293.293a1 1 0 001.414-1.414l-7-7z"/>
                 <path v-else-if="item.name === '区块'" d="M11 17a1 1 0 001.447.894l4-2A1 1 0 0017 15V9.236a1 1 0 00-1.447-.894l-4 2a1 1 0 00-.553.894V17zM15.211 6.276a1 1 0 000-1.552l-4.764-3.368a1 1 0 00-1.447 0L4.789 4.724a1 1 0 000 1.552l4.764 3.368a1 1 0 001.447 0l4.764-3.368zM4.447 8.342A1 1 0 003 9.236V15a1 1 0 00.553.894l4 2A1 1 0 009 17v-5.764a1 1 0 00-.553-.894l-4-2z"/>
                 <path v-else-if="item.name === '地址'" d="M13 6a3 3 0 11-6 0 3 3 0 016 0zM18 8a2 2 0 11-4 0 2 2 0 014 0zM14 15a4 4 0 00-8 0v3h8v-3z"/>
+                <path v-else-if="item.name === '程序'" d="M4 5h12v2H4V5zm0 4h12v2H4V9zm0 4h12v2H4v-2z"/>
                 <path v-else-if="item.name === '统计'" d="M2 11a1 1 0 011-1h2a1 1 0 011 1v5a1 1 0 01-1 1H3a1 1 0 01-1-1v-5zM8 7a1 1 0 011-1h2a1 1 0 011 1v9a1 1 0 01-1 1H9a1 1 0 01-1-1V7zM14 4a1 1 0 011-1h2a1 1 0 011 1v12a1 1 0 01-1 1h-2a1 1 0 01-1-1V4z"/>
               </svg>
               {{ item.name }}
@@ -334,7 +335,7 @@ const menuItems = computed(() => {
     return [
       { name: '首页', path: basePath },
       { name: '区块', path: `${basePath}/blocks` },
-      { name: '地址', path: `${basePath}/addresses` },
+      { name: '程序', path: `${basePath}/programs` },
       // { name: '统计', path: `${basePath}/statistics` }, // 暂时屏蔽统计页面
     ]
   } else {
@@ -379,7 +380,7 @@ const switchChain = (chain: string) => {
       eth: ['blocks', 'addresses', 'settings'], // 暂时屏蔽统计页面
       btc: ['blocks'], // BTC没有addresses页面，暂时屏蔽统计页面
       bsc: ['blocks', 'addresses', 'settings'], // BSC支持地址页面，暂时屏蔽统计页面
-      sol: ['blocks', 'addresses', 'settings'] // SOL支持地址页面，暂时屏蔽统计页面
+      sol: ['blocks', 'programs', 'settings'] // SOL改为程序维护页面
     }
     
     // 如果目标页面在当前链中有效，则跳转；否则跳转到首页

@@ -5,6 +5,8 @@ import (
 	"fmt"
 	"math"
 	"math/big"
+	"sort"
+	"strconv"
 	"time"
 
 	"blockChainBrowser/server/internal/interfaces"
@@ -64,13 +66,15 @@ func (fs *FeeScheduler) SetWebSocketHandler(handler interfaces.WebSocketBroadcas
 func (fs *FeeScheduler) Start(ctx context.Context) {
 	fs.logger.Info("费率调度器已启动")
 
-	// ETH每10秒更新一次，BTC每30秒更新一次，BSC每15秒更新一次
+	// ETH每10秒更新一次，BTC每30秒更新一次，BSC每5秒更新一次，SOL每10秒更新一次
 	ethTicker := time.NewTicker(10 * time.Second)
 	btcTicker := time.NewTicker(30 * time.Second)
 	bscTicker := time.NewTicker(5 * time.Second)
+	solTicker := time.NewTicker(3 * time.Second)
 	defer ethTicker.Stop()
 	defer btcTicker.Stop()
 	defer bscTicker.Stop()
+	defer solTicker.Stop()
 
 	// 立即执行一次
 	fs.updateFeeData(ctx)
@@ -89,6 +93,9 @@ func (fs *FeeScheduler) Start(ctx context.Context) {
 		case <-bscTicker.C:
 			// 更新BSC费率
 			fs.updateBSCFeeData(ctx)
+		case <-solTicker.C:
+			// 更新SOL费率
+			fs.updateSOLFeeData(ctx)
 		}
 	}
 }
@@ -101,6 +108,258 @@ func (fs *FeeScheduler) updateFeeData(ctx context.Context) {
 	fs.updateBTCFeeData(ctx)
 	// 更新BSC费率
 	fs.updateBSCFeeData(ctx)
+	// 更新SOL费率
+	fs.updateSOLFeeData(ctx)
+}
+
+// updateSOLFeeData 更新SOL费率数据
+func (fs *FeeScheduler) updateSOLFeeData(ctx context.Context) {
+	// 获取SOL费率数据
+	feeData, err := fs.getSOLFeeData(ctx)
+	if err != nil {
+		fs.logger.WithField("chain", "sol").WithError(err).Error("获取SOL费率数据失败，使用默认值")
+		feeData = fs.getDefaultSOLFeeData()
+	}
+
+	// 广播费率更新
+	fs.broadcastFeeData("sol", feeData)
+
+	fs.logger.WithField("chain", "sol").Debug("SOL费率数据已更新")
+}
+
+// getSOLFeeData 从RPC获取SOL费率数据
+func (fs *FeeScheduler) getSOLFeeData(ctx context.Context) (*FeeLevels, error) {
+	if fs.rpcManager == nil {
+		return nil, fmt.Errorf("RPC管理器未初始化")
+	}
+
+	// 获取SOL RPC客户端
+	solClient, err := fs.rpcManager.GetSolanaClient("sol")
+	if err != nil {
+		return nil, fmt.Errorf("获取SOL RPC客户端失败: %w", err)
+	}
+
+	// 获取最近的优先费用数据
+	prioritizationFees, err := solClient.GetRecentPrioritizationFees(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("获取优先费用失败: %w", err)
+	}
+
+	// 计算不同速度档位的费用
+	slowFee, normalFee, fastFee := fs.calculateSOLFeeLevels(prioritizationFees)
+
+	// 获取网络拥堵状态
+	congestion := fs.calculateSOLCongestion(prioritizationFees)
+
+	return &FeeLevels{
+		Slow: FeeData{
+			Chain:             "sol",
+			BaseFee:           "5000", // SOL基础费用 5000 lamports
+			MaxPriorityFee:    slowFee,
+			MaxFee:            slowFee,
+			GasPrice:          slowFee,
+			LastUpdated:       time.Now().Unix(),
+			BlockNumber:       0,
+			NetworkCongestion: congestion,
+		},
+		Normal: FeeData{
+			Chain:             "sol",
+			BaseFee:           "5000",
+			MaxPriorityFee:    normalFee,
+			MaxFee:            normalFee,
+			GasPrice:          normalFee,
+			LastUpdated:       time.Now().Unix(),
+			BlockNumber:       0,
+			NetworkCongestion: congestion,
+		},
+		Fast: FeeData{
+			Chain:             "sol",
+			BaseFee:           "5000",
+			MaxPriorityFee:    fastFee,
+			MaxFee:            fastFee,
+			GasPrice:          fastFee,
+			LastUpdated:       time.Now().Unix(),
+			BlockNumber:       0,
+			NetworkCongestion: congestion,
+		},
+	}, nil
+}
+
+// calculateSOLFeeLevels 计算SOL不同速度档位的费用
+func (fs *FeeScheduler) calculateSOLFeeLevels(fees []utils.PrioritizationFeeItem) (slow, normal, fast string) {
+	if len(fees) == 0 {
+		// 默认费用
+		return "0", "0", "1000"
+	}
+
+	// 统计0优先费的占比
+	zeroFeeCount := 0
+	var nonZeroFees []uint64
+
+	for _, fee := range fees {
+		if fee.PrioritizationFee == 0 {
+			zeroFeeCount++
+		} else {
+			nonZeroFees = append(nonZeroFees, fee.PrioritizationFee)
+		}
+	}
+
+	zeroFeeRatio := float64(zeroFeeCount) / float64(len(fees))
+
+	// 如果0优先费占比很高，大部分交易都能用0优先费成功
+	if zeroFeeRatio >= 0.8 {
+		// 大部分都是0，只有少数需要优先费
+		if len(nonZeroFees) > 0 {
+			sort.Slice(nonZeroFees, func(i, j int) bool { return nonZeroFees[i] < nonZeroFees[j] })
+			// 取非零费用的25%分位数作为fast
+			fastIdx := int(float64(len(nonZeroFees)) * 0.25)
+			if fastIdx >= len(nonZeroFees) {
+				fastIdx = len(nonZeroFees) - 1
+			}
+			return "0", "0", strconv.FormatUint(nonZeroFees[fastIdx], 10)
+		}
+		return "0", "0", "1000"
+	}
+
+	// 如果0优先费占比在50%-80%之间，slow和normal可以用0，fast需要一些优先费
+	if zeroFeeRatio >= 0.5 {
+		if len(nonZeroFees) > 0 {
+			sort.Slice(nonZeroFees, func(i, j int) bool { return nonZeroFees[i] < nonZeroFees[j] })
+			// 取非零费用的50%分位数作为fast
+			fastIdx := int(float64(len(nonZeroFees)) * 0.5)
+			if fastIdx >= len(nonZeroFees) {
+				fastIdx = len(nonZeroFees) - 1
+			}
+			return "0", "0", strconv.FormatUint(nonZeroFees[fastIdx], 10)
+		}
+		return "0", "0", "5000"
+	}
+
+	// 如果0优先费占比低于50%，需要根据实际分布计算
+	// 排序所有费用
+	sort.Slice(fees, func(i, j int) bool { return fees[i].PrioritizationFee < fees[j].PrioritizationFee })
+
+	// 计算百分位数
+	slowIdx := int(float64(len(fees)) * 0.25)   // 25th percentile
+	normalIdx := int(float64(len(fees)) * 0.50) // 50th percentile
+	fastIdx := int(float64(len(fees)) * 0.75)   // 75th percentile
+
+	if slowIdx >= len(fees) {
+		slowIdx = len(fees) - 1
+	}
+	if normalIdx >= len(fees) {
+		normalIdx = len(fees) - 1
+	}
+	if fastIdx >= len(fees) {
+		fastIdx = len(fees) - 1
+	}
+
+	slow = strconv.FormatUint(fees[slowIdx].PrioritizationFee, 10)
+	normal = strconv.FormatUint(fees[normalIdx].PrioritizationFee, 10)
+	fast = strconv.FormatUint(fees[fastIdx].PrioritizationFee, 10)
+
+	return slow, normal, fast
+}
+
+// calculateSOLCongestion 计算SOL网络拥堵状态
+func (fs *FeeScheduler) calculateSOLCongestion(fees []utils.PrioritizationFeeItem) string {
+	if len(fees) == 0 {
+		return "normal"
+	}
+
+	// 统计0优先费的占比
+	zeroFeeCount := 0
+	var nonZeroFees []uint64
+
+	for _, fee := range fees {
+		if fee.PrioritizationFee == 0 {
+			zeroFeeCount++
+		} else {
+			nonZeroFees = append(nonZeroFees, fee.PrioritizationFee)
+		}
+	}
+
+	zeroFeeRatio := float64(zeroFeeCount) / float64(len(fees))
+
+	// 如果0优先费占比超过70%，说明网络不拥堵，大部分交易都能用0优先费成功
+	if zeroFeeRatio >= 0.7 {
+		return "low"
+	}
+
+	// 如果0优先费占比在30%-70%之间，需要结合非零费用的分布来判断
+	if zeroFeeRatio >= 0.3 {
+		// 计算非零费用的中位数
+		if len(nonZeroFees) == 0 {
+			return "low"
+		}
+
+		// 排序非零费用
+		sort.Slice(nonZeroFees, func(i, j int) bool { return nonZeroFees[i] < nonZeroFees[j] })
+		medianIdx := len(nonZeroFees) / 2
+		medianFee := nonZeroFees[medianIdx]
+
+		// 根据中位数判断拥堵状态
+		if medianFee < 5000 {
+			return "low"
+		} else if medianFee < 20000 {
+			return "normal"
+		} else {
+			return "high"
+		}
+	}
+
+	// 如果0优先费占比低于30%，说明网络确实拥堵，大部分交易都需要支付优先费
+	// 计算所有费用的中位数
+	allFees := make([]uint64, len(fees))
+	for i, fee := range fees {
+		allFees[i] = fee.PrioritizationFee
+	}
+	sort.Slice(allFees, func(i, j int) bool { return allFees[i] < allFees[j] })
+	medianIdx := len(allFees) / 2
+	medianFee := allFees[medianIdx]
+
+	if medianFee < 10000 {
+		return "normal"
+	} else {
+		return "high"
+	}
+}
+
+// getDefaultSOLFeeData 获取默认SOL费率数据（占位）
+func (fs *FeeScheduler) getDefaultSOLFeeData() *FeeLevels {
+	congestion := "normal"
+	return &FeeLevels{
+		Slow: FeeData{
+			Chain:             "sol",
+			BaseFee:           "0",
+			MaxPriorityFee:    "0",
+			MaxFee:            "0",
+			GasPrice:          "0",
+			LastUpdated:       time.Now().Unix(),
+			BlockNumber:       0,
+			NetworkCongestion: congestion,
+		},
+		Normal: FeeData{
+			Chain:             "sol",
+			BaseFee:           "0",
+			MaxPriorityFee:    "0",
+			MaxFee:            "0",
+			GasPrice:          "0",
+			LastUpdated:       time.Now().Unix(),
+			BlockNumber:       0,
+			NetworkCongestion: congestion,
+		},
+		Fast: FeeData{
+			Chain:             "sol",
+			BaseFee:           "0",
+			MaxPriorityFee:    "0",
+			MaxFee:            "0",
+			GasPrice:          "0",
+			LastUpdated:       time.Now().Unix(),
+			BlockNumber:       0,
+			NetworkCongestion: congestion,
+		},
+	}
 }
 
 // updateETHFeeData 更新ETH费率数据

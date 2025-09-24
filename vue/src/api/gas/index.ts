@@ -50,3 +50,18 @@ export function getAllGasRates(): Promise<ApiResponse<GetAllGasRatesResponse>> {
     method: 'GET'
   })
 }
+
+/**
+ * 获取SOL缓存费率（无鉴权，页面初始加载用）
+ */
+export function getSOLGasRatesCached(): Promise<ApiResponse<FeeLevels>> {
+  if (__USE_MOCK__) {
+    console.log('🔧 使用Mock数据 - getSOLGasRatesCached')
+    return handleMockGetGasRates({ chain: 'sol' })
+  }
+  
+  return request({
+    url: '/api/no-auth/gas/sol',
+    method: 'GET'
+  })
+}

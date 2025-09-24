@@ -29,7 +29,8 @@ import SOLHomeView from '../views/sol/HomeView.vue'
 import SOLBlocksView from '../views/sol/BlocksView.vue'
 import SOLBlockDetailView from '../views/sol/detail/BlockDetailView.vue'
 import SOLContractDetailView from '../views/sol/detail/ContractDetailView.vue'
-import SOLAddressesView from '../views/sol/AddressesView.vue'
+// import SOLAddressesView from '../views/sol/AddressesView.vue'
+import SOLProgramView from '../views/sol/ProgramView.vue'
 import SOLStatisticsView from '../views/sol/StatisticsView.vue'
 import SOLSettingsView from '../views/sol/SettingsView.vue'
 
@@ -229,15 +230,16 @@ const router = createRouter({
       component: SOLBlockDetailView
     },
     {
-      path: '/sol/addresses',
-      name: 'sol-addresses',
-      component: SOLAddressesView
+      path: '/sol/programs',
+      name: 'sol-programs',
+      component: SOLProgramView
     },
     {
       path: '/sol/address-transactions',
       name: 'sol-address-transactions',
       component: () => import('../views/sol/detail/AddressTransactionsView.vue')
     },
+    // 保留合约详情但入口改到 programs 页，这里保持兼容
     {
       path: '/sol/addresses/:address',
       name: 'sol-contract-detail',
