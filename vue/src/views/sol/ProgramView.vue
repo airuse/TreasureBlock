@@ -402,7 +402,7 @@
 <script setup lang="ts">
 import { ref, computed, watch } from 'vue'
 import { solPrograms } from '@/api'
-import type { SolProgram } from '@/api/sol-programs'
+import type { SolProgram } from '@/types'
 
 const list = ref<SolProgram[]>([])
 const page = ref(1)
