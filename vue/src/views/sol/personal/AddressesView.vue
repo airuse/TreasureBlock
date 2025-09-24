@@ -189,12 +189,54 @@
             <div class="space-y-4">
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">地址</label>
-                <input
-                  v-model="newAddress.address"
-                  type="text"
-                  class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
-                  placeholder="0x..."
-                />
+                <div class="flex items-center space-x-2">
+                  <input
+                    v-model="newAddress.address"
+                    :readonly="isAtaComputed"
+                    type="text"
+                    class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
+                    placeholder="地址或自动计算"
+                  />
+                  <button
+                    v-if="newAddress.type === 'ata'"
+                    type="button"
+                    @click="toggleAtaCalc"
+                    class="px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50"
+                  >
+                    {{ showAtaCalc ? '收起' : '自动计算' }}
+                  </button>
+                </div>
+                <div v-if="showAtaCalc && newAddress.type === 'ata'" class="mt-3 space-y-3 border border-gray-200 rounded-md p-3 bg-gray-50">
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">铸币地址 (Mint)</label>
+                    <select v-model="ataMint" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option value="">请选择铸币地址</option>
+                      <option v-for="m in mintOptions" :key="m.value" :value="m.value">
+                        {{ m.label }}
+                      </option>
+                    </select>
+                  </div>
+                  <div>
+                    <label class="block text-sm font-medium text-gray-700 mb-1">主账户地址 (Owner)</label>
+                    <select v-model="ataOwner" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                      <option value="">请选择主账户地址</option>
+                      <option v-for="o in ownerAddressOptions" :key="o.value" :value="o.value">
+                        {{ o.label }}
+                      </option>
+                    </select>
+                  </div>
+                  <div class="flex items-center space-x-3">
+                    <button
+                      type="button"
+                      @click="computeAta"
+                      :disabled="!ataMint || !ataOwner || computingAta"
+                      class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
+                    >
+                      {{ computingAta ? '计算中...' : '计算 ATA' }}
+                    </button>
+                    <span v-if="isAtaComputed" class="text-sm text-gray-600">已计算</span>
+                  </div>
+                </div>
               </div>
               <div>
                 <label class="block text-sm font-medium text-gray-700 mb-1">标签</label>
@@ -212,9 +254,8 @@
                   class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="wallet">钱包</option>
-                  <option value="contract">合约</option>
                   <option value="authorized_contract">被授权合约</option>
-                  <option value="exchange">交易所</option>
+                  <option value="ata">ATA账户</option>
                   <option value="other">其他</option>
                 </select>
               </div>
@@ -350,9 +391,8 @@
                   class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
                 >
                   <option value="wallet">钱包</option>
-                  <option value="contract">合约</option>
                   <option value="authorized_contract">被授权合约</option>
-                  <option value="exchange">交易所</option>
+                  <option value="ata">ATA账户</option>
                   <option value="other">其他</option>
                 </select>
               </div>
@@ -567,6 +607,8 @@ import type {
   UpdatePersonalAddressRequest 
 } from '@/types/personal-address'
 import type { Contract } from '@/types'
+import { PublicKey } from '@solana/web3.js'
+import { getAssociatedTokenAddress, TOKEN_PROGRAM_ID, ASSOCIATED_TOKEN_PROGRAM_ID } from '@solana/spl-token'
 
 // 初始化路由
 const router = useRouter()
@@ -603,6 +645,30 @@ const newAddress = ref<CreatePersonalAddressRequest>({
   notes: ''
 })
 
+// ATA 计算相关
+const showAtaCalc = ref(false)
+const ataMint = ref<string>('')
+const ataOwner = ref<string>('')
+const computingAta = ref(false)
+const isAtaComputed = computed(() => newAddress.value.type === 'ata' && !!newAddress.value.address)
+
+// Mint 下拉：使用已加载的合约（SPL Token）
+const mintOptions = computed(() => {
+  return contracts.value
+    .filter(c => c.chain_name === 'sol')
+    .map(c => ({
+      value: c.address,
+      label: `${c.name || c.symbol || formatAddress(c.address)} (${formatAddress(c.address)})`
+    }))
+})
+
+// Owner 下拉：使用本页地址列表中的钱包类型
+const ownerAddressOptions = computed(() => {
+  return addressesList.value
+    .filter(a => a.type === 'wallet')
+    .map(a => ({ value: a.address, label: `${a.label || formatAddress(a.address)} (${formatAddress(a.address)})` }))
+})
+
 // 编辑地址表单
 const editingAddress = ref<PersonalAddressDetail>({
   id: 0,
@@ -637,6 +703,9 @@ const canAddAddress = computed(() => {
   const hasRequiredFields = newAddress.value.address && newAddress.value.label
   if (newAddress.value.type === 'contract' || newAddress.value.type === 'authorized_contract') {
     return hasRequiredFields && newAddress.value.contract_id
+  }
+  if (newAddress.value.type === 'ata') {
+    return newAddress.value.label && !!newAddress.value.address
   }
   return hasRequiredFields
 })
@@ -676,6 +745,7 @@ const getTypeClass = (type: string) => {
     case 'wallet': return 'bg-blue-100 text-blue-800'
     case 'contract': return 'bg-purple-100 text-purple-800'
     case 'authorized_contract': return 'bg-indigo-100 text-indigo-800'
+    case 'ata': return 'bg-teal-100 text-teal-800'
     case 'exchange': return 'bg-orange-100 text-orange-800'
     case 'other': return 'bg-gray-100 text-gray-800'
     default: return 'bg-gray-100 text-gray-800'
@@ -688,6 +758,7 @@ const getTypeText = (type: string) => {
     case 'wallet': return '钱包'
     case 'contract': return '合约'
     case 'authorized_contract': return '被授权合约'
+    case 'ata': return 'ATA账户'
     case 'exchange': return '交易所'
     case 'other': return '其他'
     default: return '未知'
@@ -985,6 +1056,14 @@ watch(() => newAddress.value.type, (newType) => {
   if (newType !== 'contract' && newType !== 'authorized_contract') {
     newAddress.value.contract_id = undefined
   }
+  if (newType !== 'ata') {
+    showAtaCalc.value = false
+    ataMint.value = ''
+    ataOwner.value = ''
+  } else {
+    // 切换到 ATA 类型时清空地址，等待计算
+    newAddress.value.address = ''
+  }
 })
 
 watch(() => editingAddress.value.type, (newType) => {
@@ -998,4 +1077,33 @@ onMounted(() => {
   loadAddresses()
   loadContracts()
 })
+
+// UI helpers
+const toggleAtaCalc = () => {
+  showAtaCalc.value = !showAtaCalc.value
+}
+
+// 计算 ATA
+const computeAta = async () => {
+  try {
+    computingAta.value = true
+    if (!ataMint.value || !ataOwner.value) return
+    const mintKey = new PublicKey(ataMint.value)
+    const ownerKey = new PublicKey(ataOwner.value)
+    const ata = await getAssociatedTokenAddress(
+      mintKey,
+      ownerKey,
+      false,
+      TOKEN_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID
+    )
+    newAddress.value.address = ata.toBase58()
+    showSuccess('ATA已计算')
+  } catch (e) {
+    console.error('计算ATA失败:', e)
+    showError('计算ATA失败，请检查铸币地址和主账户地址')
+  } finally {
+    computingAta.value = false
+  }
+}
 </script>

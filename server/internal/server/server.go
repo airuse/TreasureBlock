@@ -128,7 +128,7 @@ func New() *Server {
 	userAddressHandler := handlers.NewUserAddressHandler(userAddressService)
 	baseConfigHandler := handlers.NewBaseConfigHandler(baseConfigService)
 	parserConfigHandler := handlers.NewParserConfigHandler(parserConfigService)
-	homeHandler := handlers.NewHomeHandler(blockService, txService, statsService)
+	homeHandler := handlers.NewHomeHandler(blockService, txService, statsService, solService)
 	earningsHandler := handlers.NewEarningsHandler(earningsService)
 	userTransactionHandler := handlers.NewUserTransactionHandler()
 	contractParseResultHandler := handlers.NewContractParseResultHandler(contractParseResultService)

@@ -155,3 +155,34 @@ type SlotStatsResponse struct {
 	FailedTxs        int    `json:"failed_txs"`
 	ComputeUnitsUsed uint64 `json:"compute_units_used"`
 }
+
+// ================= SOL 专用交易导出/导入/发送 DTO =================
+
+// SolExportTransactionResponse 用于导出未签名的SOL交易数据
+type SolExportTransactionResponse struct {
+	ID              uint             `json:"id"`
+	Chain           string           `json:"chain"`
+	RecentBlockhash string           `json:"recent_blockhash"`
+	FeePayer        string           `json:"fee_payer"`
+	Version         string           `json:"version"`           // legacy 或 v0
+	Instructions    []map[string]any `json:"instructions"`      // 指令计划（由前端/签名器构造最终指令）
+	Context         map[string]any   `json:"context,omitempty"` // 额外上下文，例如 token decimals 等
+}
+
+// SolImportSignatureRequest 导入SOL签名（base64原始交易）
+type SolImportSignatureRequest struct {
+	ID         uint   `json:"id" binding:"required" validate:"required"`
+	SignedBase string `json:"signed_base64" binding:"required" validate:"required"`
+}
+
+// SolSendTransactionRequest 发送SOL交易
+type SolSendTransactionRequest struct {
+	ID uint `json:"id" binding:"required" validate:"required"`
+}
+
+// SolSendTransactionResponse 发送SOL交易响应
+type SolSendTransactionResponse struct {
+	Success bool   `json:"success"`
+	TxHash  string `json:"tx_hash"`
+	Message string `json:"message"`
+}

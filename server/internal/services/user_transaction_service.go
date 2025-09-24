@@ -34,6 +34,11 @@ type UserTransactionService interface {
 	ImportSignature(ctx context.Context, id uint, userID uint64, req *dto.ImportSignatureRequest) (*dto.UserTransactionResponse, error)
 	SendTransaction(ctx context.Context, id uint, userID uint64) (*dto.UserTransactionResponse, error)
 	GetUserTransactionStats(ctx context.Context, userID uint64, chain string) (*dto.UserTransactionStatsResponse, error)
+
+	// SOL 专用接口
+	ExportSolUnsigned(ctx context.Context, id uint, userID uint64) (*dto.SolExportTransactionResponse, error)
+	ImportSolSignature(ctx context.Context, id uint, userID uint64, req *dto.SolImportSignatureRequest) (*dto.UserTransactionResponse, error)
+	SendSolTransaction(ctx context.Context, id uint, userID uint64) (*dto.UserTransactionResponse, error)
 }
 
 // userTransactionService 用户交易服务实现
@@ -52,6 +57,118 @@ func NewUserTransactionService() UserTransactionService {
 		parserConfigRepo: repository.NewParserConfigRepository(database.GetDB()),
 		logger:           logrus.New(),
 	}
+}
+
+// ExportSolUnsigned 导出SOL未签名交易载荷
+func (s *userTransactionService) ExportSolUnsigned(ctx context.Context, id uint, userID uint64) (*dto.SolExportTransactionResponse, error) {
+	userTx, err := s.userTxRepo.GetByID(ctx, id, userID)
+	if err != nil {
+		return nil, err
+	}
+	if !strings.EqualFold(userTx.Chain, "sol") {
+		return nil, fmt.Errorf("交易非SOL链")
+	}
+	rpcManager := utils.NewRPCClientManager()
+	defer rpcManager.Close()
+	solClient, err := rpcManager.GetSolanaClient("sol")
+	if err != nil {
+		return nil, fmt.Errorf("获取Solana客户端失败: %w", err)
+	}
+	blockhash, err := solClient.GetLatestBlockhash(ctx)
+	if err != nil {
+		return nil, fmt.Errorf("获取最新区块哈希失败: %w", err)
+	}
+	resp := &dto.SolExportTransactionResponse{
+		ID:              userTx.ID,
+		Chain:           userTx.Chain,
+		RecentBlockhash: blockhash,
+		FeePayer:        userTx.FromAddress,
+		Version:         "legacy",
+		Instructions:    []map[string]any{},
+		Context:         map[string]any{},
+	}
+	if strings.EqualFold(userTx.TransactionType, "token") && userTx.TokenContractAddress != "" {
+		resp.Instructions = append(resp.Instructions, map[string]any{
+			"program_id": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+			"type":       "spl_transfer_checked",
+			"params": map[string]any{
+				"mint":       userTx.TokenContractAddress,
+				"from_owner": userTx.FromAddress,
+				"to_owner":   userTx.ToAddress,
+				"amount":     userTx.Amount,
+			},
+		})
+	} else {
+		resp.Instructions = append(resp.Instructions, map[string]any{
+			"program_id": "11111111111111111111111111111111",
+			"type":       "system_transfer",
+			"params": map[string]any{
+				"from":     userTx.FromAddress,
+				"to":       userTx.ToAddress,
+				"lamports": userTx.Amount,
+			},
+		})
+	}
+	// 将交易状态更新为 unsigned，表示已导出待签名
+	userTx.Status = "unsigned"
+	if err := s.userTxRepo.Update(ctx, userTx); err != nil {
+		return nil, fmt.Errorf("更新交易状态失败: %w", err)
+	}
+	return resp, nil
+}
+
+// ImportSolSignature 导入SOL签名（base64）
+func (s *userTransactionService) ImportSolSignature(ctx context.Context, id uint, userID uint64, req *dto.SolImportSignatureRequest) (*dto.UserTransactionResponse, error) {
+	userTx, err := s.userTxRepo.GetByID(ctx, id, userID)
+	if err != nil {
+		return nil, err
+	}
+	if !strings.EqualFold(userTx.Chain, "sol") {
+		return nil, fmt.Errorf("交易非SOL链")
+	}
+	userTx.SignedTx = &req.SignedBase
+	userTx.Status = "in_progress"
+	if err := s.userTxRepo.Update(ctx, userTx); err != nil {
+		return nil, fmt.Errorf("保存签名失败: %w", err)
+	}
+	// 可选：立即发送
+	return s.SendSolTransaction(ctx, id, userID)
+}
+
+// SendSolTransaction 发送SOL交易
+func (s *userTransactionService) SendSolTransaction(ctx context.Context, id uint, userID uint64) (*dto.UserTransactionResponse, error) {
+	userTx, err := s.userTxRepo.GetByID(ctx, id, userID)
+	if err != nil {
+		return nil, err
+	}
+	if !strings.EqualFold(userTx.Chain, "sol") {
+		return nil, fmt.Errorf("交易非SOL链")
+	}
+	if userTx.SignedTx == nil || *userTx.SignedTx == "" {
+		return nil, fmt.Errorf("缺少已签名交易base64")
+	}
+	rpcManager := utils.NewRPCClientManager()
+	defer rpcManager.Close()
+	sendResp, err := rpcManager.SendTransaction(ctx, &utils.SendTransactionRequest{
+		Chain:       userTx.Chain,
+		SignedTx:    *userTx.SignedTx,
+		FromAddress: userTx.FromAddress,
+		ToAddress:   userTx.ToAddress,
+		Amount:      userTx.Amount,
+		Fee:         userTx.Fee,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("发送交易失败: %w", err)
+	}
+	if !sendResp.Success {
+		return nil, fmt.Errorf("发送交易失败: %s", sendResp.Message)
+	}
+	userTx.Status = "in_progress"
+	userTx.TxHash = &sendResp.TxHash
+	if err := s.userTxRepo.Update(ctx, userTx); err != nil {
+		return nil, fmt.Errorf("更新交易状态失败: %w", err)
+	}
+	return s.convertToResponse(userTx), nil
 }
 
 // CreateTransaction 创建用户交易
@@ -144,6 +261,10 @@ func (s *userTransactionService) GetUserTransactions(ctx context.Context, userID
 				decimals := uint8(config.Decimals)
 				tx.TokenDecimals = &decimals
 			}
+		} else if tx.TransactionType == "coin" && tx.Symbol == "SOL" {
+			// 对于SOL原生代币交易，设置正确的精度
+			decimals := uint8(9) // SOL使用9位精度
+			tx.TokenDecimals = &decimals
 		}
 		responses = append(responses, *s.convertToResponse(tx))
 	}
@@ -198,6 +319,10 @@ func (s *userTransactionService) GetUserTransactionsByChain(ctx context.Context,
 				decimals := uint8(config.Decimals)
 				tx.TokenDecimals = &decimals
 			}
+		} else if tx.TransactionType == "coin" && tx.Symbol == "SOL" {
+			// 对于SOL原生代币交易，设置正确的精度
+			decimals := uint8(9) // SOL使用9位精度
+			tx.TokenDecimals = &decimals
 		}
 		responses = append(responses, *s.convertToResponse(tx))
 	}
@@ -333,6 +458,88 @@ func (s *userTransactionService) ExportTransaction(ctx context.Context, id uint,
 	userTx, err := s.userTxRepo.GetByID(ctx, id, userID)
 	if err != nil {
 		return nil, err
+	}
+
+	// SOL 专用导出：返回未签名消息结构（用于前端/离线签名器组装与签名）
+	if strings.EqualFold(userTx.Chain, "sol") {
+		rpcManager := utils.NewRPCClientManager()
+		defer rpcManager.Close()
+
+		solClient, err := rpcManager.GetSolanaClient("sol")
+		if err != nil {
+			return nil, fmt.Errorf("获取Solana客户端失败: %w", err)
+		}
+		blockhash, err := solClient.GetLatestBlockhash(ctx)
+		if err != nil {
+			return nil, fmt.Errorf("获取最新区块哈希失败: %w", err)
+		}
+
+		// 构造通用未签名交易负载（供签名器消费）
+		// 注意：对于SPL代币，将使用 TokenContractAddress 作为 mint 传递
+		solPayload := map[string]interface{}{
+			"type":             "sol_unsigned",
+			"version":          "legacy",
+			"recent_blockhash": blockhash,
+			"fee_payer":        userTx.FromAddress,
+		}
+
+		// 指令集合（由签名器据此生成真实指令并签名）
+		if strings.EqualFold(userTx.TransactionType, "token") && userTx.TokenContractAddress != "" {
+			// SPL Token 转账计划
+			// 需要签名器根据 mint + from_owner + to_owner 计算 ATA
+			instr := map[string]interface{}{
+				"program_id": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+				"type":       "spl_transfer_checked",
+				"params": map[string]interface{}{
+					"mint":       userTx.TokenContractAddress,
+					"from_owner": userTx.FromAddress,
+					"to_owner":   userTx.ToAddress,
+					"amount":     userTx.Amount, // 基于最小单位（按mint decimals）
+					"decimals":   0,             // 由签名器查询/填充具体精度
+				},
+			}
+			solPayload["instructions"] = []interface{}{instr}
+		} else {
+			// 原生 SOL 转账计划（lamports）
+			instr := map[string]interface{}{
+				"program_id": "11111111111111111111111111111111",
+				"type":       "system_transfer",
+				"params": map[string]interface{}{
+					"from":     userTx.FromAddress,
+					"to":       userTx.ToAddress,
+					"lamports": userTx.Amount,
+				},
+			}
+			solPayload["instructions"] = []interface{}{instr}
+		}
+
+		// 序列化为字符串，放入 UnsignedTx 字段，其他EVM特定字段置空
+		b, _ := json.Marshal(solPayload)
+		unsigned := string(b)
+
+		userTx.Status = "unsigned"
+		userTx.UnsignedTx = &unsigned
+		if err := s.userTxRepo.Update(ctx, userTx); err != nil {
+			return nil, fmt.Errorf("更新交易状态失败: %w", err)
+		}
+
+		return &dto.ExportTransactionResponse{
+			UnsignedTx:           unsigned,
+			Chain:                userTx.Chain,
+			Symbol:               userTx.Symbol,
+			FromAddress:          userTx.FromAddress,
+			ToAddress:            userTx.ToAddress,
+			Amount:               userTx.Amount,
+			Fee:                  userTx.Fee,
+			GasLimit:             nil,
+			GasPrice:             nil,
+			Nonce:                nil,
+			MaxPriorityFeePerGas: nil,
+			MaxFeePerGas:         nil,
+			ChainID:              nil,
+			TxData:               nil,
+			AccessList:           nil,
+		}, nil
 	}
 
 	// 检查是否可以导出
@@ -559,7 +766,7 @@ func (s *userTransactionService) ImportSignature(ctx context.Context, id uint, u
 		}
 	}
 
-	// 更新签名数据
+	// 更新签名数据（对于SOL，SignedTx 预期为 base64 原始交易）
 	userTx.SignedTx = &req.SignedTx
 	userTx.Status = "in_progress" // 直接设置为在途状态，因为会自动发送
 

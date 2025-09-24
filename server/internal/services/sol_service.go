@@ -373,8 +373,8 @@ func (s *solService) ListTxDetails(ctx context.Context, slot *uint64, page, page
 	if slot != nil {
 		details, total, err = s.txDetailRepo.GetBySlot(ctx, *slot, page, pageSize)
 	} else {
-		// 复用 List：GetBySlot 无slot时可新建List接口，这里简单调用GetBySlot(0)不合适，暂用GetBySlot分支要求slot
-		details, total, err = s.txDetailRepo.GetBySlot(ctx, 0, page, pageSize)
+		// 当slot为nil时，使用List方法获取所有交易
+		details, total, err = s.txDetailRepo.List(ctx, page, pageSize)
 	}
 	if err != nil {
 		return nil, 0, err

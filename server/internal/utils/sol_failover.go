@@ -2,8 +2,12 @@ package utils
 
 import (
 	"blockChainBrowser/server/config"
+	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
+	"io"
+	"net/http"
 	"sync/atomic"
 
 	"github.com/blocto/solana-go-sdk/client"
@@ -13,9 +17,10 @@ import (
 
 // SolFailoverManager 负责对多个 Solana RPC 节点做简单故障转移/轮询
 type SolFailoverManager struct {
-	clients []*client.Client
-	idx     uint32
-	logger  *logrus.Logger
+	clients   []*client.Client
+	idx       uint32
+	logger    *logrus.Logger
+	endpoints []string
 }
 
 // NewSolFailoverFromChain 根据链名从配置创建 Sol 故障转移管理器
@@ -36,8 +41,9 @@ func NewSolFailoverFromChain(chainName string) (*SolFailoverManager, error) {
 	}
 
 	return &SolFailoverManager{
-		clients: clients,
-		logger:  logrus.New(),
+		clients:   clients,
+		logger:    logrus.New(),
+		endpoints: chainCfg.RPCURLs,
 	}, nil
 }
 
@@ -112,11 +118,132 @@ func (m *SolFailoverManager) GetRecentPrioritizationFees(ctx context.Context) ([
 	return fees, err
 }
 
-// SendRawTransaction 发送原始交易
+// SendRawTransaction 发送原始交易（rawTx 为 base64 序列化字节串）
 func (m *SolFailoverManager) SendRawTransaction(ctx context.Context, rawTx string) (string, error) {
-	// TODO: 实现从 base58 字符串解析并发送交易
-	// 这需要将 base58 字符串转换为 types.Transaction 对象
-	return "", fmt.Errorf("SendRawTransaction not implemented yet")
+	if len(m.endpoints) == 0 {
+		return "", fmt.Errorf("no sol endpoints configured")
+	}
+	var lastErr error
+	for i := 0; i < len(m.endpoints); i++ {
+		endpoint := m.endpoints[(int(m.idx)+i)%len(m.endpoints)]
+		txHash, err := m.sendRawTransactionOnce(ctx, endpoint, rawTx)
+		if err == nil {
+			return txHash, nil
+		}
+		lastErr = err
+		m.logger.WithError(err).Warnf("sendRawTransaction failed on %s, trying next", endpoint)
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("unknown error sending sol tx")
+	}
+	return "", lastErr
+}
+
+func (m *SolFailoverManager) sendRawTransactionOnce(ctx context.Context, endpoint string, rawBase64 string) (string, error) {
+	payload := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "sendTransaction",
+		"params":  []interface{}{rawBase64, map[string]interface{}{"encoding": "base64"}},
+	}
+	body, _ := json.Marshal(payload)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	var out struct {
+		Result string `json:"result"`
+		Error  *struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(respBytes, &out); err != nil {
+		return "", fmt.Errorf("decode response failed: %w, body=%s", err, string(respBytes))
+	}
+	if out.Error != nil {
+		return "", fmt.Errorf("rpc error %d: %s", out.Error.Code, out.Error.Message)
+	}
+	if out.Result == "" {
+		return "", fmt.Errorf("empty tx hash: %s", string(respBytes))
+	}
+	return out.Result, nil
+}
+
+// GetLatestBlockhash 获取最近区块哈希（用于构建未签名交易）
+func (m *SolFailoverManager) GetLatestBlockhash(ctx context.Context) (string, error) {
+	if len(m.endpoints) == 0 {
+		return "", fmt.Errorf("no sol endpoints configured")
+	}
+	var lastErr error
+	for i := 0; i < len(m.endpoints); i++ {
+		endpoint := m.endpoints[(int(m.idx)+i)%len(m.endpoints)]
+		bh, err := m.getLatestBlockhashOnce(ctx, endpoint)
+		if err == nil {
+			return bh, nil
+		}
+		lastErr = err
+		m.logger.WithError(err).Warnf("getLatestBlockhash failed on %s, trying next", endpoint)
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("unknown error getLatestBlockhash")
+	}
+	return "", lastErr
+}
+
+func (m *SolFailoverManager) getLatestBlockhashOnce(ctx context.Context, endpoint string) (string, error) {
+	payload := map[string]interface{}{
+		"jsonrpc": "2.0",
+		"id":      1,
+		"method":  "getLatestBlockhash",
+		"params":  []interface{}{},
+	}
+	body, _ := json.Marshal(payload)
+	req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+	if err != nil {
+		return "", err
+	}
+	req.Header.Set("Content-Type", "application/json")
+	resp, err := http.DefaultClient.Do(req)
+	if err != nil {
+		return "", err
+	}
+	defer resp.Body.Close()
+	respBytes, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return "", err
+	}
+	var out struct {
+		Result struct {
+			Value struct {
+				Blockhash string `json:"blockhash"`
+			} `json:"value"`
+		} `json:"result"`
+		Error *struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+	if err := json.Unmarshal(respBytes, &out); err != nil {
+		return "", fmt.Errorf("decode response failed: %w, body=%s", err, string(respBytes))
+	}
+	if out.Error != nil {
+		return "", fmt.Errorf("rpc error %d: %s", out.Error.Code, out.Error.Message)
+	}
+	if out.Result.Value.Blockhash == "" {
+		return "", fmt.Errorf("empty blockhash: %s", string(respBytes))
+	}
+	return out.Result.Value.Blockhash, nil
 }
 
 // Close 关闭所有客户端连接

@@ -120,6 +120,10 @@ func SetupRoutes(
 			userTransactions.POST("/:id/export", userTransactionHandler.ExportTransaction)         // 导出交易
 			userTransactions.POST("/:id/import-signature", userTransactionHandler.ImportSignature) // 导入签名
 			userTransactions.POST("/:id/send", userTransactionHandler.SendTransaction)             // 发送交易
+			// SOL 专用
+			userTransactions.GET("/:id/sol/export-unsigned", userTransactionHandler.ExportSolUnsigned)
+			userTransactions.POST("/:id/sol/import-signature", userTransactionHandler.ImportSolSignature)
+			userTransactions.POST("/:id/sol/send", userTransactionHandler.SendSolTransaction)
 		}
 
 		// Gas费率管理
@@ -139,6 +143,7 @@ func SetupRoutes(
 		{
 			home.GET("/stats", homeHandler.GetHomeStats)        // 获取首页统计数据（通用，需传 chain）
 			home.GET("/btc/stats", homeHandler.GetBtcHomeStats) // 获取比特币首页统计数据（固定链）
+			home.GET("/sol/stats", homeHandler.GetSolHomeStats) // 获取Solana首页统计数据（固定链）
 		}
 
 		// Gas缓存（公开）：页面初次打开快速展示

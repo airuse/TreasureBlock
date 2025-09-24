@@ -1,7 +1,11 @@
 package crypto
 
 import (
+	"crypto/ed25519"
+	"crypto/hmac"
 	"crypto/sha256"
+	"crypto/sha512"
+	"encoding/binary"
 	"encoding/hex"
 	"fmt"
 	"strings"
@@ -12,6 +16,11 @@ import (
 	"github.com/btcsuite/btcd/txscript"
 	"github.com/ethereum/go-ethereum/common"
 	ethcrypto "github.com/ethereum/go-ethereum/crypto"
+
+	"encoding/base64"
+
+	soltypes "github.com/blocto/solana-go-sdk/types"
+	bip39 "github.com/tyler-smith/go-bip39"
 )
 
 // DeriveETHAddresses 从私钥派生ETH地址（小写与EIP-55校验两种）
@@ -90,6 +99,92 @@ type BTCAddresses struct {
 	P2WPKH string
 	P2WSH  string
 	P2SH   string
+}
+
+// ===== SOL =====
+
+// DeriveSOLAddressFromBase64 从 base64(64字节) 私钥派生 SOL 地址
+func DeriveSOLAddressFromBase64(base64Priv string) (string, error) {
+	raw, err := base64.StdEncoding.DecodeString(base64Priv)
+	if err != nil {
+		return "", fmt.Errorf("解析SOL私钥失败: %w", err)
+	}
+	if len(raw) != 64 {
+		return "", fmt.Errorf("无效的SOL私钥长度: %d，期望64字节", len(raw))
+	}
+	acc, err := soltypes.AccountFromBytes(raw)
+	if err != nil {
+		return "", fmt.Errorf("创建SOL账户失败: %w", err)
+	}
+	return acc.PublicKey.ToBase58(), nil
+}
+
+// DeriveSOLFromMnemonic 通过助记词派生 Solana keypair（ed25519）
+// 约定：使用标准 BIP39 助记词 + 空密码，seed 前 32 字节作为 ed25519 种子（简单方案）
+// 返回：base64(64字节keypair), address(base58)
+func DeriveSOLFromMnemonic(mnemonic string, passphrase string) (string, string, error) {
+	if !bip39.IsMnemonicValid(mnemonic) {
+		return "", "", fmt.Errorf("无效助记词")
+	}
+	seed := bip39.NewSeed(mnemonic, passphrase)
+	if len(seed) < 32 {
+		return "", "", fmt.Errorf("seed 长度不足")
+	}
+	// 使用前32字节生成 ed25519 keypair（简化版）
+	pk := ed25519.NewKeyFromSeed(seed[:32]) // 64字节
+	if len(pk) != 64 {
+		return "", "", fmt.Errorf("生成的keypair长度异常: %d", len(pk))
+	}
+	acc, err := soltypes.AccountFromBytes(pk)
+	if err != nil {
+		return "", "", fmt.Errorf("创建SOL账户失败: %w", err)
+	}
+	base64Key := base64.StdEncoding.EncodeToString(pk)
+	return base64Key, acc.PublicKey.ToBase58(), nil
+}
+
+// DeriveSOLFromMnemonicBIP44: 与JS(ED25519-HD Key)一致的派生
+func DeriveSOLFromMnemonicBIP44(mnemonic, passphrase string, account, change uint32) (string, string, error) {
+	if !bip39.IsMnemonicValid(mnemonic) {
+		return "", "", fmt.Errorf("无效助记词")
+	}
+	seed := bip39.NewSeed(mnemonic, passphrase)
+	k, c := slip10MasterKeyEd25519(seed)
+	hardened := func(i uint32) uint32 { return i | 0x80000000 }
+	path := []uint32{hardened(44), hardened(501), hardened(account), hardened(change)}
+	for _, idx := range path {
+		k, c = slip10CKDEd25519(k, c, idx)
+	}
+	pk := ed25519.NewKeyFromSeed(k)
+	if len(pk) != 64 {
+		return "", "", fmt.Errorf("生成的keypair长度异常: %d", len(pk))
+	}
+	acc, err := soltypes.AccountFromBytes(pk)
+	if err != nil {
+		return "", "", fmt.Errorf("创建SOL账户失败: %w", err)
+	}
+	base64Key := base64.StdEncoding.EncodeToString(pk)
+	return base64Key, acc.PublicKey.ToBase58(), nil
+}
+
+func slip10MasterKeyEd25519(seed []byte) (key []byte, chainCode []byte) {
+	mac := hmac.New(sha512.New, []byte("ed25519 seed"))
+	mac.Write(seed)
+	I := mac.Sum(nil)
+	return I[:32], I[32:]
+}
+
+func slip10CKDEd25519(kParent, cParent []byte, index uint32) (key []byte, chainCode []byte) {
+	data := make([]byte, 0, 1+32+4)
+	data = append(data, 0x00)
+	data = append(data, kParent...)
+	ib := make([]byte, 4)
+	binary.BigEndian.PutUint32(ib, index)
+	data = append(data, ib...)
+	mac := hmac.New(sha512.New, cParent)
+	mac.Write(data)
+	I := mac.Sum(nil)
+	return I[:32], I[32:]
 }
 
 // DeriveAllBTCAddresses 从私钥派生所有BTC地址类型

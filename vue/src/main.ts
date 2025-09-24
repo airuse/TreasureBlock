@@ -2,6 +2,8 @@ import './assets/main.css'
 
 import { createApp } from 'vue'
 import { createPinia } from 'pinia'
+// Polyfill Buffer for browser usage (needed by @solana/spl-token)
+import { Buffer } from 'buffer'
 
 import App from './App.vue'
 import router from './router'
@@ -11,6 +13,9 @@ import { useAuthStore } from './stores/auth'
 import { createWebSocketManager, setupVisibilityHandler } from './utils/websocket'
 
 const app = createApp(App)
+
+// Expose Buffer globally for libs expecting Node Buffer
+;(window as any).Buffer = (window as any).Buffer || Buffer
 
 // 在应用启动时创建全局WebSocket管理器
 const wsManager = createWebSocketManager({

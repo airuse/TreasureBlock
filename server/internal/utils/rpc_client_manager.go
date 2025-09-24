@@ -12,6 +12,8 @@ import (
 	"regexp"
 	"strings"
 
+	"bytes"
+
 	ethereum "github.com/ethereum/go-ethereum"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/core/types"
@@ -138,6 +140,8 @@ func (m *RPCClientManager) SendTransaction(ctx context.Context, req *SendTransac
 		return m.sendBscTransaction(ctx, req)
 	case "btc", "bitcoin":
 		return m.sendBtcTransaction(ctx, req)
+	case "sol", "solana":
+		return m.sendSolTransaction(ctx, req)
 	default:
 		return &SendTransactionResponse{
 			Success:   false,
@@ -353,6 +357,49 @@ func (m *RPCClientManager) sendBtcTransaction(ctx context.Context, req *SendTran
 	}, nil
 }
 
+// sendSolTransaction 发送Solana交易
+func (m *RPCClientManager) sendSolTransaction(ctx context.Context, req *SendTransactionRequest) (*SendTransactionResponse, error) {
+	// 获取SOL故障转移管理器
+	fo, exists := m.solFailovers["sol"]
+	if !exists {
+		// 尝试其他可能的键名
+		for key, f := range m.solFailovers {
+			if strings.Contains(strings.ToLower(key), "sol") {
+				fo = f
+				exists = true
+				break
+			}
+		}
+	}
+
+	if !exists {
+		return &SendTransactionResponse{
+			Success:   false,
+			Message:   "SOL RPC故障转移未初始化",
+			ErrorCode: "RPC_CLIENT_NOT_AVAILABLE",
+		}, nil
+	}
+
+	// 发送原始交易（故障转移）
+	txHash, err := fo.SendRawTransaction(ctx, req.SignedTx)
+	if err != nil {
+		m.logger.Errorf("发送SOL交易失败: %v", err)
+		return &SendTransactionResponse{
+			Success:   false,
+			Message:   fmt.Sprintf("发送交易失败: %v", err),
+			ErrorCode: "SEND_TX_FAILED",
+		}, nil
+	}
+
+	m.logger.Infof("SOL交易发送成功: %s", txHash)
+
+	return &SendTransactionResponse{
+		Success: true,
+		TxHash:  txHash,
+		Message: "交易发送成功",
+	}, nil
+}
+
 // SendRawTransaction 发送原始交易（BTC）
 func (c *BitcoinRPCClient) SendRawTransaction(ctx context.Context, rawTx string) (string, error) {
 	// 准备RPC请求
@@ -439,6 +486,8 @@ func (m *RPCClientManager) GetTransactionStatus(ctx context.Context, chain, txHa
 		return m.getBscTransactionStatus(ctx, txHash)
 	case "btc", "bitcoin":
 		return m.getBtcTransactionStatus(ctx, txHash)
+	case "sol", "solana":
+		return m.getSolTransactionStatus(ctx, txHash)
 	default:
 		return nil, fmt.Errorf("不支持的链类型: %s", chain)
 	}
@@ -1064,4 +1113,126 @@ func (m *RPCClientManager) Close() {
 		client.Close()
 	}
 	m.logger.Info("RPC客户端管理器已关闭")
+}
+
+func (m *RPCClientManager) getSolTransactionStatus(ctx context.Context, txHash string) (*TransactionStatus, error) {
+	// 复用 SolFailoverManager 直接调用 getSignatureStatuses
+	fo, exists := m.solFailovers["sol"]
+	if !exists {
+		for key, f := range m.solFailovers {
+			if strings.Contains(strings.ToLower(key), "sol") {
+				fo = f
+				exists = true
+				break
+			}
+		}
+	}
+	if !exists {
+		return nil, fmt.Errorf("SOL RPC客户端未配置")
+	}
+
+	// 直接走 HTTP JSON-RPC，沿用 failover 里的 endpoints 轮询
+	type rpcReq struct {
+		JSONRPC string        `json:"jsonrpc"`
+		ID      int           `json:"id"`
+		Method  string        `json:"method"`
+		Params  []interface{} `json:"params"`
+	}
+	type rpcResp struct {
+		Result struct {
+			Value []struct {
+				ConfirmationStatus string `json:"confirmationStatus"`
+				Confirmations      *int   `json:"confirmations"`
+				Slot               uint64 `json:"slot"`
+				Err                any    `json:"err"`
+			} `json:"value"`
+		} `json:"result"`
+		Error *struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+
+	endpoints := fo.endpoints
+	var lastErr error
+	for i := 0; i < len(endpoints); i++ {
+		endpoint := endpoints[(int(fo.idx)+i)%len(endpoints)]
+		payload := rpcReq{
+			JSONRPC: "2.0",
+			ID:      1,
+			Method:  "getSignatureStatuses",
+			Params:  []interface{}{[]string{txHash}, map[string]any{"searchTransactionHistory": true}},
+		}
+		b, _ := json.Marshal(payload)
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(b))
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		respBytes, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		var out rpcResp
+		if err := json.Unmarshal(respBytes, &out); err != nil {
+			lastErr = fmt.Errorf("decode response failed: %w, body=%s", err, string(respBytes))
+			continue
+		}
+		if out.Error != nil {
+			lastErr = fmt.Errorf("rpc error %d: %s", out.Error.Code, out.Error.Message)
+			continue
+		}
+		if len(out.Result.Value) == 0 {
+			lastErr = fmt.Errorf("empty signature status")
+			continue
+		}
+		v := out.Result.Value[0]
+		status := &TransactionStatus{TxHash: txHash}
+		if v.Err != nil {
+			status.Status = "failed"
+			return status, nil
+		}
+		// 计算最新slot用于确认数：latestSlot - txSlot + 1
+		var latestSlot uint64
+		if s, err := fo.GetSlot(ctx); err == nil {
+			latestSlot = s
+		}
+		computedConf := uint64(0)
+		if latestSlot > 0 && latestSlot >= v.Slot {
+			computedConf = latestSlot - v.Slot + 1
+		}
+
+		// 确认状态映射：processed/pending -> in_progress, confirmed/finalized -> confirmed
+		cs := strings.ToLower(v.ConfirmationStatus)
+		switch cs {
+		case "finalized", "confirmed":
+			status.Status = "confirmed"
+			status.BlockHeight = v.Slot
+			if computedConf > 0 {
+				status.Confirmations = computedConf
+			} else if v.Confirmations != nil {
+				status.Confirmations = uint64(*v.Confirmations)
+			} else {
+				status.Confirmations = 1
+			}
+			return status, nil
+		default:
+			status.Status = "in_progress"
+			status.BlockHeight = v.Slot
+			status.Confirmations = 0
+			return status, nil
+		}
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("unknown sol status error")
+	}
+	return nil, lastErr
 }

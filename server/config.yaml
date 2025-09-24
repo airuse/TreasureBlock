@@ -118,7 +118,7 @@ blockchain:
       decimals: 9
       enabled: true
       rpc_urls:
-        - "https://alpha-clean-yard.solana-mainnet.quiknode.pro/7979488c04b1a36bdc4230b23e3eaac3e9c1c1af"
+        - "https://alpha-clean-yard.solana-devnet.quiknode.pro/7979488c04b1a36bdc4230b23e3eaac3e9c1c1af"
 
 cache:
   enabled: false

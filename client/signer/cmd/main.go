@@ -5,6 +5,7 @@ import (
 	"blockChainBrowser/client/signer/internal/crypto"
 	"blockChainBrowser/client/signer/internal/eth"
 	"blockChainBrowser/client/signer/internal/script"
+	"blockChainBrowser/client/signer/internal/sol"
 	"blockChainBrowser/client/signer/internal/utils"
 	"blockChainBrowser/client/signer/pkg"
 	"encoding/json"
@@ -16,7 +17,12 @@ import (
 	"strconv"
 	"strings"
 
+	"crypto/rand"
+	"encoding/hex"
+
+	ethcrypto "github.com/ethereum/go-ethereum/crypto"
 	"github.com/skip2/go-qrcode"
+	bip39 "github.com/tyler-smith/go-bip39"
 )
 
 // 内嵌密码哈希 - 用于验证系统访问权限
@@ -41,7 +47,7 @@ func firstAddress(addresses []string) (string, bool) {
 func main() {
 	fmt.Println("=== 区块链交易签名程序 ===")
 	fmt.Println("版本: 1.0.0")
-	fmt.Println("支持: ETH, BSC, BTC")
+	fmt.Println("支持: ETH, BSC, BTC, SOL")
 	fmt.Println("=========================")
 
 	// 验证系统密码
@@ -55,11 +61,10 @@ func main() {
 	// 初始化加密模块
 	cryptoManager := crypto.NewCryptoManager()
 
-	// 初始化ETH签名器
+	// 初始化签名器
 	ethSigner := eth.NewETHSigner(cryptoManager)
-
-	// 初始化BTC签名器
 	btcSigner := btc.NewBTCSigner(cryptoManager)
+	solSigner := sol.NewSOLSigner(cryptoManager)
 
 	// 主菜单循环
 	for {
@@ -71,16 +76,18 @@ func main() {
 
 		switch choice {
 		case "1":
-			handleQRCodeImport(ethSigner, btcSigner)
+			handleQRCodeImport(ethSigner, btcSigner, solSigner)
 		case "2":
 			handlePrivateKeyImport(cryptoManager)
 		case "3":
-			handleKeyManagement(cryptoManager)
+			handleKeyCreation(cryptoManager)
 		case "4":
-			handleScriptImport()
+			handleKeyManagement(cryptoManager)
 		case "5":
-			handleSystemSettings()
+			handleScriptImport()
 		case "6":
+			handleSystemSettings()
+		case "7":
 			fmt.Println("👋 感谢使用，程序退出")
 			os.Exit(0)
 		default:
@@ -110,11 +117,102 @@ func showMainMenu() {
 	fmt.Println("\n=== 主菜单 ===")
 	fmt.Println("1. 导入QR码并签名")
 	fmt.Println("2. 导入私钥")
-	fmt.Println("3. 密钥管理")
-	fmt.Println("4. 导入脚本")
-	fmt.Println("5. 系统设置")
-	fmt.Println("6. 退出程序")
+	fmt.Println("3. 创建私钥")
+	fmt.Println("4. 密钥管理")
+	fmt.Println("5. 导入脚本")
+	fmt.Println("6. 系统设置")
+	fmt.Println("7. 退出程序")
 	fmt.Println("===============")
+}
+
+// 创建私钥
+func handleKeyCreation(cryptoManager *crypto.CryptoManager) {
+	fmt.Println("\n=== 创建私钥 ===")
+	chainType := selectChainType()
+	if chainType == "" {
+		return
+	}
+
+	keyManager := crypto.NewKeyManager(cryptoManager)
+	if err := keyManager.LoadKeys(); err != nil {
+		fmt.Printf("❌ 加载私钥失败: %v\n", err)
+		return
+	}
+
+	fmt.Print("请输入描述 (可选): ")
+	description, _ := utils.ReadLine("")
+	password, err := utils.ReadPassword("请输入加密密码: ")
+	if err != nil {
+		fmt.Println("读取密码失败:", err)
+		return
+	}
+
+	switch chainType {
+	case "eth":
+		priv, err := ethcrypto.GenerateKey()
+		if err != nil {
+			fmt.Printf("❌ 生成ETH私钥失败: %v\n", err)
+			return
+		}
+		privHex := hex.EncodeToString(ethcrypto.FromECDSA(priv))
+		lower, checksum, err := crypto.DeriveETHAddresses(privHex)
+		if err != nil {
+			fmt.Printf("❌ 生成地址失败: %v\n", err)
+			return
+		}
+		if err := keyManager.AddKey(lower, privHex, "eth", description, password); err != nil {
+			fmt.Printf("❌ 保存失败: %v\n", err)
+			return
+		}
+		_ = keyManager.AddAlias(checksum, lower)
+		fmt.Println("✅ 创建成功 (ETH)")
+		fmt.Printf("地址: %s\n校验地址: %s\n", lower, checksum)
+	case "btc":
+		b := make([]byte, 32)
+		if _, err := rand.Read(b); err != nil {
+			fmt.Printf("❌ 随机失败: %v\n", err)
+			return
+		}
+		privHex := hex.EncodeToString(b)
+		mainnetAddrs, err := crypto.DeriveAllBTCAddresses(privHex, "mainnet")
+		if err != nil {
+			fmt.Printf("❌ 生成地址失败: %v\n", err)
+			return
+		}
+		if err := keyManager.AddKey(mainnetAddrs.P2WPKH, privHex, "btc", description, password); err != nil {
+			fmt.Printf("❌ 保存失败: %v\n", err)
+			return
+		}
+		for _, a := range []string{mainnetAddrs.P2PKH, mainnetAddrs.P2WSH, mainnetAddrs.P2SH} {
+			if a != mainnetAddrs.P2WPKH {
+				_ = keyManager.AddAlias(a, mainnetAddrs.P2WPKH)
+			}
+		}
+		fmt.Println("✅ 创建成功 (BTC)")
+		fmt.Printf("主网地址 P2WPKH: %s\n", mainnetAddrs.P2WPKH)
+	case "sol":
+		entropy, err := bip39.NewEntropy(128)
+		if err != nil {
+			fmt.Printf("❌ 生成熵失败: %v\n", err)
+			return
+		}
+		mnemonic, err := bip39.NewMnemonic(entropy)
+		if err != nil {
+			fmt.Printf("❌ 生成助记词失败: %v\n", err)
+			return
+		}
+		base64Key, addr, err := crypto.DeriveSOLFromMnemonicBIP44(mnemonic, "", 0, 0)
+		if err != nil {
+			fmt.Printf("❌ 派生失败: %v\n", err)
+			return
+		}
+		if err := keyManager.AddKey(addr, base64Key, "sol", description, password); err != nil {
+			fmt.Printf("❌ 保存失败: %v\n", err)
+			return
+		}
+		fmt.Println("✅ 创建成功 (SOL)")
+		fmt.Printf("地址: %s\n助记词: %s\n(请妥善保管，勿泄露)\n", addr, mnemonic)
+	}
 }
 
 // 选择链类型
@@ -122,7 +220,8 @@ func selectChainType() string {
 	fmt.Println("\n请选择链类型:")
 	fmt.Println("1. ETH (Ethereum)")
 	fmt.Println("2. BTC (Bitcoin)")
-	fmt.Print("请选择 (1-2): ")
+	fmt.Println("3. SOL (Solana)")
+	fmt.Print("请选择 (1-3): ")
 
 	var choice string
 	fmt.Scanln(&choice)
@@ -132,6 +231,8 @@ func selectChainType() string {
 		return "eth"
 	case "2":
 		return "btc"
+	case "3":
+		return "sol"
 	default:
 		fmt.Println("❌ 无效选择")
 		return ""
@@ -151,7 +252,7 @@ func getNetworkName(networkType string) string {
 }
 
 // 处理QR码导入和签名
-func handleQRCodeImport(ethSigner *eth.ETHSigner, btcSigner *btc.BTCSigner) {
+func handleQRCodeImport(ethSigner *eth.ETHSigner, btcSigner *btc.BTCSigner, solSigner *sol.SOLSigner) {
 	fmt.Println("\n=== QR码导入和签名 ===")
 
 	// 获取QR码文件路径
@@ -211,10 +312,32 @@ func handleQRCodeImport(ethSigner *eth.ETHSigner, btcSigner *btc.BTCSigner) {
 	} else if transaction.IsBTC() {
 		fmt.Println("🟠 自动识别为BTC交易，使用BTC签名器")
 		signBTCTransaction(btcSigner, transaction)
+	} else if transaction.IsSOL() {
+		fmt.Println("🟣 自动识别为SOL交易，使用SOL签名器")
+		signSOLTransaction(solSigner, qrData)
 	} else {
 		fmt.Printf("❌ 不支持的链类型: %s\n", transaction.Type)
 		return
 	}
+}
+
+// 签名SOL交易
+func signSOLTransaction(solSigner *sol.SOLSigner, qrData string) {
+	fmt.Println("\n=== SOL交易签名 ===")
+	// 直接解析为 SolanaUnsigned
+	var unsigned pkg.SolanaUnsigned
+	if err := json.Unmarshal([]byte(qrData), &unsigned); err != nil {
+		fmt.Printf("❌ 解析SOL未签名数据失败: %v\n", err)
+		return
+	}
+	solSigner.Display(&unsigned)
+	signedBase64, err := solSigner.SignTransaction(&unsigned)
+	if err != nil {
+		fmt.Printf("❌ SOL交易签名失败: %v\n", err)
+		return
+	}
+	// 导出（SOL专用：导出包含 signed_base64 与必要上下文）
+	handleSignatureExportSOL(signedBase64, &unsigned)
 }
 
 // 签名ETH交易
@@ -281,7 +404,7 @@ func handleSignatureExport(signedTx string, transaction *pkg.TransactionData) {
 	var choice string
 	fmt.Scanln(&choice)
 
-	// 构造导出JSON
+	// 构造导出JSON（通用：EVM/BTC 使用 signer 字段）
 	exportObj := map[string]interface{}{
 		"id":     transaction.ID,
 		"signer": signedTx,
@@ -334,6 +457,74 @@ func handleSignatureExport(signedTx string, transaction *pkg.TransactionData) {
 	}
 }
 
+// SOL 专用：包含后端导入所需的字段（signed_base64 + 基本上下文）
+func handleSignatureExportSOL(signedBase64 string, unsigned *pkg.SolanaUnsigned) {
+	fmt.Println("\n=== 签名导出 (SOL) ===")
+	fmt.Println("1. 复制到剪贴板 (JSON)")
+	fmt.Println("2. 保存到文件 (JSON)")
+	fmt.Println("3. 生成并展示QR码")
+	fmt.Println("4. 返回主菜单")
+
+	fmt.Print("请选择导出方式: ")
+	var choice string
+	fmt.Scanln(&choice)
+
+	// 构造导出JSON（与后端 ImportSolSignature 对齐）
+	exportObj := map[string]interface{}{
+		"id":               unsigned.ID,
+		"type":             "sol",
+		"signed_base64":    signedBase64,
+		"fee_payer":        unsigned.FeePayer,
+		"recent_blockhash": unsigned.RecentBlockhash,
+	}
+	exportJSON, _ := json.Marshal(exportObj)
+
+	switch choice {
+	case "1":
+		if err := utils.CopyToClipboard(string(exportJSON)); err != nil {
+			fmt.Printf("❌ 复制到剪贴板失败: %v\n", err)
+		} else {
+			fmt.Println("✅ 已复制JSON到剪贴板")
+		}
+	case "2":
+		filename := fmt.Sprintf("signed_tx_sol_%d.json", unsigned.ID)
+		if err := utils.SaveToFile(filename, string(exportJSON)); err != nil {
+			fmt.Printf("❌ 保存到文件失败: %v\n", err)
+		} else {
+			fmt.Printf("✅ 已保存JSON到文件: %s\n", filename)
+		}
+	case "3":
+		pngName := fmt.Sprintf("signed_tx_sol_%d.png", unsigned.ID)
+		if err := qrcode.WriteFile(string(exportJSON), qrcode.Medium, 320, pngName); err != nil {
+			fmt.Printf("❌ 生成QR码失败: %v\n", err)
+		} else {
+			fmt.Printf("✅ 已生成签名QR码: %s\n", pngName)
+			// 尝试用系统默认查看器打开
+			openCmd := ""
+			args := []string{}
+			if utils.IsMacOS() {
+				openCmd = "open"
+				args = []string{pngName}
+			} else if utils.IsWindows() {
+				openCmd = "rundll32"
+				args = []string{"url.dll,FileProtocolHandler", pngName}
+			} else if utils.IsLinux() {
+				openCmd = "xdg-open"
+				args = []string{pngName}
+			}
+			if openCmd != "" {
+				if err := exec.Command(openCmd, args...).Start(); err != nil {
+					fmt.Printf("⚠️  无法自动打开图片，请手动查看: %s\n", pngName)
+				}
+			}
+		}
+	case "4":
+		return
+	default:
+		fmt.Println("❌ 无效选择")
+	}
+}
+
 // 处理私钥导入
 func handlePrivateKeyImport(cryptoManager *crypto.CryptoManager) {
 	fmt.Println("\n=== 私钥导入 ===")
@@ -350,15 +541,41 @@ func handlePrivateKeyImport(cryptoManager *crypto.CryptoManager) {
 		return
 	}
 
-	// 获取私钥
-	fmt.Print("请输入私钥 (十六进制格式，不带0x前缀): ")
+	// 选择导入类型：1) 私钥 2) 助记词(仅SOL)
+	importMode := "1"
+	if chainType == "sol" {
+		fmt.Println("请选择导入方式:")
+		fmt.Println("1. 私钥 (base64 64字节)")
+		fmt.Println("2. 助记词 (BIP39)")
+		fmt.Print("请选择 (1-2): ")
+		fmt.Scanln(&importMode)
+		if importMode != "1" && importMode != "2" {
+			fmt.Println("❌ 无效选择")
+			return
+		}
+	}
+
+	// 获取输入
 	var privateKey string
-	fmt.Scanln(&privateKey)
+	var mnemonic string
+	if chainType == "sol" && importMode == "2" {
+		fmt.Print("请输入助记词（空格分隔）: ")
+		mnemonic, _ = utils.ReadLine("")
+	} else {
+		if chainType == "sol" {
+			fmt.Print("请输入SOL私钥 (base64，64字节): ")
+		} else {
+			fmt.Print("请输入私钥 (十六进制格式，不带0x前缀): ")
+		}
+		fmt.Scanln(&privateKey)
+	}
 
 	// 验证私钥格式
-	if len(privateKey) != 64 {
-		fmt.Println("❌ 私钥格式错误，应该是64位十六进制字符")
-		return
+	if chainType != "sol" && importMode != "2" {
+		if len(privateKey) != 64 {
+			fmt.Println("❌ 私钥格式错误，应该是64位十六进制字符")
+			return
+		}
 	}
 
 	// 获取描述
@@ -438,6 +655,33 @@ func handlePrivateKeyImport(cryptoManager *crypto.CryptoManager) {
 		fmt.Printf("P2WPKH: %s\n", testnetAddrs.P2WPKH)
 		fmt.Printf("P2WSH:  %s\n", testnetAddrs.P2WSH)
 		fmt.Printf("P2SH:   %s\n", testnetAddrs.P2SH)
+	} else if chainType == "sol" {
+		if importMode == "2" {
+			// 使用与JS相同的派生：BIP44 m/44'/501'/0'/0' 且不使用passphrase
+			base64Key, addr, err := crypto.DeriveSOLFromMnemonicBIP44(mnemonic, "", 0, 0)
+			if err != nil {
+				fmt.Printf("❌ 生成SOL地址失败: %v\n", err)
+				return
+			}
+			if err := keyManager.AddKey(addr, base64Key, "sol", description, password); err != nil {
+				fmt.Printf("❌ 添加私钥失败: %v\n", err)
+				return
+			}
+			fmt.Println("✅ 助记词导入成功 (SOL)")
+			fmt.Printf("地址: %s\n", addr)
+		} else {
+			addr, err := crypto.DeriveSOLAddressFromBase64(privateKey)
+			if err != nil {
+				fmt.Printf("❌ 生成SOL地址失败: %v\n", err)
+				return
+			}
+			if err := keyManager.AddKey(addr, privateKey, "sol", description, password); err != nil {
+				fmt.Printf("❌ 添加私钥失败: %v\n", err)
+				return
+			}
+			fmt.Println("✅ 私钥导入成功 (SOL)")
+			fmt.Printf("地址: %s\n", addr)
+		}
 	}
 }
 

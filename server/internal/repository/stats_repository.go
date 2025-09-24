@@ -22,6 +22,12 @@ type StatsRepository interface {
 	GetTotalTransactionCount(ctx context.Context, chain string) (int64, error)
 	GetLatestBaseFee(ctx context.Context, chain string) (int64, error)
 	GetCurrentDifficulty(ctx context.Context, chain string) (int64, error)
+	// Solana specific methods
+	GetTotalSolanaSlotCount(ctx context.Context) (int64, error)
+	GetTotalSolanaTransactionCount(ctx context.Context) (int64, error)
+	GetSolanaDailyVolume(ctx context.Context, duration time.Duration) (float64, error)
+	GetSolanaAverageFee(ctx context.Context, duration time.Duration) (int64, error)
+	GetSolanaAverageSlotTime(ctx context.Context, duration time.Duration) (float64, error)
 }
 
 // statsRepository 统计仓储实现
@@ -46,12 +52,31 @@ func (r *statsRepository) GetTotalBlockCount(ctx context.Context, chain string) 
 	return count, err
 }
 
+// GetTotalSolanaSlotCount 获取Solana总slot数
+func (r *statsRepository) GetTotalSolanaSlotCount(ctx context.Context) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&models.SolTxDetail{}).
+		Select("COUNT(DISTINCT slot)").
+		Scan(&count).Error
+	return count, err
+}
+
 // GetTotalTransactionCount 获取总交易数
 func (r *statsRepository) GetTotalTransactionCount(ctx context.Context, chain string) (int64, error) {
 	var count int64
 	err := r.db.WithContext(ctx).
 		Model(&models.Transaction{}).
 		Where("chain = ?", chain).
+		Count(&count).Error
+	return count, err
+}
+
+// GetTotalSolanaTransactionCount 获取Solana总交易数
+func (r *statsRepository) GetTotalSolanaTransactionCount(ctx context.Context) (int64, error) {
+	var count int64
+	err := r.db.WithContext(ctx).
+		Model(&models.SolTxDetail{}).
 		Count(&count).Error
 	return count, err
 }
@@ -112,6 +137,22 @@ func (r *statsRepository) GetDailyVolume(ctx context.Context, chain string, dura
 		Model(&models.Transaction{}).
 		Where("chain = ? AND ctime >= ? AND amount IS NOT NULL AND amount != ''", chain, startTime).
 		Select("COALESCE(SUM(CAST(amount AS DECIMAL(65,18))), 0)").
+		Scan(&totalVolume).Error
+
+	return totalVolume, err
+}
+
+// GetSolanaDailyVolume 获取Solana指定时间范围内的交易量（lamports）
+func (r *statsRepository) GetSolanaDailyVolume(ctx context.Context, duration time.Duration) (float64, error) {
+	// 计算指定时间范围前的时间
+	startTime := time.Now().Add(-duration)
+
+	// 使用GORM查询，配合索引提升性能
+	var totalVolume float64
+	err := r.db.WithContext(ctx).
+		Model(&models.SolTxDetail{}).
+		Where("ctime >= ? AND fee > 0", startTime).
+		Select("COALESCE(SUM(fee), 0)").
 		Scan(&totalVolume).Error
 
 	return totalVolume, err
@@ -218,4 +259,59 @@ func (r *statsRepository) GetCurrentDifficulty(ctx context.Context, chain string
 	}
 
 	return result, nil
+}
+
+// GetSolanaAverageFee 获取Solana指定时间范围内的平均费用（lamports）
+func (r *statsRepository) GetSolanaAverageFee(ctx context.Context, duration time.Duration) (int64, error) {
+	// 计算指定时间范围前的时间
+	startTime := time.Now().Add(-duration)
+
+	// 使用GORM查询，配合索引提升性能
+	var avgFee float64
+	err := r.db.WithContext(ctx).
+		Model(&models.SolTxDetail{}).
+		Where("ctime >= ? AND fee > 0", startTime).
+		Select("COALESCE(AVG(fee), 0)").
+		Scan(&avgFee).Error
+
+	return int64(avgFee), err
+}
+
+// GetSolanaAverageSlotTime 获取Solana指定时间范围内的平均出块时间
+func (r *statsRepository) GetSolanaAverageSlotTime(ctx context.Context, duration time.Duration) (float64, error) {
+	// 计算指定时间范围前的时间
+	startTime := time.Now().Add(-duration)
+
+	// 查询指定时间范围内的slot
+	var slots []struct {
+		Slot      uint64    `gorm:"column:slot"`
+		Timestamp time.Time `gorm:"column:ctime"`
+	}
+
+	err := r.db.WithContext(ctx).
+		Model(&models.SolTxDetail{}).
+		Where("ctime >= ?", startTime).
+		Group("slot").
+		Order("slot ASC").
+		Select("slot, MIN(ctime) as ctime").
+		Find(&slots).Error
+
+	if err != nil {
+		return 0, err
+	}
+
+	if len(slots) < 2 {
+		// 如果slot数量不足，返回Solana默认值
+		return 0.4, nil // Solana 默认400ms
+	}
+
+	// 计算平均出块时间
+	var totalTime float64
+	for i := 1; i < len(slots); i++ {
+		timeDiff := slots[i].Timestamp.Sub(slots[i-1].Timestamp).Seconds()
+		totalTime += timeDiff
+	}
+
+	avgSlotTime := totalTime / float64(len(slots)-1)
+	return avgSlotTime, nil
 }

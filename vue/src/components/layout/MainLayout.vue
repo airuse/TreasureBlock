@@ -336,6 +336,7 @@ const menuItems = computed(() => {
       { name: '首页', path: basePath },
       { name: '区块', path: `${basePath}/blocks` },
       { name: '程序', path: `${basePath}/programs` },
+      { name: '地址', path: `${basePath}/addresses` },
       // { name: '统计', path: `${basePath}/statistics` }, // 暂时屏蔽统计页面
     ]
   } else {
@@ -380,7 +381,7 @@ const switchChain = (chain: string) => {
       eth: ['blocks', 'addresses', 'settings'], // 暂时屏蔽统计页面
       btc: ['blocks'], // BTC没有addresses页面，暂时屏蔽统计页面
       bsc: ['blocks', 'addresses', 'settings'], // BSC支持地址页面，暂时屏蔽统计页面
-      sol: ['blocks', 'programs', 'settings'] // SOL改为程序维护页面
+      sol: ['blocks', 'programs', 'addresses', 'settings'] // SOL支持程序维护和地址页面
     }
     
     // 如果目标页面在当前链中有效，则跳转；否则跳转到首页

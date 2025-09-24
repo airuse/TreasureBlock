@@ -2,15 +2,15 @@
   <div class="space-y-6">
     <!-- 页面标题和返回按钮 -->
     <div class="flex items-center space-x-4">
-      <router-link 
-        to="/sol/programs" 
+      <button 
+        @click="goBack"
         class="inline-flex items-center px-3 py-2 text-sm font-medium text-gray-500 bg-white border border-gray-300 rounded-md hover:bg-gray-50"
       >
         <svg class="w-4 h-4 mr-2" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7"></path>
         </svg>
-        返回合约列表
-      </router-link>
+        返回
+      </button>
       <h1 class="text-2xl font-bold text-gray-900">合约详情</h1>
     </div>
 
@@ -250,7 +250,7 @@
 
 <script setup lang="ts">
 import { ref, onMounted, computed, defineComponent, h } from 'vue'
-import { useRoute } from 'vue-router'
+import { useRoute, useRouter } from 'vue-router'
 import { getContractByAddress } from '@/api/contracts'
 import { getCoinConfigMaintenance } from '@/api/coinconfig'
 
@@ -281,6 +281,7 @@ const Field = defineComponent({
 
 // 路由参数
 const route = useRoute()
+const router = useRouter()
 const contractAddress = computed(() => route.params.address as string)
 
 // 响应式数据
@@ -291,6 +292,19 @@ const errorMessage = ref('')
 // 币种配置
 const coinConfig = ref<any | null>(null)
 const parserConfigs = ref<any[]>([])
+
+// 返回方法
+const goBack = () => {
+  // 检查是否有来源页面信息
+  const from = route.query.from as string
+  if (from) {
+    // 如果有来源页面信息，跳转到指定页面
+    router.push(from)
+  } else {
+    // 否则使用浏览器历史记录返回
+    router.go(-1)
+  }
+}
 
 // 加载合约数据
 const loadContractData = async () => {

@@ -82,7 +82,7 @@ export interface UpdatePersonalAddressRequest {
 }
 
 // 地址类型枚举
-export type PersonalAddressType = 'wallet' | 'contract' | 'authorized_contract' | 'exchange' | 'other'
+export type PersonalAddressType = 'wallet' | 'contract' | 'authorized_contract' | 'ata' | 'exchange' | 'other'
 
 // 地址状态枚举
 export type PersonalAddressStatus = 'active' | 'inactive'

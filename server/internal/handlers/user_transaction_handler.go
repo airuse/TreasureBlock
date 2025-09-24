@@ -61,7 +61,7 @@ func (h *UserTransactionHandler) validateTransactionFields(req *dto.CreateUserTr
 	// 智能判断交易类型
 	if req.TransactionType == "" {
 		// 根据代币符号和合约地址智能判断
-		if req.Symbol != "ETH" && req.Symbol != "BTC" {
+		if req.Symbol != "ETH" && req.Symbol != "BTC" && req.Symbol != "SOL" {
 			// 如果不是原生代币，自动设置为代币交易
 			req.TransactionType = "token"
 		} else {
@@ -366,6 +366,78 @@ func (h *UserTransactionHandler) ExportTransaction(c *gin.Context) {
 	}
 
 	utils.SuccessResponse(c, http.StatusOK, "导出交易成功", response)
+}
+
+// ===== SOL 专用接口 =====
+
+// ExportSolUnsigned 导出SOL未签名交易
+func (h *UserTransactionHandler) ExportSolUnsigned(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "参数错误", "无效的交易ID")
+		return
+	}
+
+	userID, exists := c.Get("user_id")
+	if !exists {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "未授权", "用户ID不存在")
+		return
+	}
+
+	resp, err := h.userTxService.ExportSolUnsigned(c.Request.Context(), uint(id), uint64(userID.(uint)))
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusInternalServerError, "导出交易失败", err.Error())
+		return
+	}
+	utils.SuccessResponse(c, http.StatusOK, "导出交易成功", resp)
+}
+
+// ImportSolSignature 导入SOL签名
+func (h *UserTransactionHandler) ImportSolSignature(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "参数错误", "无效的交易ID")
+		return
+	}
+	var req dto.SolImportSignatureRequest
+	if err := c.ShouldBindJSON(&req); err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "请求参数错误", err.Error())
+		return
+	}
+	userID, exists := c.Get("user_id")
+	if !exists {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "未授权", "用户ID不存在")
+		return
+	}
+	resp, err := h.userTxService.ImportSolSignature(c.Request.Context(), uint(id), uint64(userID.(uint)), &req)
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusInternalServerError, "导入签名失败", err.Error())
+		return
+	}
+	utils.SuccessResponse(c, http.StatusOK, "导入签名成功", resp)
+}
+
+// SendSolTransaction 发送SOL交易
+func (h *UserTransactionHandler) SendSolTransaction(c *gin.Context) {
+	idStr := c.Param("id")
+	id, err := strconv.ParseUint(idStr, 10, 32)
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusBadRequest, "参数错误", "无效的交易ID")
+		return
+	}
+	userID, exists := c.Get("user_id")
+	if !exists {
+		utils.ErrorResponse(c, http.StatusUnauthorized, "未授权", "用户ID不存在")
+		return
+	}
+	resp, err := h.userTxService.SendSolTransaction(c.Request.Context(), uint(id), uint64(userID.(uint)))
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusInternalServerError, "发送交易失败", err.Error())
+		return
+	}
+	utils.SuccessResponse(c, http.StatusOK, "发送交易成功", resp)
 }
 
 // ImportSignature 导入签名

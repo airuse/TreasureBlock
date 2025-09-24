@@ -628,7 +628,13 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import type { UserTransaction, UserTransactionStatsResponse } from '@/types'
 import CreateTransactionModal from '@/components/sol/personal/CreateTransactionModal.vue'
-import { getUserTransactions, getUserTransactionStats, exportTransaction as exportTransactionAPI, importSignature as importSignatureAPI } from '@/api/user-transactions'
+import { 
+  getUserTransactions, 
+  getUserTransactionStats, 
+  exportSolUnsigned as exportTransactionAPI, 
+  importSolSignature as importSignatureAPI,
+  sendSolTransaction
+} from '@/api/user-transactions'
 import { getGasRates, getSOLGasRatesCached } from '@/api/gas'
 import { useChainWebSocket } from '@/composables/useWebSocket'
 import { formatTokenAmount } from '@/utils/amountFormatter'
@@ -872,7 +878,7 @@ const copyToClipboard = async (text: string) => {
 const exportTransaction = async (tx: UserTransaction) => {
   selectedTransaction.value = tx
   try {
-    const response = await exportTransactionAPI(tx.id, {})
+    const response = await exportTransactionAPI(tx.id)
     if (response.success) {
       tx.status = 'unsigned'
       loadTransactions()
@@ -918,84 +924,15 @@ const generateQRCode = async (transactionData: any, tx: UserTransaction) => {
     
     
     
-    // 生成QR码配置 - 大幅提高分辨率和质量
+    // 使用简化且兼容扫描器的配置：PNG，适中尺寸与边距
     const qrOptions = {
       type: 'image/png' as const,
-      quality: 1.0, // 最高质量
-      margin: 4, // 进一步增加边距，提高识别率
-      color: {
-        dark: '#000000',
-        light: '#FFFFFF'
-      },
-      width: 2048, // 大幅增加尺寸，从512提升到2048
-      errorCorrectionLevel: 'H' as const, // 使用最高错误纠正级别
-      scale: 16, // 增加缩放比例，提高清晰度
-      rendererOpts: {
-        quality: 1.0, // 渲染质量
-        precision: 'high' // 高精度渲染
-      }
+      margin: 8,
+      color: { dark: '#000000', light: '#FFFFFF' },
+      width: 1024, // 兼容大多数摄像头与解码器
+      errorCorrectionLevel: 'M' as const // 中等容错，避免过密
     }
-    
-    // 生成QR码数据URL - 使用多种策略
-    let qrDataURL: string
-    try {
-      // 策略1: 尝试生成SVG格式的QR码，然后转换为PNG
-      console.log('尝试生成SVG格式QR码...')
-      const svgString = await QRCode.toString(transactionJson, {
-        type: 'svg',
-        width: 2048,
-        margin: 12,
-        color: {
-          dark: '#000000',
-          light: '#FFFFFF'
-        },
-        errorCorrectionLevel: 'H'
-      })
-      
-      // 将SVG转换为PNG
-      const canvas = document.createElement('canvas')
-      const ctx = canvas.getContext('2d')
-      const img = new Image()
-      
-      qrDataURL = await new Promise<string>((resolve, reject) => {
-        img.onload = () => {
-          canvas.width = 2048
-          canvas.height = 2048
-          ctx?.drawImage(img, 0, 0, 2048, 2048)
-          const pngDataURL = canvas.toDataURL('image/png', 1.0)
-          console.log('SVG转PNG成功，QR码尺寸:', 2048)
-          resolve(pngDataURL)
-        }
-        img.onerror = () => {
-          console.warn('SVG转PNG失败，尝试标准PNG生成...')
-          // 回退到标准PNG生成
-          QRCode.toDataURL(transactionJson, qrOptions).then(resolve).catch(reject)
-        }
-        img.src = 'data:image/svg+xml;base64,' + btoa(svgString)
-      })
-      
-    } catch (error) {
-      console.warn('SVG生成失败，尝试标准PNG生成:', error)
-      try {
-        qrDataURL = await QRCode.toDataURL(transactionJson, qrOptions)
-      } catch (fallbackError) {
-        console.warn('高分辨率PNG生成失败，尝试标准分辨率:', fallbackError)
-        // 如果高分辨率失败，使用标准分辨率
-        const fallbackOptions = {
-          type: 'image/png' as const,
-          quality: 1.0,
-          margin: 8,
-          color: {
-            dark: '#000000',
-            light: '#FFFFFF'
-          },
-          width: 1024,
-          errorCorrectionLevel: 'H' as const,
-          scale: 8
-        }
-        qrDataURL = await QRCode.toDataURL(transactionJson, fallbackOptions)
-      }
-    }
+    const qrDataURL: string = await QRCode.toDataURL(transactionJson, qrOptions)
     
     qrCodeDataURL.value = qrDataURL
     
@@ -1017,47 +954,58 @@ const generateQRCode = async (transactionData: any, tx: UserTransaction) => {
 
 // 创建精简的交易数据结构
 const createMinimalTransactionData = (tx: UserTransaction, fullData: any) => {
-  // 优先使用后端保存的完整数据，确保数据一致性
+  // SOL：使用专用未签名载荷（包含 instructions）
+  if (tx.chain === 'sol') {
+    // fullData 预期来自 exportSolUnsigned 返回
+    const solPayload = {
+      id: tx.id,
+      chain: 'sol',
+      type: 'sol',
+      version: fullData.version || 'legacy',
+      recent_blockhash: fullData.recent_blockhash || fullData.recentBlockhash,
+      fee_payer: fullData.fee_payer || tx.from_address,
+      instructions: Array.isArray(fullData.instructions) ? fullData.instructions : [],
+      context: fullData.context || {}
+    }
+
+    // 如果是原生SOL转账且后端未提供instructions，则基于配方补一条最简指令计划
+    if (!solPayload.instructions.length && (!tx.transaction_type || tx.transaction_type === 'coin' || tx.transaction_type === 'native')) {
+      solPayload.instructions.push({
+        program_id: '11111111111111111111111111111111',
+        type: 'system_transfer',
+        params: { from: tx.from_address, to: tx.to_address, lamports: tx.amount }
+      })
+    }
+    return solPayload
+  }
+
+  // 其他链（EVM/BTC）沿用原有结构
   const minimalData: any = {
-    // 交易标识
     id: tx.id,
-    
-    // 链信息 - 优先使用后端保存的chainId
-    chainId: fullData.chain_id || (tx.chain === 'sol' ? '1' : tx.chain),
-    type: tx.chain, // 添加类型字段：eth 或 btc
-    
-    // 交易核心字段
-    nonce: fullData.nonce || tx.nonce || 0, // 优先使用API返回的nonce
-    from: tx.from_address, // 添加from字段用于签名程序自动匹配私钥
+    chainId: fullData.chain_id || tx.chain,
+    type: tx.chain,
+    nonce: fullData.nonce || tx.nonce || 0,
+    from: tx.from_address,
     to: tx.transaction_type === 'token' && tx.token_contract_address ? tx.token_contract_address : tx.to_address,
-    value: tx.transaction_type === 'token' ? '0x0' : convertToHexString(tx.amount || '0'), // 代币转账value为0，SOL转账使用整数金额的十六进制格式
-    data: fullData.tx_data || generateContractData(tx, fullData), // 优先使用后端保存的tx_data
-    
-    // EIP-1559费率字段 - 转换为Gwei单位供签名程序使用
+    value: tx.transaction_type === 'token' ? '0x0' : convertToHexString(tx.amount || '0'),
+    data: fullData.tx_data || generateContractData(tx, fullData),
     maxPriorityFeePerGas: convertWeiToGwei(fullData.max_priority_fee_per_gas || tx.max_priority_fee_per_gas || '2000000000'),
     maxFeePerGas: convertWeiToGwei(fullData.max_fee_per_gas || tx.max_fee_per_gas || '30000000000')
   }
 
-  // 将后端估算的GasLimit透传给签名器（数字类型）
   if (fullData.gas_limit || tx.gas_limit) {
     try {
       const gas = fullData.gas_limit ?? tx.gas_limit
       minimalData.gas = typeof gas === 'string' ? parseInt(gas, 10) : Number(gas)
-    } catch (e) {
-      // 忽略解析失败，保持未设置
-    }
+    } catch {}
   }
-  
-  // 添加AccessList - 直接使用后端计算好的数据
+
   if (fullData.access_list && fullData.access_list !== '[]') {
     try {
       minimalData.accessList = JSON.parse(fullData.access_list)
-    } catch (error) {
-      console.warn('解析AccessList失败:', error)
-      // 如果解析失败，不添加AccessList
-    }
+    } catch {}
   }
-  
+
   return minimalData
 }
 
@@ -1292,13 +1240,7 @@ const importSignatureData = async () => {
     }
     
     // 调用导入签名API
-    const response = await importSignatureAPI(id, { 
-      id, 
-      signed_tx: signatureData.signedTx,
-      v: signatureData.v,
-      r: signatureData.r,
-      s: signatureData.s
-    })
+    const response = await importSignatureAPI(id, { id, signed_base64: signatureData.signedTx })
     
     if (response.success) {
       alert('导入签名成功！')
@@ -1335,6 +1277,17 @@ const parseSignatureData = (signatureText: string) => {
       }
     }
     
+    // SOL 专用：支持 { id, signed_base64, ... }
+    if ((typeof data.id === 'number' || typeof data.id === 'string') && typeof data.signed_base64 === 'string') {
+      return {
+        id: typeof data.id === 'string' ? parseInt(data.id, 10) : data.id,
+        signedTx: data.signed_base64,
+        v: null,
+        r: null,
+        s: null
+      }
+    }
+    
     // 支持格式：{"id":2,"signer":"0x..."}
     if ((typeof data.id === 'number' || typeof data.id === 'string') && typeof data.signer === 'string') {
       return {
@@ -1359,6 +1312,7 @@ const parseSignatureData = (signatureText: string) => {
     return null
   } catch (error) {
     // 如果不是JSON格式，假设是直接的签名交易字符串
+    // EVM: 0x 开头的长串
     if (signatureText.startsWith('0x') && signatureText.length > 100) {
       return {
         signedTx: signatureText,
@@ -1367,6 +1321,18 @@ const parseSignatureData = (signatureText: string) => {
         s: null
       }
     }
+    // SOL: Base64 字符串（不含0x），做一次简单判定
+    try {
+      const maybe = atob(signatureText)
+      if (maybe && signatureText.length > 100) {
+        return {
+          signedTx: signatureText,
+          v: null,
+          r: null,
+          s: null
+        }
+      }
+    } catch {}
     
     console.error('解析签名数据失败:', error)
     return null

@@ -6,7 +6,7 @@ import "encoding/json"
 type TransactionData struct {
 	ID         int              `json:"id"`                   // 交易ID
 	ChainID    string           `json:"chainId"`              // 链ID
-	Type       string           `json:"type"`                 // 链类型：eth 或 btc
+	Type       string           `json:"type"`                 // 链类型：eth | btc | sol
 	Nonce      uint64           `json:"nonce"`                // 交易序号
 	From       string           `json:"from"`                 // 发送地址
 	To         string           `json:"to"`                   // 接收地址
@@ -114,6 +114,9 @@ func ParseQRCodeData(qrData string) (*TransactionData, error) {
 		if transaction.To == "" {
 			return nil, &ValidationError{Field: "to", Message: "接收地址不能为空"}
 		}
+	} else if transaction.IsSOL() {
+		// 对于SOL，这里仅做基本通过，实际签名数据从外层 SolanaUnsigned 解析
+		// 保持与现有流程兼容
 	} else {
 		return nil, &ValidationError{Field: "type", Message: "不支持的链类型"}
 	}
@@ -156,6 +159,22 @@ func (t *TransactionData) IsBSC() bool {
 func (t *TransactionData) IsEVM() bool {
 	return t.IsETH() || t.IsBSC()
 }
+
+// ===== SOL =====
+
+// SolanaUnsigned 本地组装未签名交易所需数据
+type SolanaUnsigned struct {
+	ID              int                      `json:"id"`
+	Chain           string                   `json:"chain"`
+	Type            string                   `json:"type"`
+	Version         string                   `json:"version"`
+	RecentBlockhash string                   `json:"recent_blockhash"`
+	FeePayer        string                   `json:"fee_payer"`
+	Instructions    []map[string]interface{} `json:"instructions"`
+	Context         map[string]interface{}   `json:"context,omitempty"`
+}
+
+func (t *TransactionData) IsSOL() bool { return t.Type == "sol" }
 
 // GetChainName 获取链名称
 func (t *TransactionData) GetChainName() string {

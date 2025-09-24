@@ -5,7 +5,7 @@ type CreateUserAddressRequest struct {
 	Address             string   `json:"address" binding:"required"`
 	Chain               string   `json:"chain" binding:"required,oneof=eth btc bsc sol other"`
 	Label               string   `json:"label"`
-	Type                string   `json:"type" binding:"required,oneof=wallet contract authorized_contract exchange other"`
+	Type                string   `json:"type" binding:"required,oneof=wallet contract authorized_contract ata exchange other"`
 	ContractID          *uint    `json:"contract_id"`          // 关联的合约ID，仅当type为contract时有效
 	AuthorizedAddresses []string `json:"authorized_addresses"` // 授权地址列表，仅当type为contract时有效
 	Notes               string   `json:"notes"`                // 备注信息
@@ -15,7 +15,7 @@ type CreateUserAddressRequest struct {
 type UpdateUserAddressRequest struct {
 	Label                 *string   `json:"label"`
 	Chain                 *string   `json:"chain" binding:"omitempty,oneof=eth btc bsc sol other"`
-	Type                  *string   `json:"type" binding:"omitempty,oneof=wallet contract authorized_contract exchange other"`
+	Type                  *string   `json:"type" binding:"omitempty,oneof=wallet contract authorized_contract ata exchange other"`
 	ContractID            *uint     `json:"contract_id"`
 	AuthorizedAddresses   *[]string `json:"authorized_addresses"`    // 授权地址列表
 	ContractBalance       *string   `json:"contract_balance"`        // 合约余额

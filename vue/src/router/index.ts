@@ -29,7 +29,7 @@ import SOLHomeView from '../views/sol/HomeView.vue'
 import SOLBlocksView from '../views/sol/BlocksView.vue'
 import SOLBlockDetailView from '../views/sol/detail/BlockDetailView.vue'
 import SOLContractDetailView from '../views/sol/detail/ContractDetailView.vue'
-// import SOLAddressesView from '../views/sol/AddressesView.vue'
+import SOLAddressesView from '../views/sol/AddressesView.vue'
 import SOLProgramView from '../views/sol/ProgramView.vue'
 import SOLStatisticsView from '../views/sol/StatisticsView.vue'
 import SOLSettingsView from '../views/sol/SettingsView.vue'
@@ -233,6 +233,11 @@ const router = createRouter({
       path: '/sol/programs',
       name: 'sol-programs',
       component: SOLProgramView
+    },
+    {
+      path: '/sol/addresses',
+      name: 'sol-addresses',
+      component: SOLAddressesView
     },
     {
       path: '/sol/address-transactions',

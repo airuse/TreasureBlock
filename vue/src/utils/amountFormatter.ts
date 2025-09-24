@@ -38,6 +38,9 @@ export function formatTokenAmount(amount: string, symbol: string, decimals: numb
   if (symbol === 'ETH' || symbol === 'BNB') {
     // ETH/BNB 使用18位精度
     return formatAmountWithDecimals(intAmount, 18)
+  } else if (symbol === 'SOL') {
+    // SOL 使用9位精度
+    return formatAmountWithDecimals(intAmount, 9)
   } else if (symbol === 'USDC' || symbol === 'USDT') {
     // USDC/USDT使用6位精度
     return formatAmountWithDecimals(intAmount, 6)
