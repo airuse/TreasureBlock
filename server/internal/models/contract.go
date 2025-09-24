@@ -9,6 +9,7 @@ type Contract struct {
 	ID            uint      `json:"id" gorm:"primaryKey;autoIncrement"`
 	Address       string    `json:"address" gorm:"uniqueIndex;not null;type:varchar(120)"` // 合约地址
 	ChainName     string    `json:"chain_name" gorm:"not null;type:varchar(20)"`           // 链名称
+	ProgramID     string    `json:"program_id" gorm:"type:varchar(120)"`                   // 关联的程序ID（如Sol Program ID）
 	ContractType  string    `json:"contract_type" gorm:"not null;type:varchar(50)"`        // 合约类型
 	Name          string    `json:"name" gorm:"type:varchar(100)"`                         // 合约名称
 	Symbol        string    `json:"symbol" gorm:"type:varchar(20)"`                        // 合约符号

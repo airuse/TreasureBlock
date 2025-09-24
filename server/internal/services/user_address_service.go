@@ -103,6 +103,8 @@ func (s *userAddressService) CreateAddress(userID uint, req *dto.CreateUserAddre
 		TransactionCount:    0,
 		IsActive:            true,
 		BalanceHeight:       createdHeight,
+		AtaOwnerAddress:     req.AtaOwnerAddress,
+		AtaMintAddress:      req.AtaMintAddress,
 	}
 
 	// 如果是合约地址，预先查询合约余额和被授权地址余额
@@ -272,6 +274,13 @@ func (s *userAddressService) UpdateAddress(userID uint, addressID uint, req *dto
 	if req.IsActive != nil {
 		address.IsActive = *req.IsActive
 	}
+	// 更新 SOL-ATA 关联冗余
+	if req.AtaOwnerAddress != nil {
+		address.AtaOwnerAddress = *req.AtaOwnerAddress
+	}
+	if req.AtaMintAddress != nil {
+		address.AtaMintAddress = *req.AtaMintAddress
+	}
 
 	// 保存更新
 	if err := s.userAddressRepo.Update(address); err != nil {
@@ -338,6 +347,9 @@ func (s *userAddressService) convertToResponse(address *models.UserAddress) *dto
 		BalanceHeight:       address.BalanceHeight,
 		CreatedAt:           address.CreatedAt.Format("2006-01-02 15:04:05"),
 		UpdatedAt:           address.UpdatedAt.Format("2006-01-02 15:04:05"),
+		// SOL-ATA 冗余字段
+		AtaOwnerAddress: address.AtaOwnerAddress,
+		AtaMintAddress:  address.AtaMintAddress,
 	}
 }
 
@@ -603,6 +615,20 @@ func (s *userAddressService) RefreshAddressBalances(userID uint, addressID uint)
 			if utxoErr == nil {
 				addr.UTXOCount = utxoCount
 			}
+		}
+	case "sol":
+		// 使用 Sol RPC 获取余额（lamports）与最新 slot 作为高度
+		fo, err := utils.NewSolFailoverFromChain("sol")
+		if err == nil {
+			ctx := context.Background()
+			slot, lamports, gerr := fo.GetAccountBalance(ctx, addr.Address)
+			if gerr == nil {
+				bal = strconv.FormatUint(lamports, 10)
+				height = slot
+				addr.Balance = &bal
+				addr.BalanceHeight = height
+			}
+			fo.Close()
 		}
 	default:
 		// 其他链类型暂时不处理

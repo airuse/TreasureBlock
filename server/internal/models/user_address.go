@@ -71,8 +71,11 @@ type UserAddress struct {
 	UTXOCount           int64                   `json:"utxo_count" gorm:"default:0"` // UTXO数量（仅BTC使用）
 	IsActive            bool                    `json:"is_active" gorm:"default:true"`
 	BalanceHeight       uint64                  `json:"balance_height" gorm:"default:0"` // 地址余额对应的区块高度
-	CreatedAt           time.Time               `json:"created_at"`
-	UpdatedAt           time.Time               `json:"updated_at"`
+	// SOL 相关（ATA 冗余信息）
+	AtaOwnerAddress string    `json:"ata_owner_address" gorm:"type:varchar(120);default:''"` // ATA所属主钱包地址
+	AtaMintAddress  string    `json:"ata_mint_address" gorm:"type:varchar(120);default:''"`  // ATA对应的SPL铸币地址
+	CreatedAt       time.Time `json:"created_at"`
+	UpdatedAt       time.Time `json:"updated_at"`
 
 	// 关联关系
 	User     User      `json:"user" gorm:"foreignKey:UserID"`

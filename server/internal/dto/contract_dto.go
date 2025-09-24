@@ -8,6 +8,7 @@ type ContractInfo struct {
 	Decimals     uint8       `json:"decimals"`
 	TotalSupply  string      `json:"total_supply"`
 	ChainName    string      `json:"chain_name"`
+	ProgramID    string      `json:"program_id"`
 	IsERC20      bool        `json:"is_erc20"`
 	ContractType string      `json:"contract_type"`
 	Interfaces   interface{} `json:"interfaces"` // 支持string、[]string或null
@@ -32,6 +33,7 @@ type ContractResponse struct {
 	Decimals      uint8       `json:"decimals"`
 	TotalSupply   string      `json:"total_supply"`
 	ChainName     string      `json:"chain_name"`
+	ProgramID     string      `json:"program_id"`
 	IsERC20       bool        `json:"is_erc20"`
 	ContractType  string      `json:"contract_type"`
 	Interfaces    interface{} `json:"interfaces"` // 支持string、[]string或null

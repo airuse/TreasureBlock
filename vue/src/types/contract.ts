@@ -5,6 +5,7 @@ export interface Contract {
   id: number
   address: string // 修复：实际后端返回的是 address
   chain_name: string
+  program_id?: string
   contract_type: string
   name: string // 修复：实际后端返回的是 name
   symbol: string // 修复：实际后端返回的是 symbol

@@ -18,6 +18,9 @@ export interface PersonalAddressItem {
   balance_height: number
   created_at: string
   updated_at: string
+  // SOL-ATA 关联冗余
+  ata_owner_address?: string
+  ata_mint_address?: string
 }
 
 // 个人地址列表项类型（与API返回数据结构匹配）
@@ -56,6 +59,9 @@ export interface PersonalAddressDetail {
   isActive: boolean
   notes?: string
   balanceHeight: number
+  // SOL-ATA 关联冗余（用于编辑表单）
+  ata_owner_address?: string
+  ata_mint_address?: string
 }
 
 // 创建个人地址请求类型
@@ -67,6 +73,9 @@ export interface CreatePersonalAddressRequest {
   contract_id?: number  // 使用与后端一致的字段名
   authorized_addresses?: string[]
   notes?: string
+  // SOL-ATA 关联冗余
+  ata_owner_address?: string
+  ata_mint_address?: string
 }
 
 // 更新个人地址请求类型
@@ -79,6 +88,9 @@ export interface UpdatePersonalAddressRequest {
   contract_balance_height?: number
   notes?: string
   isActive?: boolean
+  // SOL-ATA 关联冗余
+  ata_owner_address?: string
+  ata_mint_address?: string
 }
 
 // 地址类型枚举

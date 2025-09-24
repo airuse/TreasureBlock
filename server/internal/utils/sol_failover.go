@@ -246,6 +246,70 @@ func (m *SolFailoverManager) getLatestBlockhashOnce(ctx context.Context, endpoin
 	return out.Result.Value.Blockhash, nil
 }
 
+// GetAccountBalance 获取账户余额（返回 context.slot 与 lamports）
+func (m *SolFailoverManager) GetAccountBalance(ctx context.Context, address string) (uint64, uint64, error) {
+	if len(m.endpoints) == 0 {
+		return 0, 0, fmt.Errorf("no sol endpoints configured")
+	}
+	type rpcReq struct {
+		JSONRPC string        `json:"jsonrpc"`
+		ID      int           `json:"id"`
+		Method  string        `json:"method"`
+		Params  []interface{} `json:"params"`
+	}
+	type rpcResp struct {
+		Result struct {
+			Context struct {
+				Slot uint64 `json:"slot"`
+			} `json:"context"`
+			Value uint64 `json:"value"`
+		} `json:"result"`
+		Error *struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+
+	var lastErr error
+	for i := 0; i < len(m.endpoints); i++ {
+		endpoint := m.endpoints[(int(m.idx)+i)%len(m.endpoints)]
+		payload := rpcReq{JSONRPC: "2.0", ID: 1, Method: "getBalance", Params: []interface{}{address}}
+		body, _ := json.Marshal(payload)
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		respBytes, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		var out rpcResp
+		if err := json.Unmarshal(respBytes, &out); err != nil {
+			lastErr = fmt.Errorf("decode response failed: %w, body=%s", err, string(respBytes))
+			continue
+		}
+		if out.Error != nil {
+			lastErr = fmt.Errorf("rpc error %d: %s", out.Error.Code, out.Error.Message)
+			m.logger.WithError(lastErr).Warnf("getBalance failed on %s, trying next", endpoint)
+			continue
+		}
+		return out.Result.Context.Slot, out.Result.Value, nil
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("unknown error getBalance")
+	}
+	return 0, 0, lastErr
+}
+
 // Close 关闭所有客户端连接
 func (m *SolFailoverManager) Close() {
 	// Solana Go SDK 的 RPC 客户端通常不需要显式关闭

@@ -9,6 +9,9 @@ type CreateUserAddressRequest struct {
 	ContractID          *uint    `json:"contract_id"`          // 关联的合约ID，仅当type为contract时有效
 	AuthorizedAddresses []string `json:"authorized_addresses"` // 授权地址列表，仅当type为contract时有效
 	Notes               string   `json:"notes"`                // 备注信息
+	// SOL-ATA 关联冗余
+	AtaOwnerAddress string `json:"ata_owner_address"` // ATA所属主钱包地址
+	AtaMintAddress  string `json:"ata_mint_address"`  // ATA对应的SPL铸币地址
 }
 
 // UpdateUserAddressRequest 更新用户地址请求
@@ -22,6 +25,9 @@ type UpdateUserAddressRequest struct {
 	ContractBalanceHeight *uint64   `json:"contract_balance_height"` // 合约余额更新时的区块高度（兼容旧入参，内部忽略）
 	Notes                 *string   `json:"notes"`                   // 备注信息
 	IsActive              *bool     `json:"is_active"`
+	// SOL-ATA 关联冗余（可编辑）
+	AtaOwnerAddress *string `json:"ata_owner_address"`
+	AtaMintAddress  *string `json:"ata_mint_address"`
 }
 
 // UserAddressResponse 用户地址响应
@@ -42,6 +48,9 @@ type UserAddressResponse struct {
 	BalanceHeight       uint64                       `json:"balance_height"`
 	CreatedAt           string                       `json:"created_at"`
 	UpdatedAt           string                       `json:"updated_at"`
+	// SOL-ATA 关联冗余
+	AtaOwnerAddress string `json:"ata_owner_address"`
+	AtaMintAddress  string `json:"ata_mint_address"`
 }
 
 type UserAddressPendingResponse struct {

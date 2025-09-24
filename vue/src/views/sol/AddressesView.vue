@@ -267,6 +267,18 @@
           <form @submit.prevent="submitAddress" class="max-h-[65vh] overflow-y-auto pr-2">
             <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-4">
               <div>
+                <label class="block text-sm font-medium text-gray-700 mb-2">关联程序</label>
+                <select 
+                  v-model="addressForm.program_id"
+                  class="block w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+                >
+                  <option value="">选择程序（可选）</option>
+                  <option v-for="p in programOptions" :key="p.program_id" :value="p.program_id">
+                    {{ p.name || p.program_id }}
+                  </option>
+                </select>
+              </div>
+              <div>
                 <label class="block text-sm font-medium text-gray-700 mb-2">铸币地址 *</label>
                 <input 
                   v-model="addressForm.address" 
@@ -382,7 +394,7 @@
 <script setup lang="ts">
 import { ref, computed, onMounted, watch } from 'vue'
 import { useRouter } from 'vue-router'
-import { contracts } from '@/api'
+import { contracts, solPrograms } from '@/api'
 import { useAuthStore } from '@/stores/auth'
 import type { Contract } from '@/types'
 
@@ -404,6 +416,9 @@ const showAddAddressModal = ref(false)
 const showEditModal = ref(false)
 const editingAddress = ref<Contract | null>(null)
 
+// 程序下拉选项
+const programOptions = ref<{ program_id: string; name?: string }[]>([])
+
 // 表单数据
 const addressForm = ref({
   address: '',
@@ -413,7 +428,8 @@ const addressForm = ref({
   type: '',
   status: 'active',
   description: '',
-  logo: ''
+  logo: '',
+  program_id: ''
 })
 
 // 计算属性
@@ -463,7 +479,8 @@ function openAddModal() {
     type: '',
     status: 'active',
     description: '',
-    logo: ''
+    logo: '',
+    program_id: ''
   }
   showAddAddressModal.value = true
 }
@@ -488,7 +505,8 @@ function editAddress(address: Contract) {
         return ''
       }
     })(),
-    logo: address.contract_logo || ''
+    logo: address.contract_logo || '',
+    program_id: address.program_id || ''
   }
   showEditModal.value = true
 }
@@ -510,7 +528,8 @@ async function submitAddress() {
       decimals: addressForm.value.decimals,
       metadata: addressForm.value.description ? JSON.stringify({ description: addressForm.value.description }) : '',  // 修复：将 description 保存到 metadata
       contract_logo: addressForm.value.logo,  // 修复：使用 contract_logo 而不是 logo_url
-      status: addressForm.value.status === 'active' ? 1 : 0
+      status: addressForm.value.status === 'active' ? 1 : 0,
+      program_id: addressForm.value.program_id || ''
     }
     
     let response
@@ -616,6 +635,12 @@ const router = useRouter()
 // 初始化
 onMounted(() => {
   fetchAddresses(1)
+  // 预加载程序选项（只取前200条，避免过大）
+  solPrograms.listPrograms({ page: 1, page_size: 200 }).then((res: any) => {
+    if (res?.success && Array.isArray(res.data)) {
+      programOptions.value = res.data.map((x: any) => ({ program_id: x.program_id, name: x.name }))
+    }
+  }).catch(() => {})
 })
 </script>
 

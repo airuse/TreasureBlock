@@ -192,21 +192,14 @@
                 <div class="flex items-center space-x-2">
                   <input
                     v-model="newAddress.address"
-                    :readonly="isAtaComputed"
+                    :readonly="newAddress.type === 'ata'"
                     type="text"
                     class="flex-1 px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500 bg-white"
-                    placeholder="地址或自动计算"
+                    placeholder="地址"
                   />
-                  <button
-                    v-if="newAddress.type === 'ata'"
-                    type="button"
-                    @click="toggleAtaCalc"
-                    class="px-3 py-2 text-sm border border-gray-300 rounded-md hover:bg-gray-50"
-                  >
-                    {{ showAtaCalc ? '收起' : '自动计算' }}
-                  </button>
                 </div>
-                <div v-if="showAtaCalc && newAddress.type === 'ata'" class="mt-3 space-y-3 border border-gray-200 rounded-md p-3 bg-gray-50">
+                <!-- ATA 类型：直接选择主账户与铸币地址，实时计算 ATA 地址 -->
+                <div v-if="newAddress.type === 'ata'" class="mt-3 space-y-3 border border-gray-200 rounded-md p-3 bg-gray-50">
                   <div>
                     <label class="block text-sm font-medium text-gray-700 mb-1">铸币地址 (Mint)</label>
                     <select v-model="ataMint" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
@@ -224,17 +217,6 @@
                         {{ o.label }}
                       </option>
                     </select>
-                  </div>
-                  <div class="flex items-center space-x-3">
-                    <button
-                      type="button"
-                      @click="computeAta"
-                      :disabled="!ataMint || !ataOwner || computingAta"
-                      class="px-4 py-2 bg-blue-600 text-white rounded-md hover:bg-blue-700 disabled:opacity-50"
-                    >
-                      {{ computingAta ? '计算中...' : '计算 ATA' }}
-                    </button>
-                    <span v-if="isAtaComputed" class="text-sm text-gray-600">已计算</span>
                   </div>
                 </div>
               </div>
@@ -258,6 +240,24 @@
                   <option value="ata">ATA账户</option>
                   <option value="other">其他</option>
                 </select>
+              </div>
+
+              <!-- 当为 ATA 类型时选择主账户与铸币地址 -->
+              <div v-if="newAddress.type === 'ata'" class="md:col-span-2 grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">主账户 (Owner)</label>
+                  <select v-model="ataOwner" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">请选择主账户</option>
+                    <option v-for="o in ownerAddressOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">铸币地址 (Mint)</label>
+                  <select v-model="ataMint" class="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-blue-500">
+                    <option value="">请选择铸币地址</option>
+                    <option v-for="m in mintOptions" :key="m.value" :value="m.value">{{ m.label }}</option>
+                  </select>
+                </div>
               </div>
               
                           <!-- 合约选择器，仅当类型为合约时显示 -->
@@ -395,6 +395,24 @@
                   <option value="ata">ATA账户</option>
                   <option value="other">其他</option>
                 </select>
+              </div>
+
+              <!-- 编辑态：ATA 类型保持一致的下拉样式，但禁用不可改 -->
+              <div v-if="editingAddress.type === 'ata'" class="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">主账户 (Owner)</label>
+                  <select v-model="editingAtaOwner" disabled class="w-full px-3 py-2 border border-gray-200 rounded-md bg-gray-50 text-gray-500 cursor-not-allowed">
+                    <option value="">未设置</option>
+                    <option v-for="o in ownerAddressOptions" :key="o.value" :value="o.value">{{ o.label }}</option>
+                  </select>
+                </div>
+                <div>
+                  <label class="block text-sm font-medium text-gray-700 mb-1">铸币地址 (Mint)</label>
+                  <select v-model="editingAtaMint" disabled class="w-full px-3 py-2 border border-gray-200 rounded-md bg-gray-50 text-gray-500 cursor-not-allowed">
+                    <option value="">未设置</option>
+                    <option v-for="m in mintOptions" :key="m.value" :value="m.value">{{ m.label }}</option>
+                  </select>
+                </div>
               </div>
               
                           <!-- 合约选择器，仅当类型为合约时显示 -->
@@ -646,11 +664,31 @@ const newAddress = ref<CreatePersonalAddressRequest>({
 })
 
 // ATA 计算相关
-const showAtaCalc = ref(false)
 const ataMint = ref<string>('')
 const ataOwner = ref<string>('')
-const computingAta = ref(false)
-const isAtaComputed = computed(() => newAddress.value.type === 'ata' && !!newAddress.value.address)
+// 实时根据 owner+mint 计算 ATA
+watch([ataMint, ataOwner, () => newAddress.value.type], async ([mint, owner, t]) => {
+  try {
+    if (t !== 'ata') return
+    if (!mint || !owner) {
+      newAddress.value.address = ''
+      return
+    }
+    const mintKey = new PublicKey(mint)
+    const ownerKey = new PublicKey(owner)
+    const ata = await getAssociatedTokenAddress(
+      mintKey,
+      ownerKey,
+      false,
+      TOKEN_PROGRAM_ID,
+      ASSOCIATED_TOKEN_PROGRAM_ID
+    )
+    newAddress.value.address = ata.toBase58()
+  } catch (e) {
+    // 计算失败则清空，等待用户修正选择
+    newAddress.value.address = ''
+  }
+})
 
 // Mint 下拉：使用已加载的合约（SPL Token）
 const mintOptions = computed(() => {
@@ -686,6 +724,9 @@ const editingAddress = ref<PersonalAddressDetail>({
   notes: '',
   balanceHeight: 0
 })
+// 编辑态 ATA 选择值
+const editingAtaOwner = ref<string>('')
+const editingAtaMint = ref<string>('')
 
 // 新交易表单
 const newTransaction = ref({
@@ -925,7 +966,9 @@ const addAddress = async () => {
     const addressData = {
       ...newAddress.value,
       chain: 'sol',  // 为SOL地址添加chain字段
-      authorized_addresses: filteredAuthorizedAddresses
+      authorized_addresses: filteredAuthorizedAddresses,
+      ata_owner_address: newAddress.value.type === 'ata' ? ataOwner.value : undefined,
+      ata_mint_address: newAddress.value.type === 'ata' ? ataMint.value : undefined
     }
     
     const response = await createPersonalAddress(addressData)
@@ -964,6 +1007,8 @@ const editAddress = (address: PersonalAddressItem) => {
     notes: address.notes || '',
     balanceHeight: address.balance_height
   }
+  editingAtaOwner.value = (address as any).ata_owner_address || ''
+  editingAtaMint.value = (address as any).ata_mint_address || ''
   showEditAddressModal.value = true
 }
 
@@ -982,7 +1027,9 @@ const updateAddress = async () => {
       contract_id: editingAddress.value.contract_id,
       authorized_addresses: filteredAuthorizedAddresses,
       notes: editingAddress.value.notes,
-      isActive: editingAddress.value.isActive
+      isActive: editingAddress.value.isActive,
+      ata_owner_address: editingAddress.value.type === 'ata' ? editingAtaOwner.value : undefined,
+      ata_mint_address: editingAddress.value.type === 'ata' ? editingAtaMint.value : undefined
     }
     
     const response = await updatePersonalAddress(editingAddress.value.id, updateData)

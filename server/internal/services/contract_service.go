@@ -62,6 +62,7 @@ func (s *contractService) createNewContract(ctx context.Context, contractInfo *m
 	contract := &models.Contract{
 		Address:       contractInfo.Address,
 		ChainName:     contractInfo.ChainName,
+		ProgramID:     contractInfo.ProgramID,
 		ContractType:  contractInfo.ContractType,
 		Name:          contractInfo.Name,
 		Symbol:        contractInfo.Symbol,
@@ -104,6 +105,7 @@ func (s *contractService) createNewContract(ctx context.Context, contractInfo *m
 func (s *contractService) updateExistingContract(ctx context.Context, existing *models.Contract, contractInfo *models.Contract) (*models.Contract, error) {
 	// 更新所有基本信息字段
 	existing.ChainName = contractInfo.ChainName
+	existing.ProgramID = contractInfo.ProgramID
 	existing.Name = contractInfo.Name
 	existing.Symbol = contractInfo.Symbol
 	existing.Decimals = contractInfo.Decimals

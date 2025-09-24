@@ -58,6 +58,7 @@ func (h *ContractHandler) CreateOrUpdateContract(c *gin.Context) {
 	contract, err := h.contractService.CreateOrUpdateContract(c.Request.Context(), &models.Contract{
 		Address:      contractInfo.Address,
 		ChainName:    contractInfo.ChainName,
+		ProgramID:    contractInfo.ProgramID,
 		ContractType: contractInfo.ContractType,
 		Name:         contractInfo.Name,
 		Symbol:       contractInfo.Symbol,
@@ -123,6 +124,7 @@ func (h *ContractHandler) GetContractByAddress(c *gin.Context) {
 		"id":             contract.ID,
 		"address":        contract.Address,
 		"chain_name":     contract.ChainName,
+		"program_id":     contract.ProgramID,
 		"contract_type":  contract.ContractType,
 		"name":           contract.Name,
 		"symbol":         contract.Symbol,
@@ -319,6 +321,7 @@ func (h *ContractHandler) GetAllContracts(c *gin.Context) {
 			"id":             contract.ID,
 			"address":        contract.Address,
 			"chain_name":     contract.ChainName,
+			"program_id":     contract.ProgramID,
 			"contract_type":  contract.ContractType,
 			"name":           contract.Name,
 			"symbol":         contract.Symbol,
