@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"math/rand"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -38,6 +39,7 @@ type SOLFailoverManager struct {
 	failoverClients []*client.Client
 	failoverStates  []*SOLNodeState // 只存储故障转移节点的状态
 	currentIndex    int64
+	lastGoodIndex   int64 // -1 表示未知
 }
 
 // NewSOLFailoverManager 创建管理器
@@ -48,11 +50,19 @@ func NewSOLFailoverManager(mainClient *client.Client, failoverClients []*client.
 		failoverStates[i] = &SOLNodeState{status: SOLNodeHealthy}
 	}
 
-	return &SOLFailoverManager{
+	m := &SOLFailoverManager{
 		mainClient:      mainClient,
 		failoverClients: failoverClients,
 		failoverStates:  failoverStates,
+		lastGoodIndex:   -1,
 	}
+
+	// 随机化起始索引
+	rand.Seed(time.Now().UnixNano())
+	if len(failoverClients) > 0 {
+		atomic.StoreInt64(&m.currentIndex, rand.Int63n(int64(len(failoverClients))))
+	}
+	return m
 }
 
 // Execute 执行带故障转移的请求
@@ -75,6 +85,21 @@ func (m *SOLFailoverManager) Execute(ctx context.Context, operation string, cb f
 	}
 
 	startIndex := int(atomic.AddInt64(&m.currentIndex, 1)) % len(m.failoverClients)
+
+	// 优先尝试上次成功节点
+	if lg := int(atomic.LoadInt64(&m.lastGoodIndex)); lg >= 0 && lg < len(m.failoverClients) {
+		node := m.failoverStates[lg]
+		if !(node.status != SOLNodeHealthy && time.Now().Before(node.restUntil)) {
+			if node.status != SOLNodeHealthy && time.Now().After(node.restUntil) {
+				m.resetFailoverNode(lg)
+			}
+			data, err := cb(m.failoverClients[lg])
+			if err == nil {
+				return data, nil
+			}
+			// 失败则继续常规轮询
+		}
+	}
 	for i := 0; i < len(m.failoverClients); i++ {
 		idx := (startIndex + i) % len(m.failoverClients)
 		client := m.failoverClients[idx]
@@ -99,6 +124,7 @@ func (m *SOLFailoverManager) Execute(ctx context.Context, operation string, cb f
 		data, err := cb(client)
 		if err == nil {
 			logrus.Infof("[sol] Failover client %d %s succeeded", idx, operation)
+			atomic.StoreInt64(&m.lastGoodIndex, int64(idx))
 			return data, nil
 		}
 
@@ -115,7 +141,7 @@ func (m *SOLFailoverManager) Execute(ctx context.Context, operation string, cb f
 		} else {
 			logrus.Warnf("[sol] Failover client %d %s failed: %v", idx, operation, err)
 			node.status = SOLNodeDamaged
-			node.restUntil = now.Add(10 * time.Second)
+			node.restUntil = now.Add(60 * time.Second)
 		}
 	}
 

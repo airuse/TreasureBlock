@@ -25,6 +25,7 @@ type EthereumScanner struct {
 	externalClients  []*ethclient.Client
 	currentNodeIndex int      // 当前使用的外部节点索引
 	chainID          *big.Int // 缓存的网络链ID（作为回退）
+	failoverManager  *failover.FailoverManager
 }
 
 // NewEthereumScanner 创建新的以太坊扫块器
@@ -54,8 +55,8 @@ func NewEthereumScanner(cfg *config.ChainConfig) *EthereumScanner {
 		}
 	}
 
-	failoverManager := failover.NewFailoverManager(scanner.localClient, scanner.externalClients)
-	chainID, err := failoverManager.CallWithFailoverNetworkID("get network id", func(client *ethclient.Client) (*big.Int, error) {
+	scanner.failoverManager = failover.NewFailoverManager(scanner.localClient, scanner.externalClients)
+	chainID, err := scanner.failoverManager.CallWithFailoverNetworkID("get network id", func(client *ethclient.Client) (*big.Int, error) {
 		return client.NetworkID(context.Background())
 	})
 	if err != nil {
@@ -67,8 +68,7 @@ func NewEthereumScanner(cfg *config.ChainConfig) *EthereumScanner {
 
 // GetLatestBlockHeight 获取最新区块高度
 func (es *EthereumScanner) GetLatestBlockHeight() (uint64, error) {
-	failoverManager := failover.NewFailoverManager(es.localClient, es.externalClients)
-	result, err := failoverManager.CallWithFailoverUint64("get latest block height", func(client *ethclient.Client) (uint64, error) {
+	result, err := es.failoverManager.CallWithFailoverUint64("get latest block height", func(client *ethclient.Client) (uint64, error) {
 		return client.BlockNumber(context.Background())
 	})
 
@@ -81,8 +81,7 @@ func (es *EthereumScanner) GetLatestBlockHeight() (uint64, error) {
 // GetBlockByHeight 根据高度获取区块
 func (es *EthereumScanner) GetBlockByHeight(height uint64) (*models.Block, error) {
 	// fmt.Printf("[ETH Scanner] Scanning block at height: %d\n", height)
-	failoverManager := failover.NewFailoverManager(es.localClient, es.externalClients)
-	result, err := failoverManager.CallWithFailoverRawBlock("get block by height", func(client *ethclient.Client) (*types.Block, error) {
+	result, err := es.failoverManager.CallWithFailoverRawBlock("get block by height", func(client *ethclient.Client) (*types.Block, error) {
 		return client.BlockByNumber(context.Background(), big.NewInt(int64(height)))
 	})
 
@@ -350,9 +349,7 @@ func (es *EthereumScanner) batchGetTransactionReceipts(block *models.Block, tran
 // tryBlockReceipts 尝试使用 BlockReceipts 获取整个区块的回执
 func (es *EthereumScanner) tryBlockReceipts(blockHeight uint64) ([]*types.Receipt, error) {
 	startTime := time.Now()
-	failoverManager := failover.NewFailoverManager(es.localClient, es.externalClients)
-
-	receipts, err := failoverManager.CallWithFailoverReceipts("get block receipts", func(client *ethclient.Client) ([]*types.Receipt, error) {
+	receipts, err := es.failoverManager.CallWithFailoverReceipts("get block receipts", func(client *ethclient.Client) ([]*types.Receipt, error) {
 		// 使用正确的类型转换
 		blockNum := rpc.BlockNumber(blockHeight)
 		return client.BlockReceipts(context.Background(), rpc.BlockNumberOrHash{BlockNumber: &blockNum})
@@ -363,7 +360,7 @@ func (es *EthereumScanner) tryBlockReceipts(blockHeight uint64) ([]*types.Receip
 
 	elapsed := time.Since(startTime)
 
-	stats := failoverManager.GetStats()
+	stats := es.failoverManager.GetStats()
 	fmt.Printf("[ETH Scanner] %d 📊 BlockReceipts for Block-BBBBBB Fetch Complete:\n", blockHeight)
 	fmt.Printf("  ✅ Total Number: %d\n", len(receipts))
 	fmt.Printf("  ⏱️ Total time: %v\n", elapsed)
@@ -611,8 +608,7 @@ func (es *EthereumScanner) parseContractLogs(tx map[string]interface{}, receipt 
 func (es *EthereumScanner) GetBlockTransactionsFromBlock(block *models.Block) ([]map[string]interface{}, error) {
 	// 这里我们需要通过区块高度重新获取完整的区块数据
 	// 因为 models.Block 中只包含基本信息，不包含完整的交易数据
-	failoverManager := failover.NewFailoverManager(es.localClient, es.externalClients)
-	ethBlock, err := failoverManager.CallWithFailoverRawBlock("get block by height for transactions", func(client *ethclient.Client) (*types.Block, error) {
+	ethBlock, err := es.failoverManager.CallWithFailoverRawBlock("get block by height for transactions", func(client *ethclient.Client) (*types.Block, error) {
 		return client.BlockByNumber(context.Background(), big.NewInt(int64(block.Height)))
 	})
 

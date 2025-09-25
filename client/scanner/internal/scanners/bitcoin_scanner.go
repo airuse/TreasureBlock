@@ -31,6 +31,8 @@ type BitcoinScanner struct {
 	currentNodeIndex int // 当前使用的外部节点索引
 	// 每块级别的 prevout 缓存：txid -> voutIndex -> scriptPubKey hex
 	prevoutCache map[string]map[int]string
+	// 全局复用的故障转移管理器
+	failoverManager *failover.BTCFailoverManager
 }
 
 // newBTCFailover 创建BTC故障转移管理器
@@ -59,7 +61,7 @@ type BitcoinRPCResponse struct {
 
 // NewBitcoinScanner 创建新的比特币扫块器
 func NewBitcoinScanner(cfg *config.ChainConfig) *BitcoinScanner {
-	return &BitcoinScanner{
+	bs := &BitcoinScanner{
 		config:           cfg,
 		currentNodeIndex: 0,
 		httpClient: &http.Client{
@@ -67,6 +69,9 @@ func NewBitcoinScanner(cfg *config.ChainConfig) *BitcoinScanner {
 		},
 		prevoutCache: make(map[string]map[int]string),
 	}
+	// 初始化全局故障转移管理器（包含本地与外部节点）
+	bs.failoverManager = failover.NewBTCFailoverManager(bs.config.RPCURL, bs.config.ExplorerAPIURLs)
+	return bs
 }
 
 // callRPC 调用RPC接口
@@ -116,7 +121,7 @@ func (bs *BitcoinScanner) callRPC(url string, method string, params []interface{
 
 // GetLatestBlockHeight 获取最新区块高度
 func (bs *BitcoinScanner) GetLatestBlockHeight() (uint64, error) {
-	fm := bs.newBTCFailover()
+	fm := bs.failoverManager
 	result, err := fm.CallWithFailoverUint64("get latest block height", func(baseURL string) (uint64, error) {
 		return bs.getBlockHeightFromURL(baseURL)
 	})
@@ -209,7 +214,7 @@ func (bs *BitcoinScanner) getBlockHeightFromURL(url string) (uint64, error) {
 func (bs *BitcoinScanner) GetBlockByHeight(height uint64) (*models.Block, error) {
 	fmt.Printf("[BTC Scanner] Scanning block at height: %d\n", height)
 
-	fm := bs.newBTCFailover()
+	fm := bs.failoverManager
 	resultInterface, err := fm.Execute("get block by height", func(baseURL string) (interface{}, error) {
 		return bs.getBlockByHeightFromURL(baseURL, height)
 	})
@@ -267,7 +272,7 @@ func (bs *BitcoinScanner) getBlockByHeightFromURL(url string, height uint64) (*m
 func (bs *BitcoinScanner) GetBlockByHash(blockHash string) (*models.Block, error) {
 	fmt.Printf("[BTC Scanner] Scanning block with hash: %s\n", blockHash)
 
-	fm := bs.newBTCFailover()
+	fm := bs.failoverManager
 	resultInterface, err := fm.Execute("get block by hash", func(baseURL string) (interface{}, error) {
 		return bs.getBlockByHashFromURL(baseURL, blockHash)
 	})
@@ -308,7 +313,7 @@ func (bs *BitcoinScanner) getBlockByHashFromURL(url string, blockHash string) (*
 func (bs *BitcoinScanner) GetBlockTransactions(blockHash string) ([]map[string]interface{}, error) {
 	fmt.Printf("[BTC Scanner] Getting transactions for block: %s\n", blockHash)
 
-	fm := bs.newBTCFailover()
+	fm := bs.failoverManager
 	result, err := fm.CallWithFailoverMaps("get block transactions", func(baseURL string) ([]map[string]interface{}, error) {
 		return bs.getBlockTransactionsFromURL(baseURL, blockHash)
 	})
@@ -321,7 +326,7 @@ func (bs *BitcoinScanner) GetBlockTransactions(blockHash string) ([]map[string]i
 
 // GetBlockTransactionsFromBlock 直接从区块中获取交易信息（避免哈希不一致问题）
 func (bs *BitcoinScanner) GetBlockTransactionsFromBlock(block *models.Block) ([]map[string]interface{}, error) {
-	fm := bs.newBTCFailover()
+	fm := bs.failoverManager
 	result, err := fm.CallWithFailoverMaps("get block transactions by height", func(baseURL string) ([]map[string]interface{}, error) {
 		return bs.getBlockTransactionsFromURL(baseURL, block.Hash)
 	})

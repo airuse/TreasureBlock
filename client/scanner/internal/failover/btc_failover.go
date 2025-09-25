@@ -2,6 +2,7 @@ package failover
 
 import (
 	"fmt"
+	"math/rand"
 	"strings"
 	"sync/atomic"
 	"time"
@@ -36,10 +37,11 @@ type BTCRequestTask struct {
 // localURL 可为空；externalURLs 长度可以为0或多个
 // 注意：该管理器是轻量即时执行的，不维护后台协程
 type BTCFailoverManager struct {
-	localURL     string
-	externalURLs []string
-	nodeStates   []*BTCNodeState
-	currentIndex int64
+	localURL      string
+	externalURLs  []string
+	nodeStates    []*BTCNodeState
+	currentIndex  int64
+	lastGoodIndex int64 // -1 表示未知
 }
 
 // NewBTCFailoverManager 创建管理器
@@ -48,11 +50,17 @@ func NewBTCFailoverManager(localURL string, externalURLs []string) *BTCFailoverM
 	for i := range states {
 		states[i] = &BTCNodeState{status: BTCNodeHealthy}
 	}
-	return &BTCFailoverManager{
-		localURL:     localURL,
-		externalURLs: externalURLs,
-		nodeStates:   states,
+	m := &BTCFailoverManager{
+		localURL:      localURL,
+		externalURLs:  externalURLs,
+		nodeStates:    states,
+		lastGoodIndex: -1,
 	}
+	rand.Seed(time.Now().UnixNano())
+	if len(externalURLs) > 0 {
+		atomic.StoreInt64(&m.currentIndex, rand.Int63n(int64(len(externalURLs))))
+	}
+	return m
 }
 
 // Execute 执行带故障转移的请求
@@ -72,6 +80,20 @@ func (m *BTCFailoverManager) Execute(operation string, cb func(baseURL string) (
 	}
 
 	startIndex := int(atomic.AddInt64(&m.currentIndex, 1)) % len(m.externalURLs)
+
+	// 优先尝试上次成功节点
+	if lg := int(atomic.LoadInt64(&m.lastGoodIndex)); lg >= 0 && lg < len(m.externalURLs) {
+		n := m.nodeStates[lg]
+		if !(n.status != BTCNodeHealthy && time.Now().Before(n.restUntil)) {
+			if n.status != BTCNodeHealthy && time.Now().After(n.restUntil) {
+				m.resetNode(lg)
+			}
+			if data, err := cb(m.externalURLs[lg]); err == nil {
+				return data, nil
+			}
+			// 失败则继续常规轮询
+		}
+	}
 	for i := 0; i < len(m.externalURLs); i++ {
 		idx := (startIndex + i) % len(m.externalURLs)
 		url := m.externalURLs[idx]
@@ -94,6 +116,7 @@ func (m *BTCFailoverManager) Execute(operation string, cb func(baseURL string) (
 
 		data, err := cb(url)
 		if err == nil {
+			atomic.StoreInt64(&m.lastGoodIndex, int64(idx))
 			return data, nil
 		}
 
@@ -108,7 +131,7 @@ func (m *BTCFailoverManager) Execute(operation string, cb func(baseURL string) (
 			node.restUntil = now.Add(rest)
 		} else {
 			node.status = BTCNodeDamaged
-			node.restUntil = now.Add(10 * time.Second)
+			node.restUntil = now.Add(60 * time.Second)
 		}
 	}
 

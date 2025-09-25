@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"math/big"
+	"math/rand"
 	"strings"
 	"sync"
 	"sync/atomic"
@@ -61,6 +62,8 @@ type FailoverManager struct {
 
 	// 简单轮询
 	currentIndex int64
+	// 上次成功的节点索引（-1 表示未知）
+	lastGoodIndex atomic.Int64
 
 	// 统计
 	totalTasks     int64
@@ -93,6 +96,14 @@ func NewFailoverManager(localClient *ethclient.Client, externalClients []*ethcli
 		ctx:         ctx,
 		cancel:      cancel,
 	}
+
+	// 随机化起始索引，避免总是从0开始
+	rand.Seed(time.Now().UnixNano())
+	if len(externalClients) > 0 {
+		atomic.StoreInt64(&fm.currentIndex, rand.Int63n(int64(len(externalClients))))
+	}
+	// 初始化 lastGoodIndex 为 -1
+	fm.lastGoodIndex.Store(-1)
 
 	return fm
 }
@@ -164,6 +175,8 @@ func (fm *FailoverManager) processTask(task *RequestTask) {
 
 		if err == nil {
 			// 成功！不重置状态，保持时间窗口用于下次计算
+			// 记录上次成功节点索引
+			fm.lastGoodIndex.Store(int64(nodeID))
 			fm.completeTask(task, &RequestResult{
 				Data:     result,
 				NodeID:   nodeID,
@@ -200,6 +213,18 @@ func (fm *FailoverManager) selectNode() int {
 
 	now := time.Now()
 	startIndex := int(atomic.AddInt64(&fm.currentIndex, 1)) % len(fm.clients)
+
+	// 优先尝试上次成功的节点（如果仍然健康且未处于休息）
+	if lg := int(fm.lastGoodIndex.Load()); lg >= 0 && lg < len(fm.clients) {
+		node := fm.nodeStates[lg]
+		if !(node.status != NodeHealthy && now.Before(node.restUntil)) {
+			// 若处于休息结束则重置状态
+			if node.status != NodeHealthy && now.After(node.restUntil) {
+				fm.resetNodeState(lg)
+			}
+			return lg
+		}
+	}
 
 	// 轮询查找可用节点
 	for i := 0; i < len(fm.clients); i++ {
@@ -248,7 +273,7 @@ func (fm *FailoverManager) handleNodeError(nodeID int, err error) {
 	} else {
 		// 其他错误 - 故障
 		node.status = NodeDamaged
-		node.restUntil = now.Add(time.Second * 30) // 固定5秒
+		node.restUntil = now.Add(time.Second * 60) // 固定60秒
 		fmt.Printf("[Simple Scheduler] Node %d DAMAGED, rest for 10 Second (error: %v)\n", nodeID, err)
 	}
 }

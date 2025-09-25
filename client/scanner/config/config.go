@@ -65,19 +65,13 @@ type ChainConfig struct {
 
 // ChainScanConfig 链扫描配置
 type ChainScanConfig struct {
-	Enabled       bool          `yaml:"enabled"`
 	Interval      time.Duration `yaml:"interval"`
 	Confirmations int           `yaml:"confirmations"`
 	AutoStart     bool          `yaml:"auto_start"`
 	SaveToFile    bool          `yaml:"save_to_file"`
 	OutputDir     string        `yaml:"output_dir"`
 	// 链特定的扫描配置
-	Priority        int           `yaml:"priority"`         // 扫描优先级，数字越小优先级越高
-	MaxConcurrent   int           `yaml:"max_concurrent"`   // 最大并发扫描数
-	BlockTimeout    time.Duration `yaml:"block_timeout"`    // 单个区块扫描超时时间
-	RescanInterval  time.Duration `yaml:"rescan_interval"`  // 重新扫描间隔（用于处理分叉）
-	EnableMempool   bool          `yaml:"enable_mempool"`   // 是否启用内存池监控
-	MempoolInterval time.Duration `yaml:"mempool_interval"` // 内存池检查间隔
+	MaxConcurrent int `yaml:"max_concurrent"` // 最大并发扫描数
 	// 批量上传配置
 	BatchUpload  bool          `yaml:"batch_upload"`  // 是否启用批量上传（推荐启用）
 	BatchSize    int           `yaml:"batch_size"`    // 批量上传大小，默认1000
@@ -365,15 +359,6 @@ func setDefaultChainScanConfigs() {
 		}
 		if chainConfig.Scan.MaxConcurrent == 0 {
 			chainConfig.Scan.MaxConcurrent = 3 // 默认并发数
-		}
-		if chainConfig.Scan.BlockTimeout == 0 {
-			chainConfig.Scan.BlockTimeout = 30 * time.Second // 默认超时时间
-		}
-		if chainConfig.Scan.RescanInterval == 0 {
-			chainConfig.Scan.RescanInterval = 60 * time.Second // 默认重新扫描间隔
-		}
-		if chainConfig.Scan.MempoolInterval == 0 {
-			chainConfig.Scan.MempoolInterval = 10 * time.Second // 默认内存池检查间隔
 		}
 		// 批量上传配置默认值
 		if chainConfig.Scan.BatchSize == 0 {

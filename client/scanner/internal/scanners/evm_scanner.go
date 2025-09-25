@@ -26,6 +26,7 @@ type EVMScanner struct {
 	localClient      *ethclient.Client
 	externalClients  []*ethclient.Client
 	currentNodeIndex int // 当前使用的外部节点索引
+	failoverManager  *failover.FailoverManager
 }
 
 // NewEVMSanner 创建新的EVM扫块器
@@ -57,8 +58,8 @@ func NewEVMSanner(cfg *config.ChainConfig, chainName string) *EVMScanner {
 	}
 
 	// 获取网络链ID
-	failoverManager := failover.NewFailoverManager(scanner.localClient, scanner.externalClients)
-	chainID, err := failoverManager.CallWithFailoverNetworkID("get network id", func(client *ethclient.Client) (*big.Int, error) {
+	scanner.failoverManager = failover.NewFailoverManager(scanner.localClient, scanner.externalClients)
+	chainID, err := scanner.failoverManager.CallWithFailoverNetworkID("get network id", func(client *ethclient.Client) (*big.Int, error) {
 		return client.NetworkID(context.Background())
 	})
 	if err != nil {
@@ -72,8 +73,7 @@ func NewEVMSanner(cfg *config.ChainConfig, chainName string) *EVMScanner {
 
 // GetLatestBlockHeight 获取最新区块高度
 func (es *EVMScanner) GetLatestBlockHeight() (uint64, error) {
-	failoverManager := failover.NewFailoverManager(es.localClient, es.externalClients)
-	result, err := failoverManager.CallWithFailoverUint64("get latest block height", func(client *ethclient.Client) (uint64, error) {
+	result, err := es.failoverManager.CallWithFailoverUint64("get latest block height", func(client *ethclient.Client) (uint64, error) {
 		return client.BlockNumber(context.Background())
 	})
 
@@ -85,8 +85,7 @@ func (es *EVMScanner) GetLatestBlockHeight() (uint64, error) {
 
 // GetBlockByHeight 根据高度获取区块
 func (es *EVMScanner) GetBlockByHeight(height uint64) (*models.Block, error) {
-	failoverManager := failover.NewFailoverManager(es.localClient, es.externalClients)
-	result, err := failoverManager.CallWithFailoverRawBlock("get block by height", func(client *ethclient.Client) (*types.Block, error) {
+	result, err := es.failoverManager.CallWithFailoverRawBlock("get block by height", func(client *ethclient.Client) (*types.Block, error) {
 		return client.BlockByNumber(context.Background(), big.NewInt(int64(height)))
 	})
 
@@ -143,8 +142,7 @@ func (es *EVMScanner) ValidateEVMBlock(block *types.Block) error {
 // GetBlockTransactionsFromBlock 从区块获取交易信息
 func (es *EVMScanner) GetBlockTransactionsFromBlock(block *models.Block) ([]map[string]interface{}, error) {
 	// 与 ETH 一致：获取区块 -> 提取交易 -> 并发补全回执
-	failoverManager := failover.NewFailoverManager(es.localClient, es.externalClients)
-	evnBlock, err := failoverManager.CallWithFailoverRawBlock("get block by height for transactions", func(client *ethclient.Client) (*types.Block, error) {
+	evnBlock, err := es.failoverManager.CallWithFailoverRawBlock("get block by height for transactions", func(client *ethclient.Client) (*types.Block, error) {
 		return client.BlockByNumber(context.Background(), big.NewInt(int64(block.Height)))
 	})
 	if err != nil {
@@ -398,7 +396,7 @@ func (es *EVMScanner) tryBlockReceipts(blockHeight uint64) ([]*types.Receipt, er
 		return nil, fmt.Errorf("failed to get block receipts: %w", err)
 	}
 	elapsed := time.Since(startTime)
-	stats := failoverManager.GetStats()
+	stats := es.failoverManager.GetStats()
 	fmt.Printf("[%s Scanner] %d 📊 BlockReceipts Fetch Complete: total=%d, time=%v, stats=%+v\n",
 		strings.ToUpper(es.chainName), blockHeight, len(receipts), elapsed, stats)
 	return receipts, nil

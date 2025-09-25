@@ -124,7 +124,7 @@ func (ps *txPrefetchState) pruneBelow(minHeight uint64) {
 // initializeScanners 初始化各种链的扫块器
 func (bs *BlockScanner) initializeScanners() {
 	for chainName, chainConfig := range bs.config.Blockchain.Chains {
-		if !chainConfig.Enabled || !chainConfig.Scan.Enabled {
+		if !chainConfig.Enabled {
 			continue
 		}
 

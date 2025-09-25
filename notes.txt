@@ -1,26 +1,25 @@
-drpc 节点[每月210M](Viruse123..)
-16692555512@163.com-https://lb.drpc.org/ethereum/Aqh3uZvhdU5oq84o63-TeYsfZaTxgbgR8JO5IgaNGuYu
-15136965530@163.com-https://lb.drpc.org/ethereum/ApP8VmV0NEYMjrj0PYgtupww_Sq7gh4R8JPvIgaNGuYu
-15037508950@163.com-https://lb.drpc.org/ethereum/AhCf0-Tte050nUVwFHF_1jOCF6QNgh8R8JPxIgaNGuYu
-15238253001@163.com-https://lb.drpc.org/ethereum/AvPPIhOf-k4jldkwixy1QT3s8w99gisR8JP8IgaNGuYu
-654017336@qq.com-https://lb.drpc.org/ethereum/AjrnZKmTu0IgpPhzqbPO3unPKlTcgiAR8JP2IgaNGuYu
-835606178@qq.com-https://lb.drpc.org/ethereum/AnmJBrEnm0lsmXo0LnCNva9dh3zRgiER8JP3IgaNGuYu
-523052994@qq.com-https://lb.drpc.org/ethereum/AuM84m0TIkfQkaEYg8VtRn_SdzxVgiER8JP4IgaNGuYu
-virusegg123@gmail.com-https://lb.drpc.org/ethereum/AmpXsFj_D07JqDZ-Hv-nsjkUBedLgiAR8JPzIgaNGuYu
-viruse123@outlook.com-https://lb.drpc.org/ethereum/AhSgyzb6VUrWuIkUTrjgi3J2NuwCgh0R8JPuIgaNGuYu
-gengjiangdi@outlook.com-https://lb.drpc.org/ethereum/Ao-bi6VwUUYesmsBczwFkxqJJNtrgiIR8JP5IgaNGuYu
-gengjiangdi1@outlook.com-https://lb.drpc.org/ethereum/AgBSgHwcLEI4quCpnDNHMBeev_UPgiMR8JP6IgaNGuYu
+drpc 节点[每月210M](Viruse123..)(used:scanner)
+16692555512@163.com-SOL1
+15136965530@163.com-SOL2
+15037508950@163.com-SOL3
+15238253001@163.com-SOL4
+13673752573@163.com-SOL5
+654017336@qq.com-BSC1
+835606178@qq.com-BSC2
+523052994@qq.com-BSC3
+viruse123@outlook.com-BSC4
+virusegg123@gmail.com-ETH1
+gengjiangdi@outlook.com-ETH2
+gengjiangdi1@outlook.com-ETH3
 
 
-alchemy[每月30M](Viruse123!QAZ..){cannot:[163,]}
-viruse123@outlook.com-16692555512-https://eth-mainnet.g.alchemy.com/v2/9N4BtDqjALaxGX12hcbvC
-gengjiangdi@outlook.com-15037508950-https://eth-mainnet.g.alchemy.com/v2/A8Rr89_Bm2O0RSIxhjJ8a
 
+chainstack[每天3M](Viruse123..)(used:scanner,random)
+viruse123@outlook.com-BTC1
+virusegg123@gmail.com-BTC2
+gengjiangdi@outlook.com-BTC3
+gengjiangdi1@outlook.com-BTC4
 
-chainstack[每天3M](Viruse123..)
-viruse123@outlook.com-https://bitcoin-testnet.core.chainstack.com/fc0977c5fde70ec8c26e2d500a1491dd
-gengjiangdi@outlook.com-https://bsc-testnet.core.chainstack.com/121b6c75b21bfad0e4bb8c64620ac358
-gengjiangdi1@outlook.com-https://bsc-testnet.core.chainstack.com/230a3cc67305e569c8cb6afbe8b4b98d
 16692555512@163.com-https://bsc-testnet.core.chainstack.com/5190644a86def4f6a809767c086a6cdf
 15037508950@163.com-https://bsc-testnet.core.chainstack.com/37227029d9dd9980f7d9dda9f6d3cd63
 15136965530@163.com-https://solana-devnet.core.chainstack.com/4638e5beaad96a5eef455fa2b15c8ff8
@@ -28,13 +27,13 @@ gengjiangdi1@outlook.com-https://bsc-testnet.core.chainstack.com/230a3cc67305e56
 654017336@qq.com-https://solana-devnet.core.chainstack.com/ba227c34aa1687ce7fb29c3c582dbeea
 835606178@qq.com-https://solana-devnet.core.chainstack.com/05e878dc4aedcb81432084cf7bce51b0
 523052994@qq.com-https://solana-devnet.core.chainstack.com/705c7391ab5ff4e39640d6a0db08f1bb
-virusegg123@gmail.com-https://ethereum-mainnet.core.chainstack.com/fa00dae894f9dd1b7b4a530d83a83bd7
 
-quiknode[每月10M](Viruse123..)
-viruse123@outlook.com-https://alpha-clean-yard.quiknode.pro/7979488c04b1a36bdc4230b23e3eaac3e9c1c1af
-16692555512@163.com-https://newest-ultra-friday.quiknode.pro/7091d98af3809c189285739c3f4141b94f368fff
-654017336@qq.com-https://yolo-smart-tree.quiknode.pro/52836b8f979fca7325258c42925d6c245ca45079
+
+
+quiknode[每月10M](Viruse123..)(used:server)
+viruse123@outlook.com-ETH1
+16692555512@163.com-BTC1
+654017336@qq.com-BSC1
 15037508950@163.com-https://thrilling-summer-frost.quiknode.pro/ca8e71700184f645a7935acf1487acd191e429a1
 15136965530@163.com-https://warmhearted-bold-emerald.quiknode.pro/be4e6633f9443a4dd26046d40be1650a810db3a1
 15238253001@163.com-https://empty-hardworking-spree.quiknode.pro/d1cb31945987ed11caa6f3e63c2b8b86b00d41ff
-virusegg123+0001@163.com-https://solemn-purple-river.quiknode.pro/93a62baaa6ed6004344fca98ff7f05f8f0a12ae1

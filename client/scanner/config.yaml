@@ -23,27 +23,21 @@ blockchain:
       enabled: true
       # rpc_url: "http://192.168.1.70:8332"
       explorer_api_urls:
-        - "https://bitcoin-testnet.core.chainstack.com/fc0977c5fde70ec8c26e2d500a1491dd"
+        - "https://bitcoin-mainnet.core.chainstack.com/d52e0740e4d4fcdfb2c79cacd4d072f6"
+        - "https://bitcoin-mainnet.core.chainstack.com/fff2562a8ed4fea4378d16129b82d325"
+        - "https://bitcoin-mainnet.core.chainstack.com/a57195ceb0e546400052e042e9439ac7"
+        - "https://bitcoin-mainnet.core.chainstack.com/690e0baa6567b9388ca978b6a96cc602"
       api_key: ""
       username: "bitcoin"      # bitcoind RPC用户名
       password: "bitcoin123"  # bitcoind RPC密码
       # BTC链特定的扫描配置
       scan:
-        enabled: false
         interval: 3s
-        max_retries: 3
-        retry_delay: 5s
         confirmations: 6
-        start_block_height: 0
         auto_start: true
         save_to_file: false
         output_dir: "./output/btc"
-        priority: 1  # 高优先级
         max_concurrent: 5
-        block_timeout: 30s
-        rescan_interval: 60s
-        enable_mempool: true
-        mempool_interval: 5s
         # 批量上传配置（推荐启用以提高性能）
         batch_upload: true           # 是否启用批量上传交易（推荐启用）
         batch_size: 2000             # 批量上传大小，默认1000条交易
@@ -59,29 +53,21 @@ blockchain:
       enabled: true
       # rpc_url: "https://bsc-dataseed.binance.org/"
       explorer_api_urls:
-        - "https://bsc-testnet.core.chainstack.com/230a3cc67305e569c8cb6afbe8b4b98d"
-        - "https://bsc-testnet.core.chainstack.com/5190644a86def4f6a809767c086a6cdf"
-        - "https://bsc-testnet.core.chainstack.com/37227029d9dd9980f7d9dda9f6d3cd63"
+        - "https://lb.drpc.org/bsc/AjrnZKmTu0IgpPhzqbPO3unPKlTcgiAR8JP2IgaNGuYu"
+        - "https://lb.drpc.org/bsc/AnmJBrEnm0lsmXo0LnCNva9dh3zRgiER8JP3IgaNGuYu"
+        - "https://lb.drpc.org/bsc/AuM84m0TIkfQkaEYg8VtRn_SdzxVgiER8JP4IgaNGuYu"
+        - "https://lb.drpc.org/bsc/AhSgyzb6VUrWuIkUTrjgi3J2NuwCgh0R8JPuIgaNGuYu"
       api_key: ""
       username: ""
       password: ""
       # BSC链特定的扫描配置
       scan:
-        enabled: false
         interval: 500ms
-        max_retries: 3
-        retry_delay: 5s
         confirmations: 6
-        start_block_height: 0
         auto_start: true
         save_to_file: false
         output_dir: "./output/bsc"
-        priority: 2  # 中等优先级
         max_concurrent: 10
-        block_timeout: 30s
-        rescan_interval: 60s
-        enable_mempool: true
-        mempool_interval: 5s
         # 批量上传配置（推荐启用以提高性能）
         batch_upload: false           # 是否启用批量上传交易（推荐启用）
         batch_size: 2000             # 批量上传大小，默认1000条交易
@@ -97,45 +83,21 @@ blockchain:
       enabled: true
       # rpc_url: "http://192.168.1.70:8545"
       explorer_api_urls:
-        - "https://eth-mainnet.g.alchemy.com/v2/9N4BtDqjALaxGX12hcbvC"
-        - "https://eth-mainnet.g.alchemy.com/v2/A8Rr89_Bm2O0RSIxhjJ8a"
-        - "https://lb.drpc.org/ethereum/AvPPIhOf-k4jldkwixy1QT3s8w99gisR8JP8IgaNGuYu"
-        - "https://lb.drpc.org/ethereum/ApP8VmV0NEYMjrj0PYgtupww_Sq7gh4R8JPvIgaNGuYu"
-        - "https://lb.drpc.org/ethereum/AhSgyzb6VUrWuIkUTrjgi3J2NuwCgh0R8JPuIgaNGuYu"
-        - "https://lb.drpc.org/ethereum/Aqh3uZvhdU5oq84o63-TeYsfZaTxgbgR8JO5IgaNGuYu"
-        - "https://lb.drpc.org/ethereum/AhCf0-Tte050nUVwFHF_1jOCF6QNgh8R8JPxIgaNGuYu"
         - "https://lb.drpc.org/ethereum/AmpXsFj_D07JqDZ-Hv-nsjkUBedLgiAR8JPzIgaNGuYu"
-        - "https://lb.drpc.org/ethereum/AjrnZKmTu0IgpPhzqbPO3unPKlTcgiAR8JP2IgaNGuYu"
-        - "https://lb.drpc.org/ethereum/AnmJBrEnm0lsmXo0LnCNva9dh3zRgiER8JP3IgaNGuYu"
-        - "https://lb.drpc.org/ethereum/AuM84m0TIkfQkaEYg8VtRn_SdzxVgiER8JP4IgaNGuYu"
         - "https://lb.drpc.org/ethereum/Ao-bi6VwUUYesmsBczwFkxqJJNtrgiIR8JP5IgaNGuYu"
         - "https://lb.drpc.org/ethereum/AgBSgHwcLEI4quCpnDNHMBeev_UPgiMR8JP6IgaNGuYu"
-        - "https://newest-ultra-friday.quiknode.pro/7091d98af3809c189285739c3f4141b94f368fff"
-        - "https://yolo-smart-tree.quiknode.pro/52836b8f979fca7325258c42925d6c245ca45079"
-        - "https://thrilling-summer-frost.quiknode.pro/ca8e71700184f645a7935acf1487acd191e429a1"
-        - "https://warmhearted-bold-emerald.quiknode.pro/be4e6633f9443a4dd26046d40be1650a810db3a1"
-        - "https://empty-hardworking-spree.quiknode.pro/d1cb31945987ed11caa6f3e63c2b8b86b00d41ff"
-        - "https://solemn-purple-river.quiknode.pro/93a62baaa6ed6004344fca98ff7f05f8f0a12ae1"
       api_key: ""  # 如果需要的话
       username: ""
       password: ""
       # 配置的币种地址列表（已知的合约地址）  
       # ETH链特定的扫描配置
       scan:
-        enabled: false                # 是否启用ETH链扫描
         interval: 2s                 # 扫描区块的时间间隔
-        max_retries: 3               # 区块扫描失败时的最大重试次数
-        retry_delay: 3s              # 重试间隔时间
         confirmations: 61            # 需要等待的区块确认数
         auto_start: true             # 启动时是否自动开始扫描
         save_to_file: false          # 是否将扫描结果保存到文件
         output_dir: "./output/eth"   # 扫描结果输出目录
-        priority: 2                  # 扫描任务优先级（2为中等优先级）
         max_concurrent: 40            # 最大并发扫描区块数
-        block_timeout: 45s           # 单个区块扫描超时时间
-        rescan_interval: 120s        # 重新扫描的时间间隔
-        enable_mempool: true         # 是否启用内存池（mempool）扫描
-        mempool_interval: 10s        # 内存池扫描的时间间隔
         # 批量上传配置（推荐启用以提高性能）
         batch_upload: true           # 是否启用批量上传交易（推荐启用）
         batch_size: 2000             # 批量上传大小，默认1000条交易
@@ -151,29 +113,22 @@ blockchain:
       enabled: true
       # rpc_url: "https://solana-devnet.core.chainstack.com/2b6c4bfadb9ea95696b79cd68125601a"
       explorer_api_urls:
-        - "https://solana-devnet.core.chainstack.com/2b6c4bfadb9ea95696b79cd68125601a"
-        - "https://solana-devnet.core.chainstack.com/ba227c34aa1687ce7fb29c3c582dbeea"
-        - "https://solana-devnet.core.chainstack.com/05e878dc4aedcb81432084cf7bce51b0"
-        - "https://solana-devnet.core.chainstack.com/705c7391ab5ff4e39640d6a0db08f1bb"
+        - "https://lb.drpc.org/solana/Aqh3uZvhdU5oq84o63-TeYsfZaTxgbgR8JO5IgaNGuYu"
+        - "https://lb.drpc.org/solana/ApP8VmV0NEYMjrj0PYgtupww_Sq7gh4R8JPvIgaNGuYu"
+        - "https://lb.drpc.org/solana/AhCf0-Tte050nUVwFHF_1jOCF6QNgh8R8JPxIgaNGuYu"
+        - "https://lb.drpc.org/solana/AvPPIhOf-k4jldkwixy1QT3s8w99gisR8JP8IgaNGuYu"
+        - "https://lb.drpc.org/solana/AuMWx_tHC041opKA_1AWeHXgqCJ8mewR8LzJwg8TMB_n"
       api_key: ""
       username: ""
       password: ""
       # SOL链特定的扫描配置
       scan:
-        enabled: true                # 是否启用SOL链扫描
         interval: 100ms              # 扫描区块的时间间隔
-        max_retries: 3               # 区块扫描失败时的最大重试次数
-        retry_delay: 2s              # 重试间隔时间
         confirmations: 1             # 需要等待的区块确认数（Solana确认很快）
         auto_start: true             # 启动时是否自动开始扫描
         save_to_file: false          # 是否将扫描结果保存到文件
         output_dir: "./output/sol"   # 扫描结果输出目录
-        priority: 3                  # 扫描任务优先级（3为低优先级）
         max_concurrent: 20           # 最大并发扫描区块数
-        block_timeout: 30s           # 单个区块扫描超时时间
-        rescan_interval: 60s         # 重新扫描的时间间隔
-        enable_mempool: false        # 是否启用内存池扫描（Solana不需要）
-        mempool_interval: 10s        # 内存池扫描的时间间隔
         # 批量上传配置（推荐启用以提高性能）
         batch_upload: true           # 是否启用批量上传交易（推荐启用）
         batch_size: 1000             # 批量上传大小，默认1000条交易
