@@ -65,9 +65,11 @@ func NewUserAddressService(userAddressRepo repository.UserAddressRepository, blo
 func (s *userAddressService) CreateAddress(userID uint, req *dto.CreateUserAddressRequest) (*dto.UserAddressResponse, error) {
 	// 验证地址格式（按链类型）
 
-	// 自动获取当前区块高度和地址余额（仅对ETH执行）
+	// 自动获取当前区块高度和地址余额
 	createdHeight := uint64(0)
 	balance := "0"
+	contractBalance := ""
+
 	if strings.ToLower(req.Chain) == "eth" {
 		var err error
 		createdHeight, balance, err = s.getCurrentBlockHeightAndBalance(req.Address)
@@ -75,6 +77,33 @@ func (s *userAddressService) CreateAddress(userID uint, req *dto.CreateUserAddre
 			// 如果获取失败，记录错误日志，使用默认值，但不影响地址创建
 			createdHeight = 0
 			balance = "0"
+		}
+	} else if strings.ToLower(req.Chain) == "sol" {
+		// 对于SOL，获取原生余额和可能的Token余额
+		fo, err := utils.NewSolFailoverFromChain("sol")
+		if err == nil {
+			ctx := context.Background()
+			slot, lamports, gerr := fo.GetAccountBalance(ctx, req.Address)
+			if gerr == nil {
+				balance = strconv.FormatUint(lamports, 10)
+				createdHeight = slot
+			}
+
+			// 如果是SOL ATA账户，获取Token余额
+			if req.AtaMintAddress != "" && req.AtaOwnerAddress != "" {
+				tokenAccounts, tokenErr := fo.GetTokenAccountsByOwner(ctx, req.AtaOwnerAddress, &req.AtaMintAddress)
+				if tokenErr == nil && len(tokenAccounts) > 0 {
+					// 找到匹配的Token账户 - 用ATA地址匹配
+					for _, tokenAccount := range tokenAccounts {
+						if tokenAccount.Address == req.Address {
+							contractBalance = tokenAccount.Amount
+							break
+						}
+					}
+				}
+			}
+
+			fo.Close()
 		}
 	}
 
@@ -105,6 +134,11 @@ func (s *userAddressService) CreateAddress(userID uint, req *dto.CreateUserAddre
 		BalanceHeight:       createdHeight,
 		AtaOwnerAddress:     req.AtaOwnerAddress,
 		AtaMintAddress:      req.AtaMintAddress,
+	}
+
+	// 设置合约余额（对于SOL ATA账户）
+	if contractBalance != "" {
+		userAddress.ContractBalance = &contractBalance
 	}
 
 	// 如果是合约地址，预先查询合约余额和被授权地址余额
@@ -628,6 +662,24 @@ func (s *userAddressService) RefreshAddressBalances(userID uint, addressID uint)
 				addr.Balance = &bal
 				addr.BalanceHeight = height
 			}
+
+			// 如果是SOL ATA账户，获取Token余额
+			if addr.AtaMintAddress != "" && addr.AtaOwnerAddress != "" {
+				// 获取指定mint的Token账户余额
+				tokenAccounts, tokenErr := fo.GetTokenAccountsByOwner(ctx, addr.AtaOwnerAddress, &addr.AtaMintAddress)
+
+				if tokenErr == nil && len(tokenAccounts) > 0 {
+					// 找到匹配的Token账户 - 用ATA地址匹配
+					for _, tokenAccount := range tokenAccounts {
+						// 用ATA地址匹配
+						if tokenAccount.Address == addr.AtaMintAddress {
+							addr.ContractBalance = &tokenAccount.Amount
+							break
+						}
+					}
+				}
+			}
+
 			fo.Close()
 		}
 	default:

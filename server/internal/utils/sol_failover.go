@@ -310,6 +310,155 @@ func (m *SolFailoverManager) GetAccountBalance(ctx context.Context, address stri
 	return 0, 0, lastErr
 }
 
+// GetTokenAccountsByOwner 获取指定所有者的Token账户列表
+func (m *SolFailoverManager) GetTokenAccountsByOwner(ctx context.Context, owner string, mint *string) ([]TokenAccountInfo, error) {
+	if len(m.endpoints) == 0 {
+		return nil, fmt.Errorf("no sol endpoints configured")
+	}
+
+	type rpcReq struct {
+		JSONRPC string        `json:"jsonrpc"`
+		ID      int           `json:"id"`
+		Method  string        `json:"method"`
+		Params  []interface{} `json:"params"`
+	}
+
+	type rpcResp struct {
+		Result struct {
+			Context struct {
+				Slot uint64 `json:"slot"`
+			} `json:"context"`
+			Value []struct {
+				Account struct {
+					Data struct {
+						Parsed struct {
+							Info struct {
+								TokenAmount struct {
+									Amount         string   `json:"amount"`
+									Decimals       int      `json:"decimals"`
+									UIAmount       *float64 `json:"uiAmount"`
+									UIAmountString string   `json:"uiAmountString"`
+								} `json:"tokenAmount"`
+								Mint  string `json:"mint"`
+								Owner string `json:"owner"`
+							} `json:"info"`
+							Type string `json:"type"`
+						} `json:"parsed"`
+					} `json:"data"`
+					Executable bool   `json:"executable"`
+					Lamports   uint64 `json:"lamports"`
+					Owner      string `json:"owner"`
+					RentEpoch  uint64 `json:"rentEpoch"`
+				} `json:"account"`
+				Pubkey string `json:"pubkey"`
+			} `json:"value"`
+		} `json:"result"`
+		Error *struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+
+	var lastErr error
+	for i := 0; i < len(m.endpoints); i++ {
+		endpoint := m.endpoints[(int(m.idx)+i)%len(m.endpoints)]
+
+		// 构建参数
+		var params []interface{}
+
+		if mint != nil {
+			// 当指定mint时，使用mint过滤
+			params = []interface{}{
+				owner,
+				map[string]interface{}{
+					"mint": *mint,
+				},
+				map[string]interface{}{
+					"encoding": "jsonParsed",
+				},
+			}
+		} else {
+			// 当不指定mint时，使用programId过滤
+			params = []interface{}{
+				owner,
+				map[string]interface{}{
+					"programId": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+				},
+				map[string]interface{}{
+					"encoding": "jsonParsed",
+				},
+			}
+		}
+
+		payload := rpcReq{JSONRPC: "2.0", ID: 1, Method: "getTokenAccountsByOwner", Params: params}
+		body, _ := json.Marshal(payload)
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		respBytes, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		var out rpcResp
+		if err := json.Unmarshal(respBytes, &out); err != nil {
+			lastErr = fmt.Errorf("decode response failed: %w, body=%s", err, string(respBytes))
+			continue
+		}
+		if out.Error != nil {
+			lastErr = fmt.Errorf("rpc error %d: %s", out.Error.Code, out.Error.Message)
+			m.logger.WithError(lastErr).Warnf("getTokenAccountsByOwner failed on %s, trying next", endpoint)
+			continue
+		}
+
+		// 转换结果
+		var tokenAccounts []TokenAccountInfo
+		fmt.Printf("RPC返回的账户数量: %d\n", len(out.Result.Value))
+		for i, account := range out.Result.Value {
+			fmt.Printf("账户 %d: Pubkey=%s, Type=%s\n", i, account.Pubkey, account.Account.Data.Parsed.Type)
+			if account.Account.Data.Parsed.Type == "account" {
+				fmt.Printf("  - Mint: %s\n", account.Account.Data.Parsed.Info.Mint)
+				fmt.Printf("  - Owner: %s\n", account.Account.Data.Parsed.Info.Owner)
+				fmt.Printf("  - Amount: %s\n", account.Account.Data.Parsed.Info.TokenAmount.Amount)
+
+				tokenAccounts = append(tokenAccounts, TokenAccountInfo{
+					Address:  account.Pubkey,
+					Mint:     account.Account.Data.Parsed.Info.Mint,
+					Owner:    account.Account.Data.Parsed.Info.Owner,
+					Amount:   account.Account.Data.Parsed.Info.TokenAmount.Amount,
+					Decimals: account.Account.Data.Parsed.Info.TokenAmount.Decimals,
+					UIAmount: account.Account.Data.Parsed.Info.TokenAmount.UIAmount,
+				})
+			}
+		}
+		fmt.Printf("最终返回的Token账户数量: %d\n", len(tokenAccounts))
+		return tokenAccounts, nil
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("unknown error getTokenAccountsByOwner")
+	}
+	return nil, lastErr
+}
+
+// TokenAccountInfo Token账户信息
+type TokenAccountInfo struct {
+	Address  string   `json:"address"`
+	Mint     string   `json:"mint"`
+	Owner    string   `json:"owner"`
+	Amount   string   `json:"amount"`
+	Decimals int      `json:"decimals"`
+	UIAmount *float64 `json:"uiAmount,omitempty"`
+}
+
 // Close 关闭所有客户端连接
 func (m *SolFailoverManager) Close() {
 	// Solana Go SDK 的 RPC 客户端通常不需要显式关闭

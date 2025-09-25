@@ -51,8 +51,8 @@
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">类型</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">合约</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">授权地址</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">余额 (Wei)</th>
-                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">合约余额 (Wei)</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">余额</th>
+                <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">合约余额</th>
                 <th class="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider">操作</th>
               </tr>
             </thead>
@@ -135,7 +135,7 @@
                 <td class="px-6 py-4 whitespace-nowrap text-sm text-gray-900">
                   <div v-if="address.contract_balance">
                     <div class="space-y-1">
-                      <div class="text-gray-700">{{ formatTokenAmount(address.contract_balance, address.contract_id) }}</div>
+                      <div class="text-gray-700">{{ formatTokenAmount(address.contract_balance, address.contract_id, (address as any).ata_mint_address) }}</div>
                       <div v-if="address.contract_balance_height" class="text-xs text-gray-500">
                         区块 #{{ address.contract_balance_height }}
                       </div>
@@ -865,16 +865,25 @@ const formatWeiBalance = (wei: string) => {
 }
 
 // 获取合约精度
-const getContractDecimals = (contractId?: number) => {
-  if (!contractId) return 18
-  const c = contracts.value.find(c => c.id === contractId)
-  return (c && (c as any).decimals) ? Number((c as any).decimals) : 18
+const getContractDecimals = (contractId?: number, ataMintAddress?: string) => {
+  if (contractId) {
+    const c = contracts.value.find(c => c.id === contractId)
+    return (c && (c as any).decimals) ? Number((c as any).decimals) : 18
+  }
+  
+  // 对于 ATA 账户，根据 mint 地址查找合约精度
+  if (ataMintAddress) {
+    const c = contracts.value.find(c => c.address === ataMintAddress)
+    return (c && (c as any).decimals) ? Number((c as any).decimals) : 18
+  }
+  
+  return 18
 }
 
 // 使用合约精度格式化代币数量（字符串安全处理，显示4位小数）
-const formatTokenAmount = (amount: string, contractId?: number) => {
+const formatTokenAmount = (amount: string, contractId?: number, ataMintAddress?: string) => {
   try {
-    const decimals = getContractDecimals(contractId)
+    const decimals = getContractDecimals(contractId, ataMintAddress)
     if (!amount) return '0.0000'
     // 仅数字字符串
     const raw = amount.replace(/^0+/, '') || '0'
@@ -1126,6 +1135,9 @@ onMounted(() => {
 })
 
 // UI helpers
+const showAtaCalc = ref(false)
+const computingAta = ref(false)
+
 const toggleAtaCalc = () => {
   showAtaCalc.value = !showAtaCalc.value
 }
