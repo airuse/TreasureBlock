@@ -114,14 +114,31 @@
                     class="px-3 py-2 hover:bg-gray-100 cursor-pointer border-b border-gray-100 last:border-b-0"
                   >
                     <div class="flex items-center justify-between">
-                      <div>
-                        <div class="font-medium text-gray-900">{{ token.symbol }} - {{ token.name }}</div>
-                        <div class="text-sm text-gray-500 font-mono">{{ token.contract_address }}</div>
+                      <div class="flex items-center space-x-2">
+                        <div>
+                          <div class="font-medium text-gray-900 flex items-center space-x-2">
+                            <span>{{ token.symbol }}</span>
+                            <span v-if="token.verified" class="inline-flex items-center px-1.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                              ✓ 已验证
+                            </span>
+                          </div>
+                          <div class="text-sm text-gray-500">{{ token.name }}</div>
+                          <div class="text-xs text-gray-400 font-mono">{{ token.contract_address }}</div>
+                        </div>
                       </div>
                       <div class="text-right">
                         <div class="text-sm text-gray-600">精度: {{ token.decimals }}</div>
+                        <div v-if="token.balance && token.balance !== '0'" class="text-xs text-gray-500">
+                          余额: {{ formatTokenBalance(token) }}
+                        </div>
                       </div>
                     </div>
+                  </div>
+                </div>
+                <!-- 无结果提示 -->
+                <div v-else-if="showTokenDropdown && filteredTokens.length === 0" class="absolute z-10 w-full mt-1 bg-white border border-gray-300 rounded-md shadow-lg">
+                  <div class="px-3 py-2 text-sm text-gray-500 text-center">
+                    未找到匹配的代币
                   </div>
                 </div>
               </div>
@@ -291,20 +308,20 @@
 import { ref, watch, computed, onMounted } from 'vue'
 import { createUserTransaction, updateUserTransaction } from '@/api/user-transactions'
 import { getPersonalAddresses } from '@/api/personal-addresses'
-import { listCoinConfigs } from '@/api/coinconfig'
+import { getContracts } from '@/api/contracts'
 import type { CreateUserTransactionRequest } from '@/types'
 import type { PersonalAddressItem } from '@/types/personal-address'
-import type { CoinConfig } from '@/types/coinconfig'
+import type { Contract } from '@/types/contract'
 
-// ERC-20代币类型定义（基于CoinConfig）
-interface ERC20Token {
+// SPL代币类型定义（基于Contract）
+interface SPLToken {
   contract_address: string
   name: string
   symbol: string
   decimals: number
   balance?: string
-  logo_url?: string
-  is_verified?: boolean
+  contract_logo?: string
+  verified?: boolean
   status?: number
 }
 
@@ -423,10 +440,10 @@ const showAllowanceAddressDropdown = ref(false)
 const showToAddressDropdown = ref(false)
 
 // 代币相关
-const tokens = ref<ERC20Token[]>([])
+const tokens = ref<SPLToken[]>([])
 const selectedTokenSearch = ref('')
 const showTokenDropdown = ref(false)
-const selectedToken = ref<ERC20Token | null>(null)
+const selectedToken = ref<SPLToken | null>(null)
 
 // 计算属性
 const filteredFromAddresses = computed(() => {
@@ -568,58 +585,42 @@ const loadAddresses = async () => {
 // 加载代币列表
 const loadTokens = async () => {
   try {
-    // 调用币种配置API获取代币列表
-    const response = await listCoinConfigs({
-      chain: 'sol', // 只获取Solana链的代币
-      status: 1, // 只获取启用的代币
+    // 调用合约API获取代币列表
+    const response = await getContracts({
+      chainName: 'sol', // 只获取Solana链的合约
+      status: '1', // 只获取启用的合约
       page: 1,
-      page_size: 100 // 获取足够多的代币
+      page_size: 100 // 获取足够多的合约
     })
     
     if (response.success && response.data) {
-      // 检查响应数据结构，支持两种格式
-      let coinConfigs: any[] = []
-      
-      if (Array.isArray(response.data)) {
-        // 如果data直接是数组（PaginatedResponse<CoinConfig>格式）
-        coinConfigs = response.data
-      } else if (typeof response.data === 'object' && response.data !== null && 'coin_configs' in response.data) {
-        // 如果data包含coin_configs数组（后端实际返回格式）
-        const dataWithCoinConfigs = response.data as { coin_configs: any[] }
-        if (Array.isArray(dataWithCoinConfigs.coin_configs)) {
-          coinConfigs = dataWithCoinConfigs.coin_configs
-        }
-      }
-      
-      if (coinConfigs.length > 0) {
-        // 将CoinConfig转换为ERC20Token格式
-        tokens.value = coinConfigs.map(coin => ({
-          contract_address: coin.contract_addr,
-          name: coin.name,
-          symbol: coin.symbol,
-          decimals: coin.decimals,
-          logo_url: coin.logo_url,
-          is_verified: coin.is_verified,
-          status: coin.status,
-          balance: '0' // 余额暂时设为0，后续可以从用户代币余额API获取
-        }))
-      }
+      // 将Contract转换为SPLToken格式
+      tokens.value = response.data.map(contract => ({
+        contract_address: contract.address,
+        name: contract.name,
+        symbol: contract.symbol,
+        decimals: contract.decimals,
+        contract_logo: contract.contract_logo,
+        verified: contract.verified,
+        status: contract.status,
+        balance: '0' // 余额暂时设为0，后续可以从用户代币余额API获取
+      }))
     }
   } catch (error) {
     console.error('加载代币列表失败:', error)
     // 如果API调用失败，使用一些常见的代币作为备用
     tokens.value = [
       {
-        contract_address: '0xdAC17F958D2ee523a2206206994597C13D831ec7', // USDT
-        name: 'Tether USD',
-        symbol: 'USDT',
+        contract_address: 'EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v', // USDC
+        name: 'USD Coin',
+        symbol: 'USDC',
         decimals: 6,
         balance: '0'
       },
       {
-        contract_address: '0xA0b86a33E6441b8c4C8C8C8C8C8C8C8C8C8C8C8', // USDC
-        name: 'USD Coin',
-        symbol: 'USDC',
+        contract_address: 'Es9vMFrzaCERmJfrF4H2FYD4KCoNkY11McCe8BenwNYB', // USDT
+        name: 'Tether USD',
+        symbol: 'USDT',
         decimals: 6,
         balance: '0'
       }
@@ -751,7 +752,7 @@ const handleContractOperationTypeChange = () => {
 }
 
 // 选择代币
-const selectToken = (token: ERC20Token) => {
+const selectToken = (token: SPLToken) => {
   selectedToken.value = token
   form.value.symbol = token.symbol
   selectedTokenSearch.value = token.symbol
@@ -766,7 +767,7 @@ const handleTokenDropdownBlur = () => {
 }
 
 // 格式化代币余额
-const formatTokenBalance = (token: ERC20Token) => {
+const formatTokenBalance = (token: SPLToken) => {
   if (!token.balance) return '0'
   const num = parseFloat(token.balance)
   if (isNaN(num)) return '0'

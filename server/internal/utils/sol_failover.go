@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"strings"
 	"sync/atomic"
 
 	"github.com/blocto/solana-go-sdk/client"
@@ -310,6 +311,138 @@ func (m *SolFailoverManager) GetAccountBalance(ctx context.Context, address stri
 	return 0, 0, lastErr
 }
 
+// GetAccountInfo 获取账户信息
+func (m *SolFailoverManager) GetAccountInfo(ctx context.Context, address string) (*AccountInfo, error) {
+	if len(m.endpoints) == 0 {
+		return nil, fmt.Errorf("no sol endpoints configured")
+	}
+
+	type rpcReq struct {
+		JSONRPC string        `json:"jsonrpc"`
+		ID      int           `json:"id"`
+		Method  string        `json:"method"`
+		Params  []interface{} `json:"params"`
+	}
+
+	type rpcResp struct {
+		Result struct {
+			Context struct {
+				Slot uint64 `json:"slot"`
+			} `json:"context"`
+			Value *struct {
+				Data       interface{} `json:"data"` // 可能是数组或对象
+				Executable bool        `json:"executable"`
+				Lamports   uint64      `json:"lamports"`
+				Owner      string      `json:"owner"`
+				RentEpoch  uint64      `json:"rentEpoch"`
+			} `json:"value"`
+		} `json:"result"`
+		Error *struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+
+	var lastErr error
+	for i := 0; i < len(m.endpoints); i++ {
+		endpoint := m.endpoints[(int(m.idx)+i)%len(m.endpoints)]
+		payload := rpcReq{
+			JSONRPC: "2.0",
+			ID:      1,
+			Method:  "getAccountInfo",
+			Params:  []interface{}{address, map[string]interface{}{"encoding": "base64"}},
+		}
+		body, _ := json.Marshal(payload)
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		respBytes, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		var out rpcResp
+		if err := json.Unmarshal(respBytes, &out); err != nil {
+			lastErr = fmt.Errorf("decode response failed: %w, body=%s", err, string(respBytes))
+			continue
+		}
+		if out.Error != nil {
+			// 如果账户不存在，返回特定的错误码
+			if out.Error.Code == -32602 || strings.Contains(out.Error.Message, "not found") {
+				return nil, nil // 账户不存在，返回nil
+			}
+			lastErr = fmt.Errorf("rpc error %d: %s", out.Error.Code, out.Error.Message)
+			m.logger.WithError(lastErr).Warnf("getAccountInfo failed on %s, trying next", endpoint)
+			continue
+		}
+		// 如果value为nil，说明账户不存在
+		if out.Result.Value == nil {
+			return nil, nil
+		}
+		// 账户存在，解析账户信息
+		var data []string
+		var dataType string
+
+		// 处理 Data 字段可能是数组或对象的情况
+		switch d := out.Result.Value.Data.(type) {
+		case []interface{}:
+			// 数组格式：["...", "base64"]
+			if len(d) >= 2 {
+				if dataStr, ok := d[0].(string); ok {
+					data = []string{dataStr}
+				}
+				if typeStr, ok := d[1].(string); ok {
+					dataType = typeStr
+				}
+			}
+		case map[string]interface{}:
+			// 对象格式：{"data": [...], "type": "..."}
+			if dataArray, ok := d["data"].([]interface{}); ok {
+				for _, item := range dataArray {
+					if str, ok := item.(string); ok {
+						data = append(data, str)
+					}
+				}
+			}
+			if typeStr, ok := d["type"].(string); ok {
+				dataType = typeStr
+			}
+		}
+
+		return &AccountInfo{
+			Data:       data,
+			Type:       dataType,
+			Executable: out.Result.Value.Executable,
+			Lamports:   out.Result.Value.Lamports,
+			Owner:      out.Result.Value.Owner,
+			RentEpoch:  out.Result.Value.RentEpoch,
+		}, nil
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("unknown error getAccountInfo")
+	}
+	return nil, lastErr
+}
+
+// AccountInfo 账户信息结构
+type AccountInfo struct {
+	Data       []string `json:"data"`
+	Type       string   `json:"type"`
+	Executable bool     `json:"executable"`
+	Lamports   uint64   `json:"lamports"`
+	Owner      string   `json:"owner"`
+	RentEpoch  uint64   `json:"rentEpoch"`
+}
+
 // GetTokenAccountsByOwner 获取指定所有者的Token账户列表
 func (m *SolFailoverManager) GetTokenAccountsByOwner(ctx context.Context, owner string, mint *string) ([]TokenAccountInfo, error) {
 	if len(m.endpoints) == 0 {
@@ -422,13 +555,8 @@ func (m *SolFailoverManager) GetTokenAccountsByOwner(ctx context.Context, owner 
 
 		// 转换结果
 		var tokenAccounts []TokenAccountInfo
-		fmt.Printf("RPC返回的账户数量: %d\n", len(out.Result.Value))
-		for i, account := range out.Result.Value {
-			fmt.Printf("账户 %d: Pubkey=%s, Type=%s\n", i, account.Pubkey, account.Account.Data.Parsed.Type)
+		for _, account := range out.Result.Value {
 			if account.Account.Data.Parsed.Type == "account" {
-				fmt.Printf("  - Mint: %s\n", account.Account.Data.Parsed.Info.Mint)
-				fmt.Printf("  - Owner: %s\n", account.Account.Data.Parsed.Info.Owner)
-				fmt.Printf("  - Amount: %s\n", account.Account.Data.Parsed.Info.TokenAmount.Amount)
 
 				tokenAccounts = append(tokenAccounts, TokenAccountInfo{
 					Address:  account.Pubkey,
@@ -440,7 +568,6 @@ func (m *SolFailoverManager) GetTokenAccountsByOwner(ctx context.Context, owner 
 				})
 			}
 		}
-		fmt.Printf("最终返回的Token账户数量: %d\n", len(tokenAccounts))
 		return tokenAccounts, nil
 	}
 	if lastErr == nil {
@@ -451,12 +578,140 @@ func (m *SolFailoverManager) GetTokenAccountsByOwner(ctx context.Context, owner 
 
 // TokenAccountInfo Token账户信息
 type TokenAccountInfo struct {
-	Address  string   `json:"address"`
-	Mint     string   `json:"mint"`
-	Owner    string   `json:"owner"`
-	Amount   string   `json:"amount"`
-	Decimals int      `json:"decimals"`
-	UIAmount *float64 `json:"uiAmount,omitempty"`
+	Address         string   `json:"address"`
+	Mint            string   `json:"mint"`
+	Owner           string   `json:"owner"`
+	Amount          string   `json:"amount"`
+	Decimals        int      `json:"decimals"`
+	UIAmount        *float64 `json:"uiAmount,omitempty"`
+	Delegate        *string  `json:"delegate,omitempty"`
+	DelegatedAmount *string  `json:"delegatedAmount,omitempty"`
+}
+
+// GetTokenAccountInfoParsed 获取代币账户的解析信息（包含授权详情）
+func (m *SolFailoverManager) GetTokenAccountInfoParsed(ctx context.Context, address string) (*TokenAccountInfo, error) {
+	if len(m.endpoints) == 0 {
+		return nil, fmt.Errorf("no sol endpoints configured")
+	}
+
+	type rpcReq struct {
+		JSONRPC string        `json:"jsonrpc"`
+		ID      int           `json:"id"`
+		Method  string        `json:"method"`
+		Params  []interface{} `json:"params"`
+	}
+
+	type rpcResp struct {
+		Result struct {
+			Context struct {
+				Slot uint64 `json:"slot"`
+			} `json:"context"`
+			Value *struct {
+				Data struct {
+					Parsed struct {
+						Info struct {
+							TokenAmount struct {
+								Amount         string   `json:"amount"`
+								Decimals       int      `json:"decimals"`
+								UIAmount       *float64 `json:"uiAmount"`
+								UIAmountString string   `json:"uiAmountString"`
+							} `json:"tokenAmount"`
+							Mint            string  `json:"mint"`
+							Owner           string  `json:"owner"`
+							Delegate        *string `json:"delegate,omitempty"`
+							DelegatedAmount *struct {
+								Amount         string   `json:"amount"`
+								Decimals       int      `json:"decimals"`
+								UIAmount       *float64 `json:"uiAmount"`
+								UIAmountString string   `json:"uiAmountString"`
+							} `json:"delegatedAmount,omitempty"`
+							State *string `json:"state,omitempty"`
+						} `json:"info"`
+						Type string `json:"type"`
+					} `json:"parsed"`
+				} `json:"data"`
+				Executable bool   `json:"executable"`
+				Lamports   uint64 `json:"lamports"`
+				Owner      string `json:"owner"`
+				RentEpoch  uint64 `json:"rentEpoch"`
+			} `json:"value"`
+		} `json:"result"`
+		Error *struct {
+			Code    int    `json:"code"`
+			Message string `json:"message"`
+		} `json:"error"`
+	}
+
+	var lastErr error
+	for i := 0; i < len(m.endpoints); i++ {
+		endpoint := m.endpoints[(int(m.idx)+i)%len(m.endpoints)]
+		payload := rpcReq{
+			JSONRPC: "2.0",
+			ID:      1,
+			Method:  "getAccountInfo",
+			Params:  []interface{}{address, map[string]interface{}{"encoding": "jsonParsed"}},
+		}
+		body, _ := json.Marshal(payload)
+		req, err := http.NewRequestWithContext(ctx, http.MethodPost, endpoint, bytes.NewReader(body))
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := http.DefaultClient.Do(req)
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		respBytes, err := io.ReadAll(resp.Body)
+		resp.Body.Close()
+		if err != nil {
+			lastErr = err
+			continue
+		}
+		var out rpcResp
+		if err := json.Unmarshal(respBytes, &out); err != nil {
+			lastErr = fmt.Errorf("decode response failed: %w, body=%s", err, string(respBytes))
+			continue
+		}
+		if out.Error != nil {
+			// 如果账户不存在，返回特定的错误码
+			if out.Error.Code == -32602 || strings.Contains(out.Error.Message, "not found") {
+				return nil, nil // 账户不存在，返回nil
+			}
+			lastErr = fmt.Errorf("rpc error %d: %s", out.Error.Code, out.Error.Message)
+			m.logger.WithError(lastErr).Warnf("getTokenAccountInfoParsed failed on %s, trying next", endpoint)
+			continue
+		}
+		// 如果value为nil，说明账户不存在
+		if out.Result.Value == nil {
+			return nil, nil
+		}
+		// 检查是否是代币账户
+		if out.Result.Value.Data.Parsed.Type != "account" {
+			return nil, fmt.Errorf("账户不是代币账户类型")
+		}
+		// 返回解析后的代币账户信息
+		var delegatedAmount *string
+		if out.Result.Value.Data.Parsed.Info.DelegatedAmount != nil {
+			delegatedAmount = &out.Result.Value.Data.Parsed.Info.DelegatedAmount.Amount
+		}
+
+		return &TokenAccountInfo{
+			Address:         address,
+			Mint:            out.Result.Value.Data.Parsed.Info.Mint,
+			Owner:           out.Result.Value.Data.Parsed.Info.Owner,
+			Amount:          out.Result.Value.Data.Parsed.Info.TokenAmount.Amount,
+			Decimals:        out.Result.Value.Data.Parsed.Info.TokenAmount.Decimals,
+			UIAmount:        out.Result.Value.Data.Parsed.Info.TokenAmount.UIAmount,
+			Delegate:        out.Result.Value.Data.Parsed.Info.Delegate,
+			DelegatedAmount: delegatedAmount,
+		}, nil
+	}
+	if lastErr == nil {
+		lastErr = fmt.Errorf("unknown error getTokenAccountInfoParsed")
+	}
+	return nil, lastErr
 }
 
 // Close 关闭所有客户端连接

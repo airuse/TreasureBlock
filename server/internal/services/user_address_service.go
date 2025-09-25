@@ -7,6 +7,8 @@ import (
 	"blockChainBrowser/server/internal/repository"
 	"blockChainBrowser/server/internal/utils"
 	"context"
+	"encoding/base64"
+	"encoding/binary"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -15,6 +17,7 @@ import (
 	"strings"
 
 	"github.com/ethereum/go-ethereum/common"
+	"github.com/mr-tron/base58"
 )
 
 // UserAddressService 用户地址服务接口
@@ -142,7 +145,8 @@ func (s *userAddressService) CreateAddress(userID uint, req *dto.CreateUserAddre
 	}
 
 	// 如果是合约地址，预先查询合约余额和被授权地址余额
-	if (strings.ToLower(req.Type) == "contract" || strings.ToLower(req.Type) == "authorized_contract") && req.ContractID != nil && s.contractRepo != nil && s.contractCall != nil {
+	// 注意：Sol 链不走 EVM 合约查询，避免将 base58 地址当作 EVM 地址处理
+	if strings.ToLower(req.Chain) != "sol" && (strings.ToLower(req.Type) == "contract" || strings.ToLower(req.Type) == "authorized_contract") && req.ContractID != nil && s.contractRepo != nil && s.contractCall != nil {
 		ctx := context.Background()
 		if contract, err2 := s.contractRepo.GetByID(ctx, *req.ContractID); err2 == nil && contract != nil && contract.Address != "" {
 			var blockNum *big.Int
@@ -667,15 +671,74 @@ func (s *userAddressService) RefreshAddressBalances(userID uint, addressID uint)
 			if addr.AtaMintAddress != "" && addr.AtaOwnerAddress != "" {
 				// 获取指定mint的Token账户余额
 				tokenAccounts, tokenErr := fo.GetTokenAccountsByOwner(ctx, addr.AtaOwnerAddress, &addr.AtaMintAddress)
-
 				if tokenErr == nil && len(tokenAccounts) > 0 {
 					// 找到匹配的Token账户 - 用ATA地址匹配
 					for _, tokenAccount := range tokenAccounts {
 						// 用ATA地址匹配
-						if tokenAccount.Address == addr.AtaMintAddress {
+						if tokenAccount.Address == addr.Address {
 							addr.ContractBalance = &tokenAccount.Amount
 							break
 						}
+					}
+				}
+			}
+
+			// 如果是被授权合约类型，更新授权地址的代币余额
+			if strings.ToLower(addr.Type) == "authorized_contract" && addr.ContractID != nil && s.contractRepo != nil {
+				// 获取合约信息
+				if contract, err := s.contractRepo.GetByID(ctx, *addr.ContractID); err == nil && contract != nil {
+					mintAddress := contract.Address // 合约地址就是铸币地址
+
+					// 更新每个授权地址的代币余额
+					if addr.AuthorizedAddresses != nil && len(addr.AuthorizedAddresses) > 0 {
+						updated := make(models.AuthorizedAddressesJSON, len(addr.AuthorizedAddresses))
+						for authorizedAddr := range addr.AuthorizedAddresses {
+							// 对于被授权合约，我们需要获取授权者授权给被授权合约的授权额度
+							// authorizedAddr 是授权者（有代币的账户）
+							// addr.Address 是被授权合约地址（被授权者）
+							// 我们需要查询授权者的代币账户，然后获取授权给被授权合约的额度
+
+							// 获取授权者的代币账户列表
+							tokenAccounts, tokenErr := fo.GetTokenAccountsByOwner(ctx, authorizedAddr, &mintAddress)
+
+							if tokenErr == nil && len(tokenAccounts) > 0 {
+								found := false
+								for _, tokenAccount := range tokenAccounts {
+									// 检查这个代币账户是否授权给了被授权合约
+									// 在 Solana 中，需要查询代币账户的 delegate 字段和 delegated_amount 字段
+									// 目前 GetTokenAccountsByOwner 返回的是简化信息，不包含授权详情
+									// 我们需要使用 GetAccountInfo 来获取完整的代币账户信息
+
+									// 使用 jsonParsed 格式获取代币账户信息
+									parsedInfo, parsedErr := fo.GetTokenAccountInfoParsed(ctx, tokenAccount.Address)
+									if parsedErr == nil && parsedInfo != nil {
+										if parsedInfo.Delegate != nil && *parsedInfo.Delegate != "" {
+											delegate := *parsedInfo.Delegate
+											delegatedAmount := "0"
+											if parsedInfo.DelegatedAmount != nil {
+												delegatedAmount = *parsedInfo.DelegatedAmount
+											}
+
+											// 检查 delegate 是否指向被授权合约
+											if delegate == addr.Address {
+												updated[authorizedAddr] = models.AuthorizedInfo{
+													Allowance: delegatedAmount,
+												}
+												found = true
+												break
+											}
+										}
+									}
+								}
+								if !found {
+									updated[authorizedAddr] = addr.AuthorizedAddresses[authorizedAddr]
+								}
+							} else {
+								// 如果获取失败，保留原值
+								updated[authorizedAddr] = addr.AuthorizedAddresses[authorizedAddr]
+							}
+						}
+						addr.AuthorizedAddresses = updated
 					}
 				}
 			}
@@ -689,7 +752,8 @@ func (s *userAddressService) RefreshAddressBalances(userID uint, addressID uint)
 	}
 
 	// 刷新合约余额与授权额度（仅当为合约/被授权合约且具备依赖）
-	if (strings.ToLower(addr.Type) == "contract" || strings.ToLower(addr.Type) == "authorized_contract") && addr.ContractID != nil && s.contractRepo != nil && s.contractCall != nil {
+	// 注意：Sol链的授权地址余额更新已经在上面单独处理了，这里只处理ETH/BSC
+	if (strings.ToLower(addr.Type) == "contract" || strings.ToLower(addr.Type) == "authorized_contract") && addr.ContractID != nil && s.contractRepo != nil && s.contractCall != nil && strings.ToLower(addr.Chain) != "sol" {
 		ctx := context.Background()
 		if contract, err2 := s.contractRepo.GetByID(ctx, *addr.ContractID); err2 == nil && contract != nil && contract.Address != "" {
 			// 使用最新高度（如可用）
@@ -984,4 +1048,70 @@ func (s *userAddressService) GetAddressUTXOs(userID uint, address string) ([]*mo
 	}
 
 	return utxos, nil
+}
+
+// parseTokenAccountDelegate 解析代币账户的授权信息
+// 返回 delegate 地址和 delegated_amount
+func (s *userAddressService) parseTokenAccountDelegate(accountInfo *utils.AccountInfo) (string, string, error) {
+	if accountInfo == nil {
+		return "", "", fmt.Errorf("账户信息为空")
+	}
+
+	if len(accountInfo.Data) < 1 {
+		return "", "", fmt.Errorf("账户数据为空")
+	}
+
+	// 解析 base64 编码的账户数据
+	data, err := base64.StdEncoding.DecodeString(accountInfo.Data[0])
+	if err != nil {
+		return "", "", fmt.Errorf("解码账户数据失败: %w", err)
+	}
+
+	// Solana 代币账户数据结构（165字节）：
+	// 0-32: mint (32字节)
+	// 32-64: owner (32字节)
+	// 64-72: amount (8字节，小端序)
+	// 72-104: delegate (32字节，可选)
+	// 104-112: delegated_amount (8字节，小端序)
+	// 112: state (1字节)
+	// 113: is_native (1字节)
+	// 114-122: native_amount (8字节，小端序)
+	// 122-154: close_authority (32字节，可选)
+	// 154-165: 其他字段
+
+	if len(data) < 165 {
+		return "", "", fmt.Errorf("账户数据长度不足，期望165字节，实际%d字节", len(data))
+	}
+
+	// 检查是否有 delegate
+	// 在 Solana 代币账户中，state 字段的位标志：
+	// 位 0: 账户是否已初始化
+	// 位 1: 账户是否被冻结
+	// 位 2: 账户是否有 delegate
+	state := data[112]
+	hasDelegate := (state & 0x04) != 0 // 检查第2位
+
+	// 即使 state 显示没有 delegate，我们也检查 delegate 字段是否为空
+	// 因为有些实现可能不设置 state 位
+	delegateBytes := data[72:104]
+	allZero := true
+	for _, b := range delegateBytes {
+		if b != 0 {
+			allZero = false
+			break
+		}
+	}
+
+	if !hasDelegate && allZero {
+		return "", "0", nil // 没有授权
+	}
+
+	// 解析 delegate 地址（32字节，转换为 base58）
+	delegate := base58.Encode(delegateBytes)
+
+	// 解析 delegated_amount（8字节，小端序）
+	delegatedAmountBytes := data[104:112]
+	delegatedAmount := binary.LittleEndian.Uint64(delegatedAmountBytes)
+
+	return delegate, strconv.FormatUint(delegatedAmount, 10), nil
 }

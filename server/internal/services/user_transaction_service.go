@@ -8,15 +8,19 @@ import (
 	"blockChainBrowser/server/internal/repository"
 	"blockChainBrowser/server/internal/utils"
 	"context"
+	"encoding/base64"
+	"encoding/binary"
 	"encoding/hex"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"math"
 	"math/big"
 	"strconv"
 	"strings"
 	"time"
 
+	solcommon "github.com/blocto/solana-go-sdk/common"
 	"github.com/ethereum/go-ethereum/common"
 	"github.com/ethereum/go-ethereum/crypto"
 	"github.com/sirupsen/logrus"
@@ -47,6 +51,8 @@ type userTransactionService struct {
 	coinConfigRepo   repository.CoinConfigRepository
 	parserConfigRepo repository.ParserConfigRepository
 	logger           *logrus.Logger
+	contractRepo     repository.ContractRepository
+	userAddressRepo  repository.UserAddressRepository
 }
 
 // NewUserTransactionService 创建用户交易服务实例
@@ -55,6 +61,8 @@ func NewUserTransactionService() UserTransactionService {
 		userTxRepo:       repository.NewUserTransactionRepository(),
 		coinConfigRepo:   repository.NewCoinConfigRepository(),
 		parserConfigRepo: repository.NewParserConfigRepository(database.GetDB()),
+		contractRepo:     repository.NewContractRepository(database.GetDB()),
+		userAddressRepo:  repository.NewUserAddressRepository(database.GetDB()),
 		logger:           logrus.New(),
 	}
 }
@@ -88,16 +96,201 @@ func (s *userTransactionService) ExportSolUnsigned(ctx context.Context, id uint,
 		Context:         map[string]any{},
 	}
 	if strings.EqualFold(userTx.TransactionType, "token") && userTx.TokenContractAddress != "" {
-		resp.Instructions = append(resp.Instructions, map[string]any{
-			"program_id": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
-			"type":       "spl_transfer_checked",
-			"params": map[string]any{
-				"mint":       userTx.TokenContractAddress,
-				"from_owner": userTx.FromAddress,
-				"to_owner":   userTx.ToAddress,
+		// 获取代币精度信息
+		decimals := uint8(6) // 默认精度
+		if contract, err := s.contractRepo.GetByAddress(ctx, userTx.TokenContractAddress); err == nil && contract != nil {
+			decimals = contract.Decimals
+		}
+
+		// 处理发送者ATA地址
+		_, _, _, err := s.processSenderATA(ctx, userTx.FromAddress, userTx.TokenContractAddress, userTx.Amount, decimals)
+		if err != nil {
+			return nil, err
+		}
+
+		// 根据合约操作类型生成不同的指令
+		switch strings.ToLower(userTx.ContractOperationType) {
+		case "approve":
+			// 授权操作：授权 ToAddress 可以花费 FromAddress 的代币
+			// 需要获取授权者的钱包地址（FromAddress 对应的钱包）
+			authority := userTx.FromAddress
+			if fromAddr, err := s.userAddressRepo.GetByAddress(userTx.FromAddress); err == nil && fromAddr != nil {
+				if fromAddr.Type == "ata" && fromAddr.AtaOwnerAddress != "" {
+					authority = fromAddr.AtaOwnerAddress
+				}
+			}
+
+			// 被授权者地址（ToAddress）
+			delegate := userTx.ToAddress
+
+			resp.Instructions = append(resp.Instructions, map[string]any{
+				"program_id": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+				"type":       "spl_approve",
+				"params": map[string]any{
+					"mint":      userTx.TokenContractAddress,
+					"authority": authority, // 授权者钱包地址
+					"delegate":  delegate,  // 被授权者地址
+					"amount":    userTx.Amount,
+					"decimals":  decimals,
+				},
+			})
+
+		case "transferfrom":
+			// 授权转账操作：使用授权额度进行转账
+			// 发送者(资金来源)必须是持币人A：优先 allowance_address，其次 FromAddress 若为 ATA 则取其 AtaOwner，否则回退 FromAddress
+			sourceOwner := userTx.AllowanceAddress
+			if sourceOwner == "" {
+				if fromAddr, err := s.userAddressRepo.GetByAddress(userTx.FromAddress); err == nil && fromAddr != nil && fromAddr.Type == "ata" && fromAddr.AtaOwnerAddress != "" {
+					sourceOwner = fromAddr.AtaOwnerAddress
+				} else {
+					sourceOwner = userTx.FromAddress
+				}
+			}
+			fromOwner, _, _, err := s.processSenderATA(ctx, sourceOwner, userTx.TokenContractAddress, userTx.Amount, decimals)
+			if err != nil {
+				return nil, err
+			}
+
+			// 处理接收者地址
+			toOwner := userTx.ToAddress
+
+			// 检查ToAddress是否是ATA地址，如果是则获取对应的钱包地址
+			if toAddr, err := s.userAddressRepo.GetByAddress(userTx.ToAddress); err == nil && toAddr != nil {
+				if toAddr.Type == "ata" && toAddr.AtaOwnerAddress != "" {
+					toOwner = toAddr.AtaOwnerAddress
+				}
+			}
+
+			// 检查接收者的ATA账户是否存在于链上
+			needCreateATA := false
+			if fromOwner != toOwner {
+				// 直接使用数据库中的ToAddress（如果ToAddress是ATA地址）
+				toATAAddress := userTx.ToAddress
+
+				// 检查ToAddress是否是ATA类型
+				if toAddr, err := s.userAddressRepo.GetByAddress(userTx.ToAddress); err == nil && toAddr != nil {
+					if toAddr.Type == "ata" {
+						// 通过RPC检查ATA账户是否存在于链上
+						exists, err := s.checkATAExistsOnChain(ctx, toATAAddress)
+						if err != nil {
+							s.logger.Errorf("检查ATA账户存在性失败: %v", err)
+							// 如果检查失败，为了安全起见，假设需要创建
+							needCreateATA = true
+						} else if !exists {
+							// ATA账户在链上不存在，需要创建
+							needCreateATA = true
+							s.logger.Infof("ATA账户 %s 在链上不存在，需要创建", toATAAddress)
+						} else {
+							s.logger.Infof("ATA账户 %s 在链上已存在，无需创建", toATAAddress)
+						}
+					} else {
+						// ToAddress不是ATA类型，不需要创建ATA账户
+						s.logger.Infof("ToAddress %s 不是ATA类型，无需创建ATA账户", toATAAddress)
+					}
+				} else {
+					// 无法查询到ToAddress信息，为了安全起见，假设需要创建
+					s.logger.Warnf("无法查询ToAddress %s 的信息，假设需要创建ATA账户", toATAAddress)
+					needCreateATA = true
+				}
+			}
+
+			// 构建指令参数
+			instructionParams := map[string]any{
+				"mint":       userTx.TokenContractAddress, // Mint地址（代币合约地址）
+				"from_owner": fromOwner,                   // 发送者钱包地址（持币人A）
+				"to_owner":   toOwner,                     // 接收者钱包地址
 				"amount":     userTx.Amount,
-			},
-		})
+				"decimals":   decimals, // 添加代币精度信息
+			}
+
+			// 被授权者B作为authority（本次签名者/fee_payer），使用 from 字段
+			instructionParams["delegate_auth"] = userTx.FromAddress
+
+			// 如果需要创建接收者ATA账户，添加标记
+			if needCreateATA {
+				instructionParams["create"] = 1
+			}
+
+			resp.Instructions = append(resp.Instructions, map[string]any{
+				"program_id": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+				"type":       "spl_transfer_checked",
+				"params":     instructionParams,
+			})
+
+		case "transfer":
+		default:
+			// 普通转账操作：直接转账
+			// 处理发送者ATA地址
+			fromOwner, _, _, err := s.processSenderATA(ctx, userTx.FromAddress, userTx.TokenContractAddress, userTx.Amount, decimals)
+			if err != nil {
+				return nil, err
+			}
+
+			// 处理接收者地址
+			toOwner := userTx.ToAddress
+
+			// 检查ToAddress是否是ATA地址，如果是则获取对应的钱包地址
+			if toAddr, err := s.userAddressRepo.GetByAddress(userTx.ToAddress); err == nil && toAddr != nil {
+				if toAddr.Type == "ata" && toAddr.AtaOwnerAddress != "" {
+					toOwner = toAddr.AtaOwnerAddress
+				}
+			}
+
+			// 检查接收者的ATA账户是否存在于链上
+			needCreateATA := false
+			if fromOwner != toOwner {
+				// 直接使用数据库中的ToAddress（如果ToAddress是ATA地址）
+				toATAAddress := userTx.ToAddress
+
+				// 检查ToAddress是否是ATA类型
+				if toAddr, err := s.userAddressRepo.GetByAddress(userTx.ToAddress); err == nil && toAddr != nil {
+					if toAddr.Type == "ata" {
+						// 通过RPC检查ATA账户是否存在于链上
+						exists, err := s.checkATAExistsOnChain(ctx, toATAAddress)
+						if err != nil {
+							s.logger.Errorf("检查ATA账户存在性失败: %v", err)
+							// 如果检查失败，为了安全起见，假设需要创建
+							needCreateATA = true
+						} else if !exists {
+							// ATA账户在链上不存在，需要创建
+							needCreateATA = true
+							s.logger.Infof("ATA账户 %s 在链上不存在，需要创建", toATAAddress)
+						} else {
+							s.logger.Infof("ATA账户 %s 在链上已存在，无需创建", toATAAddress)
+						}
+					} else {
+						// ToAddress不是ATA类型，不需要创建ATA账户
+						s.logger.Infof("ToAddress %s 不是ATA类型，无需创建ATA账户", toATAAddress)
+					}
+				} else {
+					// 无法查询到ToAddress信息，为了安全起见，假设需要创建
+					s.logger.Warnf("无法查询ToAddress %s 的信息，假设需要创建ATA账户", toATAAddress)
+					needCreateATA = true
+				}
+			}
+
+			// 构建指令参数
+			instructionParams := map[string]any{
+				"mint":       userTx.TokenContractAddress, // Mint地址（代币合约地址）
+				"from_owner": fromOwner,                   // 发送者钱包地址
+				"to_owner":   toOwner,                     // 接收者钱包地址
+				"amount":     userTx.Amount,
+				"decimals":   decimals, // 添加代币精度信息
+			}
+
+			// 普通转账无delegate
+
+			// 如果需要创建接收者ATA账户，添加标记
+			if needCreateATA {
+				instructionParams["create"] = 1
+			}
+
+			resp.Instructions = append(resp.Instructions, map[string]any{
+				"program_id": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+				"type":       "spl_transfer_checked",
+				"params":     instructionParams,
+			})
+		}
 	} else {
 		resp.Instructions = append(resp.Instructions, map[string]any{
 			"program_id": "11111111111111111111111111111111",
@@ -119,18 +312,30 @@ func (s *userTransactionService) ExportSolUnsigned(ctx context.Context, id uint,
 
 // ImportSolSignature 导入SOL签名（base64）
 func (s *userTransactionService) ImportSolSignature(ctx context.Context, id uint, userID uint64, req *dto.SolImportSignatureRequest) (*dto.UserTransactionResponse, error) {
+	fmt.Printf("DEBUG: ImportSolSignature 服务层 - 交易ID: %d, 用户ID: %d, 签名数据长度: %d\n",
+		id, userID, len(req.SignedBase))
+
 	userTx, err := s.userTxRepo.GetByID(ctx, id, userID)
 	if err != nil {
+		fmt.Printf("DEBUG: 获取交易失败: %v\n", err)
 		return nil, err
 	}
+
+	fmt.Printf("DEBUG: 交易链类型: %s\n", userTx.Chain)
 	if !strings.EqualFold(userTx.Chain, "sol") {
 		return nil, fmt.Errorf("交易非SOL链")
 	}
+
 	userTx.SignedTx = &req.SignedBase
 	userTx.Status = "in_progress"
+
+	fmt.Printf("DEBUG: 准备更新交易状态\n")
 	if err := s.userTxRepo.Update(ctx, userTx); err != nil {
+		fmt.Printf("DEBUG: 更新交易失败: %v\n", err)
 		return nil, fmt.Errorf("保存签名失败: %w", err)
 	}
+
+	fmt.Printf("DEBUG: 交易更新成功，准备发送交易\n")
 	// 可选：立即发送
 	return s.SendSolTransaction(ctx, id, userID)
 }
@@ -1528,6 +1733,165 @@ func (s *userTransactionService) validateEthBalance(ctx context.Context, userTx 
 		balance.String(), amountBig.String(), gasCost.String(), totalCost.String())
 
 	return nil
+}
+
+// calculateATAAddress 计算Associated Token Account地址
+func (s *userTransactionService) calculateATAAddress(ownerAddress, mintAddress string) string {
+	// 使用Solana SDK计算ATA地址
+	ownerPubKey := solcommon.PublicKeyFromString(ownerAddress)
+	mintPubKey := solcommon.PublicKeyFromString(mintAddress)
+
+	ataAddress, _, err := solcommon.FindAssociatedTokenAddress(ownerPubKey, mintPubKey)
+	if err != nil {
+		s.logger.Errorf("计算ATA地址失败: %v", err)
+		return ""
+	}
+
+	return ataAddress.String()
+}
+
+// checkATAExistsOnChain 通过RPC检查ATA账户是否存在于链上
+func (s *userTransactionService) checkATAExistsOnChain(ctx context.Context, ataAddress string) (bool, error) {
+	// 创建RPC客户端管理器
+	rpcManager := utils.NewRPCClientManager()
+	defer rpcManager.Close()
+
+	solClient, err := rpcManager.GetSolanaClient("sol")
+	if err != nil {
+		return false, fmt.Errorf("获取Solana客户端失败: %w", err)
+	}
+
+	// 使用getAccountInfo检查账户是否存在
+	accountInfo, err := solClient.GetAccountInfo(ctx, ataAddress)
+	if err != nil {
+		return false, fmt.Errorf("查询账户信息失败: %w", err)
+	}
+
+	// 如果accountInfo不为nil，说明账户存在
+	return accountInfo != nil, nil
+}
+
+// getTokenBalance 获取代币账户余额
+func (s *userTransactionService) getTokenBalance(ctx context.Context, ataAddress string) (*big.Int, error) {
+	// 创建RPC客户端管理器
+	rpcManager := utils.NewRPCClientManager()
+	defer rpcManager.Close()
+
+	solClient, err := rpcManager.GetSolanaClient("sol")
+	if err != nil {
+		return nil, fmt.Errorf("获取Solana客户端失败: %w", err)
+	}
+
+	// 获取账户信息
+	accountInfo, err := solClient.GetAccountInfo(ctx, ataAddress)
+	if err != nil {
+		return nil, fmt.Errorf("查询代币账户信息失败: %w", err)
+	}
+
+	if accountInfo == nil {
+		return big.NewInt(0), nil // 账户不存在，余额为0
+	}
+
+	// 解析代币账户数据获取余额
+	// 代币账户数据格式：mint(32) + owner(32) + amount(8) + delegate(32) + state(1) + ...
+	if len(accountInfo.Data) == 0 {
+		return nil, fmt.Errorf("代币账户数据为空")
+	}
+
+	// 解码base64数据
+	dataBytes, err := base64.StdEncoding.DecodeString(accountInfo.Data[0])
+	if err != nil {
+		return nil, fmt.Errorf("解码代币账户数据失败: %w", err)
+	}
+
+	if len(dataBytes) < 72 {
+		return nil, fmt.Errorf("代币账户数据格式错误，长度不足")
+	}
+
+	// 提取余额（第64-72字节，8字节的uint64）
+	amountBytes := dataBytes[64:72]
+	amount := binary.LittleEndian.Uint64(amountBytes)
+
+	return big.NewInt(int64(amount)), nil
+}
+
+// processSenderATA 处理发送者ATA地址逻辑
+func (s *userTransactionService) processSenderATA(ctx context.Context, fromAddress, mintAddress, amount string, decimals uint8) (fromOwner, fromATAAddress string, needCreateFromATA bool, err error) {
+	// 检查发送者地址类型和ATA账户状态
+	fromOwner = fromAddress
+	fromATAAddress = fromAddress
+	needCreateFromATA = false
+
+	// 查询发送者地址信息
+	fromAddr, err := s.userAddressRepo.GetByAddress(fromAddress)
+	if err != nil {
+		s.logger.Errorf("查询发送者地址信息失败: %v", err)
+		return "", "", false, fmt.Errorf("查询发送者地址信息失败: %w", err)
+	}
+
+	if fromAddr != nil {
+		if fromAddr.Type == "ata" {
+			// 如果FromAddress是ATA地址，直接使用（后续仍做链上检查，但在错误时保守处理为存在）
+			fromATAAddress = fromAddress
+			fromOwner = fromAddr.AtaOwnerAddress
+			s.logger.Infof("发送者地址是ATA地址: %s, 所属钱包: %s", fromATAAddress, fromOwner)
+		} else {
+			// 如果FromAddress是钱包地址，计算对应的ATA地址
+			fromOwner = fromAddress
+			fromATAAddress = s.calculateATAAddress(fromOwner, mintAddress)
+			if fromATAAddress == "" {
+				return "", "", false, fmt.Errorf("计算发送者ATA地址失败")
+			}
+			s.logger.Infof("发送者地址是钱包地址: %s, 计算ATA地址: %s", fromOwner, fromATAAddress)
+		}
+	} else {
+		// 如果数据库中没有记录，假设FromAddress是钱包地址
+		fromOwner = fromAddress
+		fromATAAddress = s.calculateATAAddress(fromOwner, mintAddress)
+		if fromATAAddress == "" {
+			return "", "", false, fmt.Errorf("计算发送者ATA地址失败")
+		}
+		s.logger.Infof("数据库中没有发送者地址记录，假设是钱包地址: %s, 计算ATA地址: %s", fromOwner, fromATAAddress)
+	}
+
+	// 检查发送者ATA账户是否存在
+	fromATAExists, err := s.checkATAExistsOnChain(ctx, fromATAAddress)
+	if err != nil {
+		// 保守策略：RPC 查询失败时，不创建（避免对已存在账户重复创建）
+		s.logger.Warnf("检查发送者ATA账户存在性失败(保守假定存在): %v", err)
+		fromATAExists = true
+	}
+	needCreateFromATA = !fromATAExists
+	if needCreateFromATA {
+		s.logger.Infof("发送者ATA账户不存在，将在交易中创建: %s", fromATAAddress)
+	} else {
+		s.logger.Infof("发送者ATA账户已存在: %s", fromATAAddress)
+	}
+
+	// 如果发送者ATA账户存在，检查代币余额
+	if fromATAExists {
+		balance, err := s.getTokenBalance(ctx, fromATAAddress)
+		if err != nil {
+			s.logger.Errorf("获取发送者代币余额失败: %v", err)
+			return "", "", false, fmt.Errorf("获取发送者代币余额失败: %w", err)
+		}
+
+		// 解析转账金额
+		amountBig, ok := new(big.Int).SetString(amount, 10)
+		if !ok {
+			return "", "", false, fmt.Errorf("无效的转账金额: %s", amount)
+		}
+
+		// 检查余额是否足够
+		if balance.Cmp(amountBig) < 0 {
+			// 转换余额和金额用于显示
+			balanceFloat := new(big.Float).Quo(new(big.Float).SetInt(balance), big.NewFloat(math.Pow10(int(decimals))))
+			amountFloat := new(big.Float).Quo(new(big.Float).SetInt(amountBig), big.NewFloat(math.Pow10(int(decimals))))
+			return "", "", false, fmt.Errorf("代币余额不足: 当前余额 %s, 需要 %s", balanceFloat.Text('f', int(decimals)), amountFloat.Text('f', int(decimals)))
+		}
+	}
+
+	return fromOwner, fromATAAddress, needCreateFromATA, nil
 }
 
 // checkTransactionPacked 检查交易是否已打包

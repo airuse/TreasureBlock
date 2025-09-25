@@ -645,11 +645,11 @@ const availableEarnings = ref(8.2)
 // 合约相关
 const contracts = ref<Contract[]>([])
 const loadingContracts = ref(false)
-// 合约地址下拉选项（类型为合约的地址）
+// 授权地址下拉选项（类型为钱包的地址）
 const contractAddressOptions = computed(() => {
-  // 从已加载的地址列表中过滤 type === 'contract' 的地址
+  // 从已加载的地址列表中过滤 type === 'wallet' 的地址
   return addressesList.value
-    .filter(a => a.type === 'contract')
+    .filter(a => a.type === 'wallet')
     .map(a => ({ value: a.address, label: `${a.label || formatAddress(a.address)} (${formatAddress(a.address)})` }))
 })
 

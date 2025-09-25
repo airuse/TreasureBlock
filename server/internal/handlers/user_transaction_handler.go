@@ -406,6 +406,11 @@ func (h *UserTransactionHandler) ImportSolSignature(c *gin.Context) {
 		utils.ErrorResponse(c, http.StatusBadRequest, "请求参数错误", err.Error())
 		return
 	}
+
+	// 添加调试日志
+	fmt.Printf("DEBUG: ImportSolSignature - 交易ID: %d, 请求ID: %d, 签名数据长度: %d\n",
+		id, req.ID, len(req.SignedBase))
+
 	userID, exists := c.Get("user_id")
 	if !exists {
 		utils.ErrorResponse(c, http.StatusUnauthorized, "未授权", "用户ID不存在")
@@ -413,9 +418,11 @@ func (h *UserTransactionHandler) ImportSolSignature(c *gin.Context) {
 	}
 	resp, err := h.userTxService.ImportSolSignature(c.Request.Context(), uint(id), uint64(userID.(uint)), &req)
 	if err != nil {
+		fmt.Printf("DEBUG: ImportSolSignature 失败: %v\n", err)
 		utils.ErrorResponse(c, http.StatusInternalServerError, "导入签名失败", err.Error())
 		return
 	}
+	fmt.Printf("DEBUG: ImportSolSignature 成功\n")
 	utils.SuccessResponse(c, http.StatusOK, "导入签名成功", resp)
 }
 
