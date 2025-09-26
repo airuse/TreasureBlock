@@ -96,11 +96,6 @@ func (bs *BitcoinScanner) callRPC(url string, method string, params []interface{
 
 	req.Header.Set("Content-Type", "application/json")
 
-	// 使用bitcoind RPC认证（如果配置了）
-	if bs.config.Username != "" && bs.config.Password != "" {
-		req.SetBasicAuth(bs.config.Username, bs.config.Password)
-	}
-
 	resp, err := bs.httpClient.Do(req)
 	if err != nil {
 		return nil, fmt.Errorf("failed to call RPC: %w", err)
@@ -154,11 +149,6 @@ func (bs *BitcoinScanner) getBlockHeightFromURL(url string) (uint64, error) {
 		}
 
 		req.Header.Set("Content-Type", "application/json")
-
-		// 使用bitcoind RPC认证
-		if bs.config.Username != "" && bs.config.Password != "" {
-			req.SetBasicAuth(bs.config.Username, bs.config.Password)
-		}
 
 		resp, err := bs.httpClient.Do(req)
 		if err != nil {
@@ -937,10 +927,6 @@ func (bs *BitcoinScanner) GetNetworkInfo() (map[string]interface{}, error) {
 		}
 
 		req.Header.Set("Content-Type", "application/json")
-
-		if bs.config.Username != "" && bs.config.Password != "" {
-			req.SetBasicAuth(bs.config.Username, bs.config.Password)
-		}
 
 		resp, err := bs.httpClient.Do(req)
 		if err != nil {

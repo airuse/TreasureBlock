@@ -449,7 +449,7 @@ func (es *EthereumScanner) fallbackToIndividualReceipts(block *models.Block, tra
 	}
 
 	// 从配置文件获取固定并发数
-	maxConcurrency := es.config.Scan.MaxConcurrent
+	maxConcurrency := es.config.Scan.MaxConcurrentReceipts
 	if maxConcurrency <= 0 {
 		maxConcurrency = 20 // 默认值
 	}

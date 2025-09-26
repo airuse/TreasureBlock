@@ -21,6 +21,7 @@ type Config struct {
 	Blockchain BlockchainConfig `yaml:"blockchain"`
 	Log        LogConfig        `yaml:"log"`
 	Database   DatabaseConfig   `yaml:"database"`
+	DingTalk   DingTalkConfig   `yaml:"dingtalk"`
 }
 
 // ServerConfig 服务器配置
@@ -55,23 +56,24 @@ type ChainConfig struct {
 	Enabled         bool     `yaml:"enabled"`
 	RPCURL          string   `yaml:"rpc_url"`
 	ExplorerAPIURLs []string `yaml:"explorer_api_urls"` // 支持多个外部API节点
-	APIKey          string   `yaml:"api_key"`
-	Username        string   `yaml:"username"`
-	Password        string   `yaml:"password"`
-	TokenAddresses  []string `yaml:"token_addresses"` // 本地配置的币种合约地址列表（备用）
+	TokenAddresses  []string `yaml:"token_addresses"`   // 本地配置的币种合约地址列表（备用）
+	// 从服务器获取的配置
+	Confirmations int `yaml:"-"` // 从服务器接口获取的确认数，不序列化到YAML
 	// 每个链的独立扫描配置
 	Scan ChainScanConfig `yaml:"scan"`
 }
 
 // ChainScanConfig 链扫描配置
 type ChainScanConfig struct {
-	Interval      time.Duration `yaml:"interval"`
-	Confirmations int           `yaml:"confirmations"`
-	AutoStart     bool          `yaml:"auto_start"`
-	SaveToFile    bool          `yaml:"save_to_file"`
-	OutputDir     string        `yaml:"output_dir"`
-	// 链特定的扫描配置
-	MaxConcurrent int `yaml:"max_concurrent"` // 最大并发扫描数
+	Interval   time.Duration `yaml:"interval"`
+	SaveToFile bool          `yaml:"save_to_file"`
+	OutputDir  string        `yaml:"output_dir"`
+
+	// 分角色并发配置
+	MaxConcurrentReceipts int `yaml:"max_concurrent_receipts"` // 回执获取并发数（ETH/EVM）
+	MaxConcurrentPrefetch int `yaml:"max_concurrent_prefetch"` // 预取窗口并发数
+	MaxConcurrentUpload   int `yaml:"max_concurrent_upload"`   // 交易上传并发数
+
 	// 批量上传配置
 	BatchUpload  bool          `yaml:"batch_upload"`  // 是否启用批量上传（推荐启用）
 	BatchSize    int           `yaml:"batch_size"`    // 批量上传大小，默认1000
@@ -110,8 +112,16 @@ type DatabaseConfig struct {
 	Enabled  bool   `yaml:"enabled"`
 }
 
+// DingTalkConfig 钉钉机器人配置
+type DingTalkConfig struct {
+	WebhookURL string `yaml:"webhook_url"`
+	Secret     string `yaml:"secret"`
+	Enabled    bool   `yaml:"enabled"`
+}
+
 var AppConfig *Config
-var ScannerAPIInstance *pkg.ScannerAPI // 全局API实例
+var ScannerAPIInstance *pkg.ScannerAPI             // 全局API实例
+var DingTalkNotifierInstance *pkg.DingTalkNotifier // 全局钉钉通知器实例
 
 // Load 加载配置
 func Load(configPath string) error {
@@ -139,6 +149,9 @@ func Load(configPath string) error {
 		level = logrus.InfoLevel
 	}
 	logrus.SetLevel(level)
+
+	// 初始化钉钉通知器
+	initializeDingTalkNotifier()
 
 	return nil
 }
@@ -193,6 +206,11 @@ func loadEnvConfig() error {
 			Password: getEnv("DB_PASSWORD", ""),
 			DBName:   getEnv("DB_NAME", "scanner.db"),
 			Enabled:  getEnvAsBool("DB_ENABLED", false),
+		},
+		DingTalk: DingTalkConfig{
+			WebhookURL: getEnv("DINGTALK_WEBHOOK_URL", ""),
+			Secret:     getEnv("DINGTALK_SECRET", ""),
+			Enabled:    getEnvAsBool("DINGTALK_ENABLED", false),
 		},
 	}
 
@@ -306,15 +324,19 @@ func loadServerConfig() error {
 
 		logrus.Infof("Loading server config for chain: %s", chainKey)
 
-		// 获取扫块配置
+		// 获取扫块配置 - 必须成功，否则启动失败
 		scanConfig, err := api.GetScanConfig(chainKey)
 		if err != nil {
-			logrus.Warnf("Failed to load scan config for chain %s: %v", chainKey, err)
-			continue
+			return fmt.Errorf("failed to load scan config for chain %s: %w", chainKey, err)
 		}
 
-		// 更新本地配置
-		chainConfig.Scan.Confirmations = scanConfig.Confirmations
+		// 验证 confirmations 配置
+		if scanConfig.Confirmations <= 0 {
+			return fmt.Errorf("invalid confirmations value %d for chain %s", scanConfig.Confirmations, chainKey)
+		}
+
+		// 更新本地配置 - 从服务器获取 confirmations
+		chainConfig.Confirmations = scanConfig.Confirmations
 
 		// 获取RPC配置（可选）
 		// rpcConfig, err := api.GetRPCConfig(chainKey)
@@ -351,14 +373,18 @@ func loadServerConfig() error {
 func setDefaultChainScanConfigs() {
 	for chainKey, chainConfig := range AppConfig.Blockchain.Chains {
 		// 如果链没有扫描配置，设置默认值
-		if chainConfig.Scan.Confirmations == 0 {
-			chainConfig.Scan.Confirmations = 6 // 默认确认数
-		}
 		if chainConfig.Scan.OutputDir == "" {
 			chainConfig.Scan.OutputDir = filepath.Join("./output", chainKey)
 		}
-		if chainConfig.Scan.MaxConcurrent == 0 {
-			chainConfig.Scan.MaxConcurrent = 3 // 默认并发数
+		// 分角色并发配置默认值
+		if chainConfig.Scan.MaxConcurrentReceipts == 0 {
+			chainConfig.Scan.MaxConcurrentReceipts = 3 // 默认回执并发数
+		}
+		if chainConfig.Scan.MaxConcurrentPrefetch == 0 {
+			chainConfig.Scan.MaxConcurrentPrefetch = 3 // 默认预取并发数
+		}
+		if chainConfig.Scan.MaxConcurrentUpload == 0 {
+			chainConfig.Scan.MaxConcurrentUpload = 10 // 默认上传并发数
 		}
 		// 批量上传配置默认值
 		if chainConfig.Scan.BatchSize == 0 {
@@ -422,4 +448,24 @@ func loadCoinConfigsFromAPI(api *pkg.ScannerAPI, chainConfig *ChainConfig) error
 // GetScannerAPI 获取扫块器API实例
 func GetScannerAPI() *pkg.ScannerAPI {
 	return ScannerAPIInstance
+}
+
+// initializeDingTalkNotifier 初始化钉钉通知器
+func initializeDingTalkNotifier() {
+	if AppConfig.DingTalk.Enabled && AppConfig.DingTalk.WebhookURL != "" {
+		dingTalkConfig := &pkg.DingTalkConfig{
+			WebhookURL: AppConfig.DingTalk.WebhookURL,
+			Secret:     AppConfig.DingTalk.Secret,
+			Enabled:    AppConfig.DingTalk.Enabled,
+		}
+		DingTalkNotifierInstance = pkg.NewDingTalkNotifier(dingTalkConfig)
+		logrus.Info("DingTalk notifier initialized successfully")
+	} else {
+		logrus.Info("DingTalk notifier is disabled or not configured")
+	}
+}
+
+// GetDingTalkNotifier 获取钉钉通知器实例
+func GetDingTalkNotifier() *pkg.DingTalkNotifier {
+	return DingTalkNotifierInstance
 }

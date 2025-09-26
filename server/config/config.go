@@ -161,6 +161,8 @@ type SecurityConfig struct {
 type DataCleanupConfig struct {
 	ETH *ChainCleanupConfig `yaml:"eth"`
 	BTC *ChainCleanupConfig `yaml:"btc"`
+	BSC *ChainCleanupConfig `yaml:"bsc"`
+	SOL *ChainCleanupConfig `yaml:"sol"`
 }
 
 // ChainCleanupConfig 单链清理配置

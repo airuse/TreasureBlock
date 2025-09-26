@@ -105,42 +105,42 @@ func (h *BlockVerificationHandler) VerifyBlock(c *gin.Context) {
 	} else if block != nil && block.Chain == "sol" {
 		// 解析 Sol 交易：根据维护的 Program 规则解析，保存事件/指令，不兼容数据入扩展表
 
-		details, err := h.solService.GetDetailsByBlockID(c.Request.Context(), blockID)
-		if err != nil {
-			logrus.Errorf("GetDetailsByBlockID failed for block %d: %v", blockID, err)
-		} else if len(details) > 0 {
-			programs, err := h.solService.GetAllPrograms(c.Request.Context())
-			if err != nil {
-				logrus.Errorf("GetAllPrograms failed: %v", err)
-			} else {
-				// 构建映射
-				programMap := make(map[string]*models.SolProgram, len(programs))
-				for _, p := range programs {
-					programMap[p.ProgramID] = p
-				}
-				for _, d := range details {
-					if d == nil {
-						continue
-					}
-					req, extra, err := h.solService.ParseUsingProgramRules(c.Request.Context(), d, programMap)
-					if err != nil {
-						logrus.Errorf("ParseUsingProgramRules failed tx %s: %v", d.TxID, err)
-						continue
-					}
-					// 转换额外数据
-					var extras []models.SolParsedExtra
-					if len(extra) > 0 {
-						for k, v := range extra {
-							bs, _ := json.Marshal(v)
-							extras = append(extras, models.SolParsedExtra{TxID: d.TxID, ProgramID: k, IsInner: false, Data: models.JSONText(string(bs))})
-						}
-					}
-					if err := h.solService.SaveArtifacts(c.Request.Context(), d.TxID, d.BlockID, d.Slot, req.Events, req.Instructions, extras); err != nil {
-						logrus.Errorf("SaveArtifacts failed tx %s: %v", d.TxID, err)
-					}
-				}
-			}
-		}
+		// details, err := h.solService.GetDetailsByBlockID(c.Request.Context(), blockID)
+		// if err != nil {
+		// 	logrus.Errorf("GetDetailsByBlockID failed for block %d: %v", blockID, err)
+		// } else if len(details) > 0 {
+		// 	programs, err := h.solService.GetAllPrograms(c.Request.Context())
+		// 	if err != nil {
+		// 		logrus.Errorf("GetAllPrograms failed: %v", err)
+		// 	} else {
+		// 		// 构建映射
+		// 		programMap := make(map[string]*models.SolProgram, len(programs))
+		// 		for _, p := range programs {
+		// 			programMap[p.ProgramID] = p
+		// 		}
+		// 		for _, d := range details {
+		// 			if d == nil {
+		// 				continue
+		// 			}
+		// 			req, extra, err := h.solService.ParseUsingProgramRules(c.Request.Context(), d, programMap)
+		// 			if err != nil {
+		// 				logrus.Errorf("ParseUsingProgramRules failed tx %s: %v", d.TxID, err)
+		// 				continue
+		// 			}
+		// 			// 转换额外数据
+		// 			var extras []models.SolParsedExtra
+		// 			if len(extra) > 0 {
+		// 				for k, v := range extra {
+		// 					bs, _ := json.Marshal(v)
+		// 					extras = append(extras, models.SolParsedExtra{TxID: d.TxID, ProgramID: k, IsInner: false, Data: models.JSONText(string(bs))})
+		// 				}
+		// 			}
+		// 			if err := h.solService.SaveArtifacts(c.Request.Context(), d.TxID, d.BlockID, d.Slot, req.Events, req.Instructions, extras); err != nil {
+		// 				logrus.Errorf("SaveArtifacts failed tx %s: %v", d.TxID, err)
+		// 			}
+		// 		}
+		// 	}
+		// }
 	}
 
 	// 验证通过需要吧数据库 block 表的 verification_status 更新为 1

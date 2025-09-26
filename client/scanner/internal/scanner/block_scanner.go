@@ -165,6 +165,12 @@ func (bs *BlockScanner) Start() error {
 	bs.running = true
 	logrus.Info("Starting block scanner...")
 
+	// 发送启动成功通知
+	bs.sendDingTalkInfo(
+		"扫块器启动成功",
+		"扫块器已成功启动，开始扫描区块链数据",
+	)
+
 	// 启动扫描协程
 	go bs.scanLoop()
 
@@ -181,6 +187,13 @@ func (bs *BlockScanner) Stop() {
 	}
 
 	logrus.Info("Stopping block scanner...")
+
+	// 发送停止通知
+	bs.sendDingTalkInfo(
+		"扫块器停止",
+		"扫块器已停止运行",
+	)
+
 	close(bs.stopChan)
 	bs.running = false
 }
@@ -298,14 +311,14 @@ func (bs *BlockScanner) processScanCycle(chainName string, scanner Scanner, chai
 
 	// 2. 计算确认后的安全高度
 	safeHeight := latestHeight
-	if latestHeight > uint64(chainConfig.Scan.Confirmations) {
-		safeHeight = latestHeight - uint64(chainConfig.Scan.Confirmations)
+	if latestHeight > uint64(chainConfig.Confirmations) {
+		safeHeight = latestHeight - uint64(chainConfig.Confirmations)
 	}
 
 	// 3. 如果安全高度为0，说明还没有足够的确认，等待新区块
 	if safeHeight == 0 {
 		logrus.Debugf("[%s] Safe height is 0, waiting for more confirmations (latest: %d, confirmations: %d)",
-			chainName, latestHeight, chainConfig.Scan.Confirmations)
+			chainName, latestHeight, chainConfig.Confirmations)
 		return
 	}
 
@@ -413,6 +426,11 @@ func (bs *BlockScanner) scanSingleBlock(chainName string, scanner Scanner, heigh
 		blk, getErr := scanner.GetBlockByHeight(height)
 		if getErr != nil {
 			logrus.Errorf("[%s] Failed to get block %d: %v", chainName, height, getErr)
+			// 发送钉钉警告通知
+			bs.sendDingTalkWarning(
+				fmt.Sprintf("扫块器获取区块失败 - %s", chainName),
+				fmt.Sprintf("链: %s\n区块高度: %d\n错误: %v", chainName, height, getErr),
+			)
 			return
 		}
 		block = blk
@@ -421,6 +439,11 @@ func (bs *BlockScanner) scanSingleBlock(chainName string, scanner Scanner, heigh
 	// 验证区块
 	if err := scanner.ValidateBlock(block); err != nil {
 		logrus.Errorf("[%s] Block validation failed for block %d: %v", chainName, height, err)
+		// 发送钉钉警告通知
+		bs.sendDingTalkWarning(
+			fmt.Sprintf("区块验证失败 - %s", chainName),
+			fmt.Sprintf("链: %s\n区块高度: %d\n区块哈希: %s\n错误: %v", chainName, height, block.Hash, err),
+		)
 		return
 	}
 
@@ -428,6 +451,11 @@ func (bs *BlockScanner) scanSingleBlock(chainName string, scanner Scanner, heigh
 	blockID, err := bs.submitBlockToServer(block)
 	if err != nil {
 		logrus.Errorf("[%s] Failed to submit block %d to server: %v", chainName, height, err)
+		// 发送钉钉警告通知
+		bs.sendDingTalkWarning(
+			fmt.Sprintf("区块提交失败 - %s", chainName),
+			fmt.Sprintf("链: %s\n区块高度: %d\n区块哈希: %s\n错误: %v", chainName, height, block.Hash, err),
+		)
 		return
 	}
 
@@ -654,10 +682,10 @@ func (bs *BlockScanner) submitTransactionsBatch(chainName string, block *models.
 
 // submitTransactionsIndividually 单个上传交易（保持原有逻辑作为备选）
 func (bs *BlockScanner) submitTransactionsIndividually(chainName string, block *models.Block, transactions []map[string]interface{}, blockID uint64, chainConfig *config.ChainConfig, api *pkg.ScannerAPI) error {
-	// 并发上限：使用链配置的 MaxConcurrent，缺省为 10
+	// 并发上限：使用链配置的 MaxConcurrentUpload，缺省为 10
 	concurrency := 10
-	if chainConfig.Scan.MaxConcurrent > 0 {
-		concurrency = chainConfig.Scan.MaxConcurrent
+	if chainConfig.Scan.MaxConcurrentUpload > 0 {
+		concurrency = chainConfig.Scan.MaxConcurrentUpload
 	}
 
 	// 并发上传交易，全部完成后再返回
@@ -899,7 +927,7 @@ func (bs *BlockScanner) ensureTxPrefetch(chainName string, scanner Scanner, chai
 		if window <= 0 {
 			window = 5
 		}
-		concurrency := chainConfig.Scan.MaxConcurrent
+		concurrency := chainConfig.Scan.MaxConcurrentPrefetch
 		ps = newTxPrefetchState(window, concurrency)
 		bs.txPrefetchers[chainName] = ps
 	}
@@ -939,4 +967,30 @@ func (bs *BlockScanner) ensureTxPrefetch(chainName string, scanner Scanner, chai
 	}
 	// 修剪窗口以下的数据，避免内存膨胀
 	ps.pruneBelow(nextHeight)
+}
+
+// sendDingTalkWarning 发送钉钉警告通知
+func (bs *BlockScanner) sendDingTalkWarning(title, message string) {
+	notifier := config.GetDingTalkNotifier()
+	if notifier != nil {
+		// 异步发送通知，避免阻塞主程序
+		go func() {
+			if err := notifier.SendWarning(title, message); err != nil {
+				logrus.Errorf("Failed to send DingTalk warning notification: %v", err)
+			}
+		}()
+	}
+}
+
+// sendDingTalkInfo 发送钉钉信息通知
+func (bs *BlockScanner) sendDingTalkInfo(title, message string) {
+	notifier := config.GetDingTalkNotifier()
+	if notifier != nil {
+		// 异步发送通知，避免阻塞主程序
+		go func() {
+			if err := notifier.SendInfo(title, message); err != nil {
+				logrus.Errorf("Failed to send DingTalk info notification: %v", err)
+			}
+		}()
+	}
 }

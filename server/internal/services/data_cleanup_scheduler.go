@@ -106,6 +106,21 @@ func (s *DataCleanupScheduler) setDefaultConfigs() {
 		Interval:         120,
 	}
 
+	bscConfig := &DataCleanupConfig{
+		Chain:            "bsc",
+		MaxBlocks:        20000,
+		CleanupThreshold: 50000,
+		BatchSize:        10000,
+		Interval:         120,
+	}
+	solConfig := &DataCleanupConfig{
+		Chain:            "sol",
+		MaxBlocks:        20000,
+		CleanupThreshold: 50000,
+		BatchSize:        10000,
+		Interval:         120,
+	}
+
 	// 如果配置文件中有清理配置，则使用配置文件的值
 	if config.AppConfig.DataCleanup.ETH != nil {
 		ethConfig.MaxBlocks = config.AppConfig.DataCleanup.ETH.MaxBlocks
@@ -119,9 +134,22 @@ func (s *DataCleanupScheduler) setDefaultConfigs() {
 		btcConfig.BatchSize = config.AppConfig.DataCleanup.BTC.BatchSize
 		btcConfig.Interval = config.AppConfig.DataCleanup.BTC.Interval
 	}
-
+	if config.AppConfig.DataCleanup.BSC != nil {
+		bscConfig.MaxBlocks = config.AppConfig.DataCleanup.BSC.MaxBlocks
+		bscConfig.CleanupThreshold = config.AppConfig.DataCleanup.BSC.CleanupThreshold
+		bscConfig.BatchSize = config.AppConfig.DataCleanup.BSC.BatchSize
+		bscConfig.Interval = config.AppConfig.DataCleanup.BSC.Interval
+	}
+	if config.AppConfig.DataCleanup.SOL != nil {
+		solConfig.MaxBlocks = config.AppConfig.DataCleanup.SOL.MaxBlocks
+		solConfig.CleanupThreshold = config.AppConfig.DataCleanup.SOL.CleanupThreshold
+		solConfig.BatchSize = config.AppConfig.DataCleanup.SOL.BatchSize
+		solConfig.Interval = config.AppConfig.DataCleanup.SOL.Interval
+	}
 	s.SetConfig("eth", ethConfig)
 	s.SetConfig("btc", btcConfig)
+	s.SetConfig("bsc", bscConfig)
+	s.SetConfig("sol", solConfig)
 }
 
 // runCleanupForChain 为指定链运行清理任务
@@ -181,9 +209,17 @@ func (s *DataCleanupScheduler) CleanupChainData(ctx context.Context, chain strin
 
 	// s.logger.Infof("受保护地址数量: %d", len(protectedAddresses))
 
-	// 4. 执行清理
-	if err := s.executeCleanup(ctx, chain, cleanupHeight, protectedAddresses, config); err != nil {
-		return fmt.Errorf("执行清理失败: %w", err)
+	// 4. 根据链类型执行不同的清理逻辑
+	if chain == "sol" {
+		// SOL 链使用专门的清理逻辑
+		if err := s.executeSolCleanup(ctx, chain, cleanupHeight, protectedAddresses, config); err != nil {
+			return fmt.Errorf("执行 SOL 链清理失败: %w", err)
+		}
+	} else {
+		// 传统链（BTC、ETH、BSC）使用原有清理逻辑
+		if err := s.executeTraditionalCleanup(ctx, chain, cleanupHeight, protectedAddresses, config); err != nil {
+			return fmt.Errorf("执行传统链清理失败: %w", err)
+		}
 	}
 
 	s.logger.Infof(`%s 🧹 链数据清理完成，耗时: %s 链清理基准高度: %d 受保护地址数量: %d\n`,
@@ -352,8 +388,8 @@ func (s *DataCleanupScheduler) cleanupWithProtection(tx *gorm.DB, chain string, 
 	return nil
 }
 
-// executeCleanup 执行数据清理
-func (s *DataCleanupScheduler) executeCleanup(ctx context.Context, chain string, cleanupHeight uint64, protectedAddresses []string, config *DataCleanupConfig) error {
+// executeTraditionalCleanup 执行传统链数据清理（BTC、ETH、BSC）
+func (s *DataCleanupScheduler) executeTraditionalCleanup(ctx context.Context, chain string, cleanupHeight uint64, protectedAddresses []string, config *DataCleanupConfig) error {
 	// 开始事务
 	tx := s.db.WithContext(ctx).Begin()
 	defer func() {
@@ -382,6 +418,13 @@ func (s *DataCleanupScheduler) executeCleanup(ctx context.Context, chain string,
 	if result.Error != nil {
 		tx.Rollback()
 		return fmt.Errorf("清理 blocks 失败: %w", result.Error)
+	}
+
+	// 4. 清理blocks表验证失败的记录
+	result = tx.Where("chain = ? AND is_verified = ?", chain, 2).Delete(&models.Block{})
+	if result.Error != nil {
+		tx.Rollback()
+		return fmt.Errorf("清理 blocks 验证失败记录失败: %w", result.Error)
 	}
 
 	// 提交事务
@@ -476,4 +519,296 @@ func (s *DataCleanupScheduler) batchDelete(tx *gorm.DB, table, whereClause strin
 	}
 
 	return nil
+}
+
+// executeSolCleanup 执行 SOL 链数据清理
+func (s *DataCleanupScheduler) executeSolCleanup(ctx context.Context, chain string, cleanupHeight uint64, protectedAddresses []string, config *DataCleanupConfig) error {
+	// 开始事务
+	tx := s.db.WithContext(ctx).Begin()
+	defer func() {
+		if r := recover(); r != nil {
+			tx.Rollback()
+		}
+	}()
+
+	// 1. 获取需要保护的高度列表（基于受保护地址）
+	protectedHeights, err := s.getSolProtectedHeights(tx, chain, cleanupHeight)
+	if err != nil {
+		tx.Rollback()
+		return fmt.Errorf("获取 SOL 受保护高度失败: %w", err)
+	}
+
+	s.logger.Infof("发现 %d 个受保护的高度需要保留", len(protectedHeights))
+
+	// 2. 基于受保护的高度进行关联清理
+	if err := s.cleanupSolWithProtection(tx, chain, cleanupHeight, protectedHeights, protectedAddresses, config); err != nil {
+		tx.Rollback()
+		return fmt.Errorf("执行 SOL 关联清理失败: %w", err)
+	}
+
+	// 3. 清理 blocks 表（最后清理，因为其他表可能依赖它）
+	result := tx.Where("chain = ? AND height < ?", chain, cleanupHeight).Delete(&models.Block{})
+	if result.Error != nil {
+		tx.Rollback()
+		return fmt.Errorf("清理 blocks 失败: %w", result.Error)
+	}
+
+	// 4. 清理blocks表验证失败的记录
+	result = tx.Where("chain = ? AND is_verified = ?", chain, 2).Delete(&models.Block{})
+	if result.Error != nil {
+		tx.Rollback()
+		return fmt.Errorf("清理 blocks 验证失败记录失败: %w", result.Error)
+	}
+
+	// 提交事务
+	return tx.Commit().Error
+}
+
+// getSolProtectedHeights 获取 SOL 链需要保护的高度列表（基于受保护地址）
+func (s *DataCleanupScheduler) getSolProtectedHeights(tx *gorm.DB, chain string, cleanupHeight uint64) ([]uint64, error) {
+	// 1. 获取受保护的地址
+	addresses, err := s.getProtectedAddresses(tx.Statement.Context)
+	if err != nil {
+		return nil, err
+	}
+
+	// 2. 基于受保护地址找到相关的高度
+	heights, err := s.getSolProtectedHeightsByAddresses(tx, chain, addresses, cleanupHeight)
+	if err != nil {
+		return nil, err
+	}
+
+	return heights, nil
+}
+
+// getSolProtectedHeightsByAddresses 基于受保护地址获取 SOL 链高度
+func (s *DataCleanupScheduler) getSolProtectedHeightsByAddresses(tx *gorm.DB, chain string, addresses []string, cleanupHeight uint64) ([]uint64, error) {
+	if len(addresses) == 0 {
+		return []uint64{}, nil
+	}
+
+	heightMap := make(map[uint64]bool)
+	batchSize := 1000 // 分批处理，避免 IN 查询过长
+
+	// 分批处理地址列表
+	for i := 0; i < len(addresses); i += batchSize {
+		end := i + batchSize
+		if end > len(addresses) {
+			end = len(addresses)
+		}
+		batchAddresses := addresses[i:end]
+
+		// 1. 从 sol_tx_detail 表获取受保护地址相关的高度
+		if err := s.getHeightsFromSolTxDetail(tx, chain, cleanupHeight, batchAddresses, heightMap); err != nil {
+			return nil, err
+		}
+
+		// 2. 从 sol_instruction 表获取受保护地址相关的高度
+		if err := s.getHeightsFromSolInstruction(tx, chain, cleanupHeight, batchAddresses, heightMap); err != nil {
+			return nil, err
+		}
+
+		// 3. 从 sol_event 表获取受保护地址相关的高度
+		if err := s.getHeightsFromSolEvent(tx, chain, cleanupHeight, batchAddresses, heightMap); err != nil {
+			return nil, err
+		}
+
+		// 4. 从 sol_parsed_extra 表获取受保护地址相关的高度
+		if err := s.getHeightsFromSolParsedExtra(tx, chain, cleanupHeight, batchAddresses, heightMap); err != nil {
+			return nil, err
+		}
+	}
+
+	// 转换为切片并返回
+	var uniqueHeights []uint64
+	for h := range heightMap {
+		uniqueHeights = append(uniqueHeights, h)
+	}
+
+	return uniqueHeights, nil
+}
+
+// getHeightsFromSolTxDetail 从 sol_tx_detail 表获取高度
+func (s *DataCleanupScheduler) getHeightsFromSolTxDetail(tx *gorm.DB, chain string, cleanupHeight uint64, addresses []string, heightMap map[uint64]bool) error {
+	var heights []uint64
+	err := tx.Table("sol_tx_detail").
+		Select("DISTINCT slot").
+		Where("slot < ?", cleanupHeight).
+		Pluck("slot", &heights).Error
+	if err != nil {
+		return err
+	}
+
+	for _, h := range heights {
+		heightMap[h] = true
+	}
+	return nil
+}
+
+// getHeightsFromSolInstruction 从 sol_instruction 表获取高度
+func (s *DataCleanupScheduler) getHeightsFromSolInstruction(tx *gorm.DB, chain string, cleanupHeight uint64, addresses []string, heightMap map[uint64]bool) error {
+	var heights []uint64
+	err := tx.Table("sol_instruction").
+		Select("DISTINCT slot").
+		Where("slot < ?", cleanupHeight).
+		Pluck("slot", &heights).Error
+	if err != nil {
+		return err
+	}
+
+	for _, h := range heights {
+		heightMap[h] = true
+	}
+	return nil
+}
+
+// getHeightsFromSolEvent 从 sol_event 表获取高度
+func (s *DataCleanupScheduler) getHeightsFromSolEvent(tx *gorm.DB, chain string, cleanupHeight uint64, addresses []string, heightMap map[uint64]bool) error {
+	var heights []uint64
+	err := tx.Table("sol_event").
+		Select("DISTINCT slot").
+		Where("slot < ? AND (from_address IN ? OR to_address IN ?)", cleanupHeight, addresses, addresses).
+		Pluck("slot", &heights).Error
+	if err != nil {
+		return err
+	}
+
+	for _, h := range heights {
+		heightMap[h] = true
+	}
+	return nil
+}
+
+// getHeightsFromSolParsedExtra 从 sol_parsed_extra 表获取高度
+func (s *DataCleanupScheduler) getHeightsFromSolParsedExtra(tx *gorm.DB, chain string, cleanupHeight uint64, addresses []string, heightMap map[uint64]bool) error {
+	var heights []uint64
+	err := tx.Table("sol_parsed_extra").
+		Select("DISTINCT slot").
+		Where("slot < ?", cleanupHeight).
+		Pluck("slot", &heights).Error
+	if err != nil {
+		return err
+	}
+
+	for _, h := range heights {
+		heightMap[h] = true
+	}
+	return nil
+}
+
+// cleanupSolWithProtection 基于受保护的高度和地址进行 SOL 链关联清理
+func (s *DataCleanupScheduler) cleanupSolWithProtection(tx *gorm.DB, chain string, cleanupHeight uint64, protectedHeights []uint64, protectedAddresses []string, config *DataCleanupConfig) error {
+	// 1. 清理 sol_instruction 表
+	if err := s.cleanupSolInstructionWithProtection(tx, chain, cleanupHeight, protectedHeights, protectedAddresses, config); err != nil {
+		return fmt.Errorf("清理 sol_instruction 失败: %w", err)
+	}
+
+	// 2. 清理 sol_parsed_extra 表
+	if err := s.cleanupSolParsedExtraWithProtection(tx, chain, cleanupHeight, protectedHeights, protectedAddresses, config); err != nil {
+		return fmt.Errorf("清理 sol_parsed_extra 失败: %w", err)
+	}
+
+	// 3. 清理 sol_tx_detail 表
+	if err := s.cleanupSolTxDetailWithProtection(tx, chain, cleanupHeight, protectedHeights, protectedAddresses, config); err != nil {
+		return fmt.Errorf("清理 sol_tx_detail 失败: %w", err)
+	}
+
+	// 4. 清理 sol_event 表
+	if err := s.cleanupSolEventWithProtection(tx, chain, cleanupHeight, protectedHeights, protectedAddresses, config); err != nil {
+		return fmt.Errorf("清理 sol_event 失败: %w", err)
+	}
+
+	return nil
+}
+
+// cleanupSolInstructionWithProtection 基于受保护高度清理 sol_instruction 表
+func (s *DataCleanupScheduler) cleanupSolInstructionWithProtection(tx *gorm.DB, chain string, cleanupHeight uint64, protectedHeights []uint64, protectedAddresses []string, config *DataCleanupConfig) error {
+	// 构建保护条件
+	conditions := []string{"slot < ?"}
+	args := []interface{}{cleanupHeight}
+
+	// 如果有受保护的高度，排除这些高度
+	if len(protectedHeights) > 0 {
+		conditions = append(conditions, "slot NOT IN ?")
+		args = append(args, protectedHeights)
+	}
+
+	whereClause := ""
+	for i, condition := range conditions {
+		if i > 0 {
+			whereClause += " AND "
+		}
+		whereClause += condition
+	}
+
+	return s.batchDelete(tx, "sol_instruction", whereClause, args, config.BatchSize)
+}
+
+// cleanupSolParsedExtraWithProtection 基于受保护高度清理 sol_parsed_extra 表
+func (s *DataCleanupScheduler) cleanupSolParsedExtraWithProtection(tx *gorm.DB, chain string, cleanupHeight uint64, protectedHeights []uint64, protectedAddresses []string, config *DataCleanupConfig) error {
+	// 构建保护条件
+	conditions := []string{"slot < ?"}
+	args := []interface{}{cleanupHeight}
+
+	// 如果有受保护的高度，排除这些高度
+	if len(protectedHeights) > 0 {
+		conditions = append(conditions, "slot NOT IN ?")
+		args = append(args, protectedHeights)
+	}
+
+	whereClause := ""
+	for i, condition := range conditions {
+		if i > 0 {
+			whereClause += " AND "
+		}
+		whereClause += condition
+	}
+
+	return s.batchDelete(tx, "sol_parsed_extra", whereClause, args, config.BatchSize)
+}
+
+// cleanupSolTxDetailWithProtection 基于受保护高度清理 sol_tx_detail 表
+func (s *DataCleanupScheduler) cleanupSolTxDetailWithProtection(tx *gorm.DB, chain string, cleanupHeight uint64, protectedHeights []uint64, protectedAddresses []string, config *DataCleanupConfig) error {
+	// 构建保护条件
+	conditions := []string{"slot < ?"}
+	args := []interface{}{cleanupHeight}
+
+	// 如果有受保护的高度，排除这些高度
+	if len(protectedHeights) > 0 {
+		conditions = append(conditions, "slot NOT IN ?")
+		args = append(args, protectedHeights)
+	}
+
+	whereClause := ""
+	for i, condition := range conditions {
+		if i > 0 {
+			whereClause += " AND "
+		}
+		whereClause += condition
+	}
+
+	return s.batchDelete(tx, "sol_tx_detail", whereClause, args, config.BatchSize)
+}
+
+// cleanupSolEventWithProtection 基于受保护高度清理 sol_event 表
+func (s *DataCleanupScheduler) cleanupSolEventWithProtection(tx *gorm.DB, chain string, cleanupHeight uint64, protectedHeights []uint64, protectedAddresses []string, config *DataCleanupConfig) error {
+	// 构建保护条件
+	conditions := []string{"slot < ?"}
+	args := []interface{}{cleanupHeight}
+
+	// 如果有受保护的高度，排除这些高度
+	if len(protectedHeights) > 0 {
+		conditions = append(conditions, "slot NOT IN ?")
+		args = append(args, protectedHeights)
+	}
+
+	whereClause := ""
+	for i, condition := range conditions {
+		if i > 0 {
+			whereClause += " AND "
+		}
+		whereClause += condition
+	}
+
+	return s.batchDelete(tx, "sol_event", whereClause, args, config.BatchSize)
 }

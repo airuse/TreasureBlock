@@ -20,24 +20,21 @@ blockchain:
       name: "Bitcoin"
       symbol: "BTC"
       decimals: 8
-      enabled: true
+      enabled: false
       # rpc_url: "http://192.168.1.70:8332"
       explorer_api_urls:
         - "https://bitcoin-mainnet.core.chainstack.com/d52e0740e4d4fcdfb2c79cacd4d072f6"
         - "https://bitcoin-mainnet.core.chainstack.com/fff2562a8ed4fea4378d16129b82d325"
         - "https://bitcoin-mainnet.core.chainstack.com/a57195ceb0e546400052e042e9439ac7"
         - "https://bitcoin-mainnet.core.chainstack.com/690e0baa6567b9388ca978b6a96cc602"
-      api_key: ""
-      username: "bitcoin"      # bitcoind RPC用户名
-      password: "bitcoin123"  # bitcoind RPC密码
-      # BTC链特定的扫描配置
       scan:
-        interval: 3s
-        confirmations: 6
-        auto_start: true
+        interval: 20s
         save_to_file: false
         output_dir: "./output/btc"
-        max_concurrent: 5
+        # 分角色并发配置
+        max_concurrent_receipts: 3  # 回执获取并发数（BTC不需要）
+        max_concurrent_prefetch: 3  # 预取窗口并发数
+        max_concurrent_upload: 5    # 交易上传并发数
         # 批量上传配置（推荐启用以提高性能）
         batch_upload: true           # 是否启用批量上传交易（推荐启用）
         batch_size: 2000             # 批量上传大小，默认1000条交易
@@ -46,65 +43,58 @@ blockchain:
         prefetch_window: 3           # 预取窗口大小（BTC较慢，窗口加大以提高命中率）
         heights_per_cycle: 1         # 每个扫描周期处理的区块数量（保证稳定与顺序）
     bsc:
-      chain_id: 97
+      chain_id: 56          #97
       name: "Binance Smart Chain"
       symbol: "BSC"
       decimals: 18
-      enabled: true
+      enabled: false
       # rpc_url: "https://bsc-dataseed.binance.org/"
       explorer_api_urls:
         - "https://lb.drpc.org/bsc/AjrnZKmTu0IgpPhzqbPO3unPKlTcgiAR8JP2IgaNGuYu"
         - "https://lb.drpc.org/bsc/AnmJBrEnm0lsmXo0LnCNva9dh3zRgiER8JP3IgaNGuYu"
         - "https://lb.drpc.org/bsc/AuM84m0TIkfQkaEYg8VtRn_SdzxVgiER8JP4IgaNGuYu"
         - "https://lb.drpc.org/bsc/AhSgyzb6VUrWuIkUTrjgi3J2NuwCgh0R8JPuIgaNGuYu"
-      api_key: ""
-      username: ""
-      password: ""
-      # BSC链特定的扫描配置
       scan:
         interval: 500ms
-        confirmations: 6
-        auto_start: true
         save_to_file: false
         output_dir: "./output/bsc"
-        max_concurrent: 10
+        # 分角色并发配置
+        max_concurrent_receipts: 3  # 回执获取并发数
+        max_concurrent_prefetch: 3  # 预取窗口并发数
+        max_concurrent_upload: 10   # 交易上传并发数
         # 批量上传配置（推荐启用以提高性能）
         batch_upload: false           # 是否启用批量上传交易（推荐启用）
         batch_size: 2000             # 批量上传大小，默认1000条交易
         batch_timeout: 30s           # 批量上传超时时间
         # 预取与批处理参数
         prefetch_window: 12          # 预取窗口大小（BSC较快，窗口 2x~3x heights）
-        heights_per_cycle: 6         # 每个扫描周期处理的区块数量
+        heights_per_cycle: 4         # 每个扫描周期处理的区块数量
     eth:
-      chain_id: 1
+      chain_id: 1       #11155111
       name: "Ethereum"
       symbol: "ETH"
       decimals: 18
-      enabled: true
+      enabled: false
       # rpc_url: "http://192.168.1.70:8545"
       explorer_api_urls:
         - "https://lb.drpc.org/ethereum/AmpXsFj_D07JqDZ-Hv-nsjkUBedLgiAR8JPzIgaNGuYu"
         - "https://lb.drpc.org/ethereum/Ao-bi6VwUUYesmsBczwFkxqJJNtrgiIR8JP5IgaNGuYu"
         - "https://lb.drpc.org/ethereum/AgBSgHwcLEI4quCpnDNHMBeev_UPgiMR8JP6IgaNGuYu"
-      api_key: ""  # 如果需要的话
-      username: ""
-      password: ""
-      # 配置的币种地址列表（已知的合约地址）  
-      # ETH链特定的扫描配置
       scan:
-        interval: 2s                 # 扫描区块的时间间隔
-        confirmations: 61            # 需要等待的区块确认数
-        auto_start: true             # 启动时是否自动开始扫描
+        interval: 5s                 # 扫描区块的时间间隔
         save_to_file: false          # 是否将扫描结果保存到文件
         output_dir: "./output/eth"   # 扫描结果输出目录
-        max_concurrent: 40            # 最大并发扫描区块数
+        # 分角色并发配置
+        max_concurrent_receipts: 3  # 回执获取并发数
+        max_concurrent_prefetch: 3  # 预取窗口并发数
+        max_concurrent_upload: 40   # 交易上传并发数
         # 批量上传配置（推荐启用以提高性能）
         batch_upload: true           # 是否启用批量上传交易（推荐启用）
         batch_size: 2000             # 批量上传大小，默认1000条交易
         batch_timeout: 30s           # 批量上传超时时间
         # 预取与批处理参数
-        prefetch_window: 12          # 预取窗口大小（ETH交易重，建议 2x~3x heights）
-        heights_per_cycle: 5         # 每个扫描周期处理的区块数量（保守起步）
+        prefetch_window: 6          # 预取窗口大小（ETH交易重，建议 2x~3x heights）
+        heights_per_cycle: 2         # 每个扫描周期处理的区块数量（保守起步）
     sol:
       chain_id: 101
       name: "sol"
@@ -118,24 +108,26 @@ blockchain:
         - "https://lb.drpc.org/solana/AhCf0-Tte050nUVwFHF_1jOCF6QNgh8R8JPxIgaNGuYu"
         - "https://lb.drpc.org/solana/AvPPIhOf-k4jldkwixy1QT3s8w99gisR8JP8IgaNGuYu"
         - "https://lb.drpc.org/solana/AuMWx_tHC041opKA_1AWeHXgqCJ8mewR8LzJwg8TMB_n"
-      api_key: ""
-      username: ""
-      password: ""
-      # SOL链特定的扫描配置
+        - "https://solana-mainnet.core.chainstack.com/75855aa72e7cd66fa745c034eb53bb10"
+        - "https://solana-mainnet.core.chainstack.com/fd1a5c5c9e8d8243ab2e1fa6abfda065"
+        - "https://solana-mainnet.core.chainstack.com/6b4a5b9f4910dd5cd1dc6835d5e312d0"
+        - "https://solana-mainnet.core.chainstack.com/8422084cf3488d54b3b3319a875c0749"
+        - "https://solana-mainnet.core.chainstack.com/f3e2b1e7e96a82d88c9f9fa198c2f763"
       scan:
-        interval: 100ms              # 扫描区块的时间间隔
-        confirmations: 1             # 需要等待的区块确认数（Solana确认很快）
-        auto_start: true             # 启动时是否自动开始扫描
+        interval: 500ms              # 扫描区块的时间间隔
         save_to_file: false          # 是否将扫描结果保存到文件
         output_dir: "./output/sol"   # 扫描结果输出目录
-        max_concurrent: 20           # 最大并发扫描区块数
+        # 分角色并发配置
+        max_concurrent_receipts: 3  # 回执获取并发数（SOL不需要）
+        max_concurrent_prefetch: 10  # 预取窗口并发数
+        max_concurrent_upload: 20   # 交易上传并发数
         # 批量上传配置（推荐启用以提高性能）
         batch_upload: true           # 是否启用批量上传交易（推荐启用）
         batch_size: 1000             # 批量上传大小，默认1000条交易
         batch_timeout: 30s           # 批量上传超时时间
         # 预取与批处理参数
-        prefetch_window: 1          # 预取窗口大小（SOL最快，窗口更大）
-        heights_per_cycle: 1         # 每个扫描周期处理的区块数量（提升吞吐）
+        prefetch_window: 15          # 预取窗口大小（SOL最快，窗口更大）
+        heights_per_cycle: 5         # 每个扫描周期处理的区块数量（提升吞吐）
 
 log:
   level: "info"
@@ -152,9 +144,11 @@ database:
   driver: "sqlite"
   host: "localhost"
   port: 3306
-  username: ""
-  password: ""
   dbname: "scanner.db"
   enabled: false
 
-
+# 钉钉机器人通知配置
+dingtalk:
+  enabled: true
+  webhook_url: "https://oapi.dingtalk.com/robot/send?access_token=38e21d9e17e2d09ff1c4f54247050f9550f44850a4d35c35fa25370646c2e60b"
+  secret: "SECbffeaf3f067dd8a697cb3992ddb2f92205652a9de3eb0c7483c9b0aac25ceacf"

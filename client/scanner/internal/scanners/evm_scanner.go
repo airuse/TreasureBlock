@@ -455,7 +455,7 @@ func (es *EVMScanner) fallbackToIndividualReceipts(block *models.Block, transact
 		err     error
 		index   int
 	}
-	maxConcurrency := es.config.Scan.MaxConcurrent
+	maxConcurrency := es.config.Scan.MaxConcurrentReceipts
 	if maxConcurrency <= 0 {
 		maxConcurrency = 20
 	}
@@ -507,7 +507,7 @@ func (es *EVMScanner) fallbackToIndividualReceipts(block *models.Block, transact
 	elapsed := time.Since(startTime)
 	stats := failoverManager.GetStats()
 	fmt.Printf("[%s Scanner] %d 📊 TransactionReceipt Fetch Complete: success=%d failed=%d time=%v workers=%d stats=%+v\n",
-		strings.ToUpper(es.chainName), block.Height, successCount, failureCount, elapsed, es.config.Scan.MaxConcurrent, stats)
+		strings.ToUpper(es.chainName), block.Height, successCount, failureCount, elapsed, es.config.Scan.MaxConcurrentReceipts, stats)
 	return nil
 }
 

@@ -53,10 +53,7 @@ type ScanConfig struct {
 
 // RPCConfig RPC配置
 type RPCConfig struct {
-	URL      string `json:"url"`
-	APIKey   string `json:"api_key,omitempty"`
-	Username string `json:"username,omitempty"`
-	Password string `json:"password,omitempty"`
+	URL string `json:"url"`
 }
 
 // ================== 区块相关 ==================

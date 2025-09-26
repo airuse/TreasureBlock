@@ -135,7 +135,7 @@ func (m *SOLFailoverManager) Execute(ctx context.Context, operation string, cb f
 			used := node.lastCallTime.Sub(node.firstCallTime)
 			rest := time.Second - used
 			if rest < 0 {
-				rest = time.Millisecond * 10000
+				rest = time.Millisecond * 100
 			}
 			node.restUntil = now.Add(rest)
 		} else {

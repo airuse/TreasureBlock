@@ -43,7 +43,7 @@ func SetupRoutes(
 
 	// 添加安全相关中间件
 	router.Use(middleware.SecurityHeadersMiddleware())
-	router.Use(middleware.RequestSizeLimitMiddleware(10 * 1024 * 1024)) // 10MB限制
+	router.Use(middleware.RequestSizeLimitMiddleware(30 * 1024 * 1024)) // 10MB限制
 	router.Use(middleware.HTTPSRedirectMiddleware(tlsEnabled))          // 根据配置启用HTTPS重定向
 	router.Use(corsMiddleware())
 

@@ -12,6 +12,9 @@ import (
 func HandleFatalError(err error, operation string) {
 	logrus.Errorf("🚨 致命错误 - %s: %v", operation, err)
 
+	// 发送钉钉通知（通过延迟导入避免循环依赖）
+	sendDingTalkFatalError(operation, err)
+
 	// 根据错误类型提供解决建议
 	var suggestion string
 	errStr := strings.ToUpper(err.Error())
@@ -44,4 +47,9 @@ func HandleFatalError(err error, operation string) {
 
 	// 退出程序
 	os.Exit(1)
+}
+
+// sendDingTalkFatalError 发送钉钉致命错误通知
+func sendDingTalkFatalError(operation string, err error) {
+	SendDingTalkFatalError(operation, err)
 }

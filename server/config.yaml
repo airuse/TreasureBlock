@@ -90,10 +90,10 @@ blockchain:
       rest_urls:
         - "https://blockstream.info/testnet/api"  # REST API (用于获取地址余额)
         - "https://mempool.space/testnet/api"     # REST API (备用)
-      username: "bitcoin"
-      password: "bitcoin123"
+      username: ""
+      password: ""
     bsc:
-      chain_id: 97
+      chain_id: 56      #97
       name: "Binance Smart Chain Testnet"
       symbol: "BSC"
       decimals: 18
@@ -132,15 +132,25 @@ security:
   jwt_expiration: 24h
   bcrypt_cost: 12
 
-# 数据清理配置
+# 数据清理配置 尽量使用素数（可以避免因为除数相同导致清理间隔相同）3, 5, 7, 11, 13, 17, 19, 83, 89, 97
 data_cleanup:
   eth:
-    max_blocks: 20000        # ETH最大保留区块数
-    cleanup_threshold: 30000 # ETH清理阈值
-    batch_size: 100000         # ETH批量删除大小
-    interval: 30             # ETH清理间隔（分钟）
+    max_blocks: 1000        # ETH最大保留区块数
+    cleanup_threshold: 2000 # ETH清理阈值
+    batch_size: 10000         # ETH批量删除大小
+    interval: 17             # ETH清理间隔（分钟）
   btc:
-    max_blocks: 5000         # BTC最大保留区块数
-    cleanup_threshold: 5000  # BTC清理阈值
-    batch_size: 500          # BTC批量删除大小
-    interval: 120            # BTC清理间隔（分钟） 
+    max_blocks: 1000         # BTC最大保留区块数
+    cleanup_threshold: 2000  # BTC清理阈值
+    batch_size: 10000          # BTC批量删除大小
+    interval: 97            # BTC清理间隔（分钟） 
+  bsc:
+    max_blocks: 500        # BSC最大保留区块数
+    cleanup_threshold: 1000 # BSC清理阈值
+    batch_size: 10000         # BSC批量删除大小
+    interval: 7             # BSC清理间隔（分钟）
+  sol:
+    max_blocks: 500        # SOL最大保留区块数
+    cleanup_threshold: 1000 # SOL清理阈值
+    batch_size: 10000         # SOL批量删除大小
+    interval: 3             # SOL清理间隔（分钟）

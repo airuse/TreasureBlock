@@ -78,21 +78,6 @@ func (api *ScannerAPI) GetRPCConfig(chain string) (*RPCConfig, error) {
 		return nil, fmt.Errorf("failed to get RPC URL for chain %s: %w", chain, err)
 	}
 
-	// API Key (可选)
-	if apiKey, err := api.getConfigValue(2, "rpc", "api_key_"+chain); err == nil {
-		config.APIKey = apiKey
-	}
-
-	// Username (可选)
-	if username, err := api.getConfigValue(2, "rpc", "username_"+chain); err == nil {
-		config.Username = username
-	}
-
-	// Password (可选)
-	if password, err := api.getConfigValue(2, "rpc", "password_"+chain); err == nil {
-		config.Password = password
-	}
-
 	return config, nil
 }
 

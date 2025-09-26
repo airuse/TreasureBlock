@@ -14,19 +14,20 @@ gengjiangdi1@outlook.com-ETH3
 
 
 
-chainstack[每天3M](Viruse123..)(used:scanner,random)
+chainstack[每天3M](Viruse123..)(used:scanner)
 viruse123@outlook.com-BTC1
 virusegg123@gmail.com-BTC2
 gengjiangdi@outlook.com-BTC3
 gengjiangdi1@outlook.com-BTC4
 
-16692555512@163.com-https://bsc-testnet.core.chainstack.com/5190644a86def4f6a809767c086a6cdf
-15037508950@163.com-https://bsc-testnet.core.chainstack.com/37227029d9dd9980f7d9dda9f6d3cd63
-15136965530@163.com-https://solana-devnet.core.chainstack.com/4638e5beaad96a5eef455fa2b15c8ff8
-15238253001@163.com-https://solana-devnet.core.chainstack.com/2b6c4bfadb9ea95696b79cd68125601a
-654017336@qq.com-https://solana-devnet.core.chainstack.com/ba227c34aa1687ce7fb29c3c582dbeea
-835606178@qq.com-https://solana-devnet.core.chainstack.com/05e878dc4aedcb81432084cf7bce51b0
-523052994@qq.com-https://solana-devnet.core.chainstack.com/705c7391ab5ff4e39640d6a0db08f1bb
+16692555512@163.com-SOL6
+15037508950@163.com-SOL7
+15136965530@163.com-SOL8
+15238253001@163.com-SOL9
+654017336@qq.com-SOL10
+
+835606178@qq.com-SOL11
+523052994@qq.com-SOL12
 
 
 

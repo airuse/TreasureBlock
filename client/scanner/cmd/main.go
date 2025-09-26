@@ -56,7 +56,7 @@ func run(cmd *cobra.Command, args []string) error {
 	// 检查是否有启用的链
 	enabledChains := 0
 	for _, chainConfig := range config.AppConfig.Blockchain.Chains {
-		if chainConfig.Enabled && chainConfig.Scan.AutoStart {
+		if chainConfig.Enabled {
 			enabledChains++
 		}
 	}
@@ -68,7 +68,7 @@ func run(cmd *cobra.Command, args []string) error {
 			return err
 		}
 	} else {
-		logrus.Warn("No enabled chains found or auto-start disabled")
+		logrus.Warn("No enabled chains found")
 	}
 
 	// 等待中断信号
