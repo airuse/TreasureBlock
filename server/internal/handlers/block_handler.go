@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"fmt"
 	"net/http"
 	"strconv"
 	"time"
@@ -579,7 +580,7 @@ func (h *BlockHandler) CreateBlock(c *gin.Context) {
 
 	// 验证区块链ID
 	if block.ChainID != config.AppConfig.Blockchain.Chains[block.Chain].ChainID {
-		utils.ErrorResponse(c, http.StatusBadRequest, "block chain id is not correct", nil)
+		utils.ErrorResponse(c, http.StatusBadRequest, fmt.Sprintf("block chain id is not client is: %s correct is: %d", block.Chain, config.AppConfig.Blockchain.Chains[block.Chain].ChainID), nil)
 		return
 	}
 

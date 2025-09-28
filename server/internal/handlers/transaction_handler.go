@@ -379,7 +379,7 @@ func (h *TransactionHandler) CreateTransactionsBatch(c *gin.Context) {
 	// fmt.Printf("批量数据一共为: %d\n", len(transactionsData))
 
 	// 限制批量数量，防止请求过大
-	const maxBatchSize = 4000
+	const maxBatchSize = 10000
 	if len(transactionsData) > maxBatchSize {
 		c.JSON(http.StatusBadRequest, gin.H{"success": false, "error": fmt.Sprintf("批量数量超过限制，最大支持%d条", maxBatchSize)})
 		return
