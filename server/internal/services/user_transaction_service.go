@@ -218,6 +218,62 @@ func (s *userTransactionService) ExportSolUnsigned(ctx context.Context, id uint,
 			})
 
 		case "transfer":
+			// 标准代币转账
+			fromOwner, _, _, err := s.processSenderATA(ctx, userTx.FromAddress, userTx.TokenContractAddress, userTx.Amount, decimals)
+			if err != nil {
+				return nil, err
+			}
+
+			// 处理接收者地址
+			toOwner := userTx.ToAddress
+			// 如果 ToAddress 是 ATA，转换为其所属钱包地址
+			if toAddr, err := s.userAddressRepo.GetByAddress(userTx.ToAddress); err == nil && toAddr != nil {
+				if toAddr.Type == "ata" && toAddr.AtaOwnerAddress != "" {
+					toOwner = toAddr.AtaOwnerAddress
+				}
+			}
+
+			// 检查接收者的ATA账户是否需要创建（当双方不是同一owner时）
+			needCreateATA := false
+			if fromOwner != toOwner {
+				toATAAddress := userTx.ToAddress // 若To为ATA，直接用数据库中的ATA地址
+				if toAddr, err := s.userAddressRepo.GetByAddress(userTx.ToAddress); err == nil && toAddr != nil {
+					if toAddr.Type == "ata" {
+						exists, err := s.checkATAExistsOnChain(ctx, toATAAddress)
+						if err != nil {
+							s.logger.Errorf("检查ATA账户存在性失败: %v", err)
+							needCreateATA = true
+						} else if !exists {
+							needCreateATA = true
+							s.logger.Infof("ATA账户 %s 在链上不存在，需要创建", toATAAddress)
+						} else {
+							s.logger.Infof("ATA账户 %s 在链上已存在，无需创建", toATAAddress)
+						}
+					} else {
+						s.logger.Infof("ToAddress %s 不是ATA类型，无需创建ATA账户", toATAAddress)
+					}
+				} else {
+					s.logger.Warnf("无法查询ToAddress %s 的信息，假设需要创建ATA账户", toATAAddress)
+					needCreateATA = true
+				}
+			}
+
+			instructionParams := map[string]any{
+				"mint":       userTx.TokenContractAddress,
+				"from_owner": fromOwner,
+				"to_owner":   toOwner,
+				"amount":     userTx.Amount,
+				"decimals":   decimals,
+			}
+			if needCreateATA {
+				instructionParams["create"] = 1
+			}
+
+			resp.Instructions = append(resp.Instructions, map[string]any{
+				"program_id": "TokenkegQfeZyiNwAJbNbGKPFXCWuBvf9Ss623VQ5DA",
+				"type":       "spl_transfer_checked",
+				"params":     instructionParams,
+			})
 		default:
 			// 普通转账操作：直接转账
 			// 处理发送者ATA地址
