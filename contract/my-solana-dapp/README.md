@@ -71,3 +71,12 @@ export default defineConfig([
   },
 ])
 ```
+
+
+
+
+# 发行信息
+- 发行时间：2025-09-28
+- 创建者：6WprxceyZvo3N39LjiakGVp4Ty1NnD8gdWF3s5Aan9s5
+- 发行铸币地址：Bv6WUgwQxQBBBGLDiEiKmzcCTizaPFfC1jpY35MGvSPa
+- 发行数量：10000000
