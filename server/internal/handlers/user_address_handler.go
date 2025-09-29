@@ -359,3 +359,15 @@ func (h *UserAddressHandler) GetUserAddressesByPending(c *gin.Context) {
 
 	utils.SuccessResponse(c, http.StatusOK, "获取在途交易地址成功", addresses)
 }
+
+// GetAllWalletAddresses 获取所有钱包地址
+func (h *UserAddressHandler) GetAllWalletAddresses(c *gin.Context) {
+
+	addresses, err := h.userAddressService.GetAllWalletAddresses()
+	if err != nil {
+		utils.ErrorResponse(c, http.StatusInternalServerError, "获取钱包地址失败: "+err.Error())
+		return
+	}
+
+	utils.SuccessResponse(c, http.StatusOK, "获取钱包地址成功", addresses)
+}

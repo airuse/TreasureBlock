@@ -269,6 +269,57 @@ func (h *BlockVerificationHandler) GetLastVerifiedBlockHeight(c *gin.Context) {
 	})
 }
 
+// UpdateLastVerifiedBlockHeight 更新最后一个验证通过的区块高度
+func (h *BlockVerificationHandler) UpdateLastVerifiedBlockHeight(c *gin.Context) {
+	chain := c.Query("chain")
+	if chain == "" {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "chain parameter is required",
+		})
+		return
+	}
+
+	// 解析请求体参数
+	var req struct {
+		Height uint64 `json:"height" binding:"required"`
+		Hash   string `json:"hash" binding:"required"`
+	}
+
+	if err := c.ShouldBindJSON(&req); err != nil {
+		c.JSON(http.StatusBadRequest, gin.H{
+			"success": false,
+			"error":   "invalid request parameters: " + err.Error(),
+		})
+		return
+	}
+
+	// 更新缓存高度
+	h.heightCacheMutex.Lock()
+	h.heightCache[chain] = req.Height
+	h.cacheUpdatedAt[chain] = time.Now()
+	h.heightCacheMutex.Unlock()
+
+	// 调用服务层更新数据库
+	if err := h.verificationService.UpdateLastVerifiedBlockHeight(c.Request.Context(), chain, req.Height, req.Hash); err != nil {
+		c.JSON(http.StatusInternalServerError, gin.H{
+			"success": false,
+			"error":   "failed to update last verified block height: " + err.Error(),
+		})
+		return
+	}
+
+	c.JSON(http.StatusOK, gin.H{
+		"success": true,
+		"data": gin.H{
+			"chain":  chain,
+			"height": req.Height,
+			"hash":   req.Hash,
+		},
+		"message": "Last verified block height updated successfully",
+	})
+}
+
 // ParseBTCBlockTransactions 解析BTC区块内交易的 vin/vout，维护本地UTXO表
 func (h *BlockVerificationHandler) ParseBTCBlockTransactions(ctx context.Context, blockID uint64) error {
 

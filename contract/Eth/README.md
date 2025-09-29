@@ -139,3 +139,48 @@ raw logs	[
     "removed": false
   }
 ]
+
+GGGTX BNB主网 56 部署成功：
+status	0x1 Transaction mined and execution succeed
+transaction hash	0x4e0478524deae6ca661082f828014acdbb857fb4d4e6a28a82819d229678a209
+block hash	0xad6997057124704b2b3c1f4da3ebf57a29cbbe072f31620e9571f40ebcc0bfcd
+block number	65670150
+contract address	0x65513dae6f19f35d6dfa4988bf371126487200f7
+from	0x26248Ec61fC83a24F958faF435f8254ce65D08d9
+to	GGGTX.(constructor)
+gas	1885134 gas
+transaction cost	1885134 gas 
+input	0x608...d08d9
+decoded input	{
+	"address _owner": "0x26248Ec61fC83a24F958faF435f8254ce65D08d9"
+}
+decoded output	 - 
+logs	[
+	{
+		"from": "0x65513dae6f19f35d6dfa4988bf371126487200f7",
+		"topic": "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+		"event": "Transfer",
+		"args": {
+			"0": "0x0000000000000000000000000000000000000000",
+			"1": "0x26248Ec61fC83a24F958faF435f8254ce65D08d9",
+			"2": "1000000000000000000000000"
+		}
+	}
+]
+raw logs	[
+  {
+    "address": "0x65513dae6f19f35d6dfa4988bf371126487200f7",
+    "topics": [
+      "0xddf252ad1be2c89b69c2b068fc378daa952ba7f163c4a11628f55a4df523b3ef",
+      "0x0000000000000000000000000000000000000000000000000000000000000000",
+      "0x00000000000000000000000026248ec61fc83a24f958faf435f8254ce65d08d9"
+    ],
+    "data": "0x00000000000000000000000000000000000000000000d3c21bcecceda1000000",
+    "blockNumber": "0x3ea0c06",
+    "transactionHash": "0x4e0478524deae6ca661082f828014acdbb857fb4d4e6a28a82819d229678a209",
+    "transactionIndex": "0x0",
+    "blockHash": "0xad6997057124704b2b3c1f4da3ebf57a29cbbe072f31620e9571f40ebcc0bfcd",
+    "logIndex": "0x0",
+    "removed": false
+  }
+]

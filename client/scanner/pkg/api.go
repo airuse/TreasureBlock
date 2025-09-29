@@ -1,6 +1,7 @@
 package pkg
 
 import (
+	"encoding/json"
 	"fmt"
 	"strconv"
 	"strings"
@@ -40,12 +41,22 @@ func (api *ScannerAPI) GetScannerConfig(configType uint8, configGroup, configKey
 	endpoint := fmt.Sprintf("/api/v1/scanner/getconfig?configType=%d&configGroup=%s&configKey=%s",
 		configType, configGroup, configKey)
 
-	var result ScannerConfigResponse
+	var result struct {
+		Success bool                  `json:"success"`
+		Data    ScannerConfigResponse `json:"data"`
+		Message string                `json:"message,omitempty"`
+		Error   string                `json:"error,omitempty"`
+	}
+
 	if err := api.client.GET(endpoint, &result); err != nil {
 		return nil, fmt.Errorf("get scanner config failed: %w", err)
 	}
 
-	return &result, nil
+	if !result.Success {
+		return nil, fmt.Errorf("API returned error: %s", result.Error)
+	}
+
+	return &result.Data, nil
 }
 
 // GetScanConfig 获取完整的扫块配置
@@ -292,8 +303,6 @@ func (api *ScannerAPI) UpdateBlockStats(hash string, payload map[string]interfac
 	return nil
 }
 
-// ================== 扩展：转账事件 & Solana 明细 ==================
-
 // UploadTransferEventsBatch 批量上传跨链转账事件
 func (api *ScannerAPI) UploadTransferEventsBatch(events []map[string]interface{}) error {
 	if len(events) == 0 {
@@ -318,6 +327,63 @@ func (api *ScannerAPI) UploadSolTxDetail(requestBody map[string]interface{}) err
 func (api *ScannerAPI) UploadSolTxDetailBatch(requestBody map[string]interface{}) error {
 	if err := api.client.POST("/api/v1/sol/tx/detail/batch", requestBody, nil); err != nil {
 		return fmt.Errorf("upload sol tx detail batch failed: %w", err)
+	}
+	return nil
+}
+
+func (api *ScannerAPI) GetAllWalletAddresses() ([]map[string]interface{}, error) {
+	// API直接返回数组，不是包装的格式
+	var result []struct {
+		ID                  uint                         `json:"id"`
+		Address             string                       `json:"address"`
+		Chain               string                       `json:"chain"`
+		Label               string                       `json:"label"`
+		Type                string                       `json:"type"`
+		ContractID          *uint                        `json:"contract_id"`          // 关联的合约ID
+		AuthorizedAddresses map[string]map[string]string `json:"authorized_addresses"` // {address:{allowance:"..."}}
+		Notes               string                       `json:"notes"`                // 备注信息
+		Balance             *string                      `json:"balance"`              // 地址余额
+		ContractBalance     *string                      `json:"contract_balance"`     // 合约余额
+		TransactionCount    int64                        `json:"transaction_count"`
+		UTXOCount           int64                        `json:"utxo_count"` // UTXO数量（仅BTC使用）
+		IsActive            bool                         `json:"is_active"`
+		BalanceHeight       uint64                       `json:"balance_height"`
+		// SOL-ATA 关联冗余
+		AtaOwnerAddress string `json:"ata_owner_address"`
+		AtaMintAddress  string `json:"ata_mint_address"`
+	}
+
+	url := "/api/v1/wallet-addresses"
+	if err := api.client.GET(url, &result); err != nil {
+		return nil, fmt.Errorf("get all wallet addresses failed: %w", err)
+	}
+
+	// 将结构体数组转换为map数组
+	var data []map[string]interface{}
+	for _, item := range result {
+		jsonData, err := json.Marshal(item)
+		if err != nil {
+			api.logger.Warnf("Failed to marshal wallet address item: %v", err)
+			continue
+		}
+
+		var itemMap map[string]interface{}
+		if err := json.Unmarshal(jsonData, &itemMap); err != nil {
+			api.logger.Warnf("Failed to unmarshal wallet address item: %v", err)
+			continue
+		}
+
+		data = append(data, itemMap)
+	}
+
+	return data, nil
+
+}
+
+func (api *ScannerAPI) UpdateLastVerifiedBlockHeight(chain string, height uint64, hash string) error {
+	endpoint := fmt.Sprintf("/api/v1/sol/jump/verification?chain=%s", chain)
+	if err := api.client.PUT(endpoint, map[string]interface{}{"height": height, "hash": hash}, nil); err != nil {
+		return fmt.Errorf("update last verified block height failed: %w", err)
 	}
 	return nil
 }

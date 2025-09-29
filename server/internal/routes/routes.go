@@ -229,6 +229,7 @@ func SetupRoutes(
 			sol.GET("/programs/:id", solHandler.GetProgram)
 			sol.PUT("/programs/:id", solHandler.UpdateProgram)
 			sol.DELETE("/programs/:id", solHandler.DeleteProgram)
+			sol.PUT("/jump/verification", blockVerificationHandler.UpdateLastVerifiedBlockHeight)
 		}
 
 		// 地址相关路由
@@ -304,6 +305,12 @@ func SetupRoutes(
 			earnings.GET("/stats", earningsHandler.GetUserEarningsStats)          // 获取收益统计
 			earnings.GET("/trend", earningsHandler.GetEarningsTrend)              // 获取收益趋势数据
 			earnings.POST("/transfer", earningsHandler.TransferTCoins)            // 转账T币
+		}
+
+		// 获取所有钱包地址列表
+		userAddresses := v1.Group("/wallet-addresses")
+		{
+			userAddresses.GET("", userAddressHandler.GetAllWalletAddresses)
 		}
 	}
 

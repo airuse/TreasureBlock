@@ -28,6 +28,7 @@ import (
 type BlockVerificationService interface {
 	VerifyBlock(ctx context.Context, blockID uint64) (*BlockVerificationResult, error)
 	GetLastVerifiedBlockHeight(ctx context.Context, chain string) (uint64, error)
+	UpdateLastVerifiedBlockHeight(ctx context.Context, chain string, height uint64, hash string) error
 	UpdateBlockVerificationStatus(ctx context.Context, blockID uint64, isVerified bool, reason string) error
 	HandleTimeoutBlocks(ctx context.Context, chain string, height uint64) error
 	GetBlockByID(ctx context.Context, blockID uint64) (*models.Block, error)
@@ -768,6 +769,18 @@ func (s *blockVerificationService) GetLastVerifiedBlockHeight(ctx context.Contex
 		return 0, err
 	}
 	return block.Height, nil
+}
+
+// UpdateBlockVerificationStatus 更新区块验证状态
+func (s *blockVerificationService) UpdateLastVerifiedBlockHeight(ctx context.Context, chain string, height uint64, hash string) error {
+	return s.blockRepo.Create(ctx, &models.Block{
+		Chain:      chain,
+		Height:     height,
+		Hash:       hash,
+		Timestamp:  time.Now(), // 设置当前时间作为时间戳
+		IsVerified: 1,
+		UpdatedAt:  time.Now(),
+	})
 }
 
 // UpdateBlockVerificationStatus 更新区块验证状态

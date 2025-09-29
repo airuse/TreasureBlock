@@ -1,4 +1,4 @@
-drpc 节点[每月210M](Viruse123..)(used:scanner)
+drpc 节点[每月210M](used:scanner)
 16692555512@163.com-SOL1
 15136965530@163.com-SOL2
 15037508950@163.com-SOL3
@@ -14,7 +14,7 @@ gengjiangdi1@outlook.com-ETH3
 
 
 
-chainstack[每天3M](Viruse123..)(used:scanner)
+chainstack[每天3M](used:scanner)
 viruse123@outlook.com-BTC1
 virusegg123@gmail.com-BTC2
 gengjiangdi@outlook.com-BTC3
@@ -31,10 +31,11 @@ gengjiangdi1@outlook.com-BTC4
 
 
 
-quiknode[每月10M](Viruse123..)(used:server)
+quiknode[每月10M](used:server)
 viruse123@outlook.com-ETH1
 16692555512@163.com-BTC1
 654017336@qq.com-BSC1
-15037508950@163.com-https://thrilling-summer-frost.quiknode.pro/ca8e71700184f645a7935acf1487acd191e429a1
-15136965530@163.com-https://warmhearted-bold-emerald.quiknode.pro/be4e6633f9443a4dd26046d40be1650a810db3a1
-15238253001@163.com-https://empty-hardworking-spree.quiknode.pro/d1cb31945987ed11caa6f3e63c2b8b86b00d41ff
+
+15037508950@163.com-未分配
+15136965530@163.com-未分配
+15238253001@163.com-未分配

@@ -99,7 +99,18 @@ func (s *SolanaScanner) GetBlockTransactionsFromBlock(block *models.Block) ([]ma
 	if err != nil {
 		return nil, fmt.Errorf("failed to get block transactions for height %d: %w", block.Height, err)
 	}
-	return s.parseTransactions(blockData, block.Height), nil
+
+	// 解析所有交易
+	allTransactions := s.parseTransactions(blockData, block.Height)
+
+	// 过滤掉投票交易
+	filteredTransactions := s.filterVoteTransactions(allTransactions)
+
+	logrus.Debugf("[sol] Filtered transactions: %d -> %d (removed %d vote transactions)",
+		len(allTransactions), len(filteredTransactions), len(allTransactions)-len(filteredTransactions))
+	// fmt.Println("已经过滤掉投票交易的数量是", len(allTransactions)-len(filteredTransactions))
+	// fmt.Println("投票交易占用的比例", (float64(len(filteredTransactions))/float64(len(allTransactions)))*100, "%")
+	return filteredTransactions, nil
 }
 
 // CalculateBlockStats 计算区块统计信息
@@ -798,4 +809,58 @@ func toJSONString(data interface{}) string {
 	}
 
 	return string(jsonBytes)
+}
+
+// filterVoteTransactions 过滤掉投票交易
+func (s *SolanaScanner) filterVoteTransactions(transactions []map[string]interface{}) []map[string]interface{} {
+	// Solana 投票程序 ID
+	voteProgramID := "Vote111111111111111111111111111111111111111"
+
+	var filtered []map[string]interface{}
+
+	for _, tx := range transactions {
+		// 检查交易是否包含投票程序
+		if s.isVoteTransaction(tx, voteProgramID) {
+			continue // 跳过投票交易
+		}
+		filtered = append(filtered, tx)
+	}
+
+	return filtered
+}
+
+// isVoteTransaction 判断是否为投票交易
+func (s *SolanaScanner) isVoteTransaction(tx map[string]interface{}, voteProgramID string) bool {
+	// 检查 sol_instructions 字段
+	if solInstructions, ok := tx["sol_instructions"].([]map[string]interface{}); ok {
+		for _, instruction := range solInstructions {
+			if programID, ok := instruction["program_id"].(string); ok {
+				if programID == voteProgramID {
+					return true
+				}
+			}
+		}
+	}
+
+	// 检查 account_keys 字段中的程序 ID
+	if accountKeys, ok := tx["account_keys"].([]interface{}); ok {
+		for _, key := range accountKeys {
+			if keyStr, ok := key.(string); ok && keyStr == voteProgramID {
+				return true
+			}
+		}
+	}
+
+	// 检查指令中的程序 ID
+	if instructions, ok := tx["instructions"].([]map[string]interface{}); ok {
+		for _, instruction := range instructions {
+			if programID, ok := instruction["program_id"].(string); ok {
+				if programID == voteProgramID {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
 }

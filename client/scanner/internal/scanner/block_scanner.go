@@ -436,6 +436,28 @@ func (bs *BlockScanner) scanSingleBlock(chainName string, scanner Scanner, heigh
 		block = blk
 	}
 
+	// 获取交易信息 - 若未预取，则从区块获取
+	var txErr error
+	if transactions == nil {
+		transactions, txErr = scanner.GetBlockTransactionsFromBlock(block)
+	}
+
+	if txErr != nil {
+		logrus.Warnf("[%s] Failed to get transactions for block %d: %v", chainName, height, txErr)
+		// 如果获取交易失败，仍然需要更新验证高度
+		bs.updateLastVerifiedHeight(chainName, height, block.Hash)
+		return
+	}
+
+	// 检查区块是否包含目标地址的交易（对 Solana 和 BSC 链）
+	if chainName == "sol" || chainName == "bsc" {
+		if !bs.containsTargetAddresses(chainName, transactions) {
+			// 更新验证高度并跳过区块创建
+			bs.updateLastVerifiedHeight(chainName, height, block.Hash)
+			return
+		}
+	}
+
 	// 验证区块
 	if err := scanner.ValidateBlock(block); err != nil {
 		logrus.Errorf("[%s] Block validation failed for block %d: %v", chainName, height, err)
@@ -459,22 +481,13 @@ func (bs *BlockScanner) scanSingleBlock(chainName string, scanner Scanner, heigh
 		return
 	}
 
-	// 获取交易信息 - 若未预取，则从区块获取
-	var txErr error
-	if transactions == nil {
-		transactions, txErr = scanner.GetBlockTransactionsFromBlock(block)
-	}
+	// 计算区块统计信息
+	scanner.CalculateBlockStats(block, transactions)
 
-	if txErr != nil {
-		logrus.Warnf("[%s] Failed to get transactions for block %d: %v", chainName, height, txErr)
-	} else {
-		scanner.CalculateBlockStats(block, transactions)
-
-		// 上传交易信息到服务器，传入区块ID
-		if err := bs.submitTransactionsToServer(chainName, block, transactions, blockID); err != nil {
-			logrus.Warnf("[%s] Failed to submit transactions for block %d: %v", chainName, height, err)
-			return
-		}
+	// 上传交易信息到服务器，传入区块ID
+	if err := bs.submitTransactionsToServer(chainName, block, transactions, blockID); err != nil {
+		logrus.Warnf("[%s] Failed to submit transactions for block %d: %v", chainName, height, err)
+		return
 	}
 
 	bs.updateBlockStatsToServer(block, transactions, blockID)
@@ -993,4 +1006,115 @@ func (bs *BlockScanner) sendDingTalkInfo(title, message string) {
 			}
 		}()
 	}
+}
+
+// containsTargetAddresses 检查交易列表中是否包含目标地址
+func (bs *BlockScanner) containsTargetAddresses(chainName string, transactions []map[string]interface{}) bool {
+	// 获取目标地址列表
+	targetAddresses := bs.getTargetAddresses(chainName)
+	if len(targetAddresses) == 0 {
+		// 如果没有配置目标地址，则处理所有交易
+		return true
+	}
+
+	// 创建地址映射以提高查找效率
+	addressMap := make(map[string]bool)
+	for _, addr := range targetAddresses {
+		addressMap[strings.ToLower(addr)] = true
+	}
+
+	// 检查每个交易是否包含目标地址
+	for _, tx := range transactions {
+		if bs.transactionContainsTargetAddress(tx, addressMap) {
+			return true
+		}
+	}
+
+	return false
+}
+
+// getTargetAddresses 获取指定链的目标地址列表
+func (bs *BlockScanner) getTargetAddresses(chainName string) []string {
+	var addresses []string
+
+	// 从配置中获取钱包地址
+	for _, wallet := range bs.config.Blockchain.WalletAddresses {
+		if wallet.Chain == chainName {
+			addresses = append(addresses, wallet.Address)
+		}
+	}
+
+	return addresses
+}
+
+// transactionContainsTargetAddress 检查单个交易是否包含目标地址
+func (bs *BlockScanner) transactionContainsTargetAddress(tx map[string]interface{}, addressMap map[string]bool) bool {
+	// 检查 from 地址
+	if from, ok := tx["from"].(string); ok {
+		if addressMap[strings.ToLower(from)] {
+			return true
+		}
+	}
+
+	// 检查 to 地址
+	if to, ok := tx["to"].(string); ok {
+		if addressMap[strings.ToLower(to)] {
+			return true
+		}
+	}
+
+	// 检查 Solana 特有的地址字段
+	if accountKeys, ok := tx["account_keys"].([]interface{}); ok {
+		for _, key := range accountKeys {
+			if keyStr, ok := key.(string); ok {
+				if addressMap[strings.ToLower(keyStr)] {
+					return true
+				}
+			}
+		}
+	}
+
+	// 检查 Solana 事件中的地址
+	if solEvents, ok := tx["sol_events"].([]map[string]interface{}); ok {
+		for _, event := range solEvents {
+			if from, ok := event["from"].(string); ok {
+				if addressMap[strings.ToLower(from)] {
+					return true
+				}
+			}
+			if to, ok := event["to"].(string); ok {
+				if addressMap[strings.ToLower(to)] {
+					return true
+				}
+			}
+			if fromAccount, ok := event["from_account"].(string); ok {
+				if addressMap[strings.ToLower(fromAccount)] {
+					return true
+				}
+			}
+			if toAccount, ok := event["to_account"].(string); ok {
+				if addressMap[strings.ToLower(toAccount)] {
+					return true
+				}
+			}
+		}
+	}
+
+	return false
+}
+
+// updateLastVerifiedHeight 更新最后验证的区块高度
+func (bs *BlockScanner) updateLastVerifiedHeight(chainName string, height uint64, hash string) {
+	api := config.GetScannerAPI()
+	if api == nil {
+		logrus.Warnf("[%s] Scanner API not available, cannot update last verified height", chainName)
+		return
+	}
+
+	if err := api.UpdateLastVerifiedBlockHeight(chainName, height, hash); err != nil {
+		logrus.Errorf("[%s] Failed to update last verified height %d: %v", chainName, height, err)
+		return
+	}
+
+	logrus.Debugf("[%s] Updated last verified height to %d (hash: %s)", chainName, height, hash)
 }

@@ -17,7 +17,7 @@ blockchain:
       name: "Bitcoin"
       symbol: "BTC"
       decimals: 8
-      enabled: true
+      enabled: false
       # rpc_url: "http://192.168.1.70:8332"
       explorer_api_urls:
         - "https://bitcoin-mainnet.core.chainstack.com/d52e0740e4d4fcdfb2c79cacd4d072f6"
@@ -97,7 +97,7 @@ blockchain:
       name: "sol"
       symbol: "SOL"
       decimals: 9
-      enabled: false
+      enabled: true
       # rpc_url: "https://solana-devnet.core.chainstack.com/2b6c4bfadb9ea95696b79cd68125601a"
       explorer_api_urls:
         - "https://lb.drpc.org/solana/Aqh3uZvhdU5oq84o63-TeYsfZaTxgbgR8JO5IgaNGuYu"
@@ -111,7 +111,7 @@ blockchain:
         - "https://solana-mainnet.core.chainstack.com/8422084cf3488d54b3b3319a875c0749"
         - "https://solana-mainnet.core.chainstack.com/f3e2b1e7e96a82d88c9f9fa198c2f763"
       scan:
-        interval: 500ms              # 扫描区块的时间间隔
+        interval: 50ms              # 扫描区块的时间间隔
         save_to_file: false          # 是否将扫描结果保存到文件
         output_dir: "./output/sol"   # 扫描结果输出目录
         # 分角色并发配置
@@ -146,6 +146,6 @@ database:
 
 # 钉钉机器人通知配置
 dingtalk:
-  enabled: true
+  enabled: false
   webhook_url: "https://oapi.dingtalk.com/robot/send?access_token=38e21d9e17e2d09ff1c4f54247050f9550f44850a4d35c35fa25370646c2e60b"
   secret: "SECbffeaf3f067dd8a697cb3992ddb2f92205652a9de3eb0c7483c9b0aac25ceacf"

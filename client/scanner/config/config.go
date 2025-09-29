@@ -44,7 +44,16 @@ type TLSConfig struct {
 
 // BlockchainConfig 区块链配置
 type BlockchainConfig struct {
-	Chains map[string]ChainConfig `yaml:"chains"`
+	Chains          map[string]ChainConfig `yaml:"chains"`
+	WalletAddresses []WalletAddressConfig
+}
+
+// WalletAddressConfig 钱包地址配置
+type WalletAddressConfig struct {
+	ID      uint   `json:"id"`
+	Address string `json:"address"`
+	Chain   string `json:"chain"`
+	Label   string `json:"label"`
 }
 
 // ChainConfig 链配置
@@ -316,6 +325,12 @@ func loadServerConfig() error {
 	}
 	logrus.Info("Server health check passed")
 
+	// 先获取所有钱包地址（只获取一次）
+	walletAddresses, err := api.GetAllWalletAddresses()
+	if err != nil {
+		return fmt.Errorf("failed to load wallet addresses: %w", err)
+	}
+
 	// 为每个启用的链加载配置
 	for chainKey, chainConfig := range AppConfig.Blockchain.Chains {
 		if !chainConfig.Enabled {
@@ -337,6 +352,45 @@ func loadServerConfig() error {
 
 		// 更新本地配置 - 从服务器获取 confirmations
 		chainConfig.Confirmations = scanConfig.Confirmations
+
+		// 只添加当前链的钱包地址
+		chainWalletCount := 0
+		for _, walletMap := range walletAddresses {
+			id, ok := walletMap["id"].(float64) // JSON numbers are float64
+			if !ok {
+				logrus.Warnf("Missing or invalid 'id' in wallet address: %+v, skipping", walletMap)
+				continue
+			}
+
+			address, ok := walletMap["address"].(string)
+			if !ok {
+				logrus.Warnf("Missing or invalid 'address' in wallet address: %+v, skipping", walletMap)
+				continue
+			}
+
+			chain, ok := walletMap["chain"].(string)
+			if !ok {
+				logrus.Warnf("Missing or invalid 'chain' in wallet address: %+v, skipping", walletMap)
+				continue
+			}
+
+			// 只添加当前链的地址
+			if chain != chainKey {
+				continue
+			}
+
+			label, _ := walletMap["label"].(string) // label is optional
+
+			AppConfig.Blockchain.WalletAddresses = append(AppConfig.Blockchain.WalletAddresses, WalletAddressConfig{
+				ID:      uint(id),
+				Address: address,
+				Chain:   chain,
+				Label:   label,
+			})
+			chainWalletCount++
+		}
+
+		logrus.Infof("Loaded %d wallet addresses for chain %s", chainWalletCount, chainKey)
 
 		// 获取RPC配置（可选）
 		// rpcConfig, err := api.GetRPCConfig(chainKey)
